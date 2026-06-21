@@ -171,16 +171,42 @@ private func connectionIsAuthorized(_ connection: NSXPCConnection) -> Bool {
         helperLog.error("No authorized cdhash on file — denying all connections")
         return false   // fail closed
     }
-    var code: SecCode?
-    let attributes = [kSecGuestAttributePid: NSNumber(value: connection.processIdentifier)] as CFDictionary
-    guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess,
-          let peerCode = code else { return false }
+    guard let peerCode = peerSecCode(for: connection) else { return false }
 
     var requirement: SecRequirement?
     guard SecRequirementCreateWithString("cdhash H\"\(pinned)\"" as CFString, [], &requirement) == errSecSuccess,
           let requirement else { return false }
 
     return SecCodeCheckValidity(peerCode, [], requirement) == errSecSuccess
+}
+
+/// Resolves the connecting process to a `SecCode`. Prefers the kernel **audit
+/// token** — it's immune to the PID-reuse race that affects PID-based lookups,
+/// which is why Apple's engineers recommend it — and falls back to the PID only
+/// if the token can't be read.
+private func peerSecCode(for connection: NSXPCConnection) -> SecCode? {
+    var code: SecCode?
+    if var token = auditToken(of: connection) {
+        let tokenData = Data(bytes: &token, count: MemoryLayout<audit_token_t>.size) as CFData
+        let attributes = [kSecGuestAttributeAudit: tokenData] as CFDictionary
+        if SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess {
+            return code
+        }
+    }
+    let attributes = [kSecGuestAttributePid: NSNumber(value: connection.processIdentifier)] as CFDictionary
+    return SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess ? code : nil
+}
+
+/// NSXPCConnection doesn't expose the audit token in its public API; read it
+/// via KVC (the documented workaround). Returns nil if unavailable.
+private func auditToken(of connection: NSXPCConnection) -> audit_token_t? {
+    let key = "auditToken"
+    guard connection.responds(to: NSSelectorFromString(key)),
+          let value = connection.value(forKey: key) as? NSData,
+          value.length == MemoryLayout<audit_token_t>.size else { return nil }
+    var token = audit_token_t()
+    value.getBytes(&token, length: MemoryLayout<audit_token_t>.size)
+    return token
 }
 
 private func pinnedCDHash() -> String? {
