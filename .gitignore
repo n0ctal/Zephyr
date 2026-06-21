@@ -1,0 +1,10 @@
+.build/
+*.app/
+.DS_Store
+# kext build artifacts (rebuild via kext/build-kext.sh)
+kext/*.o
+kext/*.lto.o
+kext/DisableTurboBoost
+kext/DisableTurboBoost.kext/
+Resources/AppIcon.iconset/
+*.dmg
