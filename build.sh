@@ -56,6 +56,18 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# Bundle the privileged-helper installer inside the app so "Install helper…"
+# works wherever the app lives (e.g. /Applications). Must happen before signing.
+echo "==> Bundling helper installer + kext"
+mkdir -p "$APP_DIR/Contents/Resources/scripts"
+cp "$PROJECT_DIR/scripts/install-helper.sh" \
+   "$PROJECT_DIR/scripts/uninstall-helper.sh" \
+   "$PROJECT_DIR/scripts/$BUNDLE_ID.helper.plist" \
+   "$APP_DIR/Contents/Resources/scripts/" 2>/dev/null || true
+if [ -d "$PROJECT_DIR/kext/DisableTurboBoost.kext" ]; then
+    cp -R "$PROJECT_DIR/kext/DisableTurboBoost.kext" "$APP_DIR/Contents/Resources/"
+fi
+
 # Ad-hoc signature (no Developer ID needed for local use).
 echo "==> Ad-hoc codesign"
 codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || \

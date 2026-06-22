@@ -11,7 +11,24 @@ set -euo pipefail
 
 LABEL="com.n0ctal.macbookcontrol.helper"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Work whether run from the source tree (scripts/) or from inside the app
+# bundle (Zephyr.app/Contents/Resources/scripts/).
+if [[ "$SCRIPT_DIR" == *"/Contents/Resources/scripts" ]]; then
+    BUNDLE_APP="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+    DEFAULT_HELPER_SRC="$BUNDLE_APP/Contents/MacOS/Zephyr"
+    KEXT_SRC="$SCRIPT_DIR/../DisableTurboBoost.kext"
+    DEFAULT_APP_FOR_PIN="$BUNDLE_APP"
+else
+    PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+    if [ -f "$PROJECT_DIR/.build/release/Zephyr" ]; then
+        DEFAULT_HELPER_SRC="$PROJECT_DIR/.build/release/Zephyr"
+    else
+        DEFAULT_HELPER_SRC="$PROJECT_DIR/.build/debug/Zephyr"
+    fi
+    KEXT_SRC="$PROJECT_DIR/kext/DisableTurboBoost.kext"
+    DEFAULT_APP_FOR_PIN="$PROJECT_DIR/Zephyr.app"
+fi
 
 HELPER_DST="/Library/PrivilegedHelperTools/$LABEL"
 PLIST_SRC="$SCRIPT_DIR/$LABEL.plist"
@@ -22,14 +39,8 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Resolve the binary to install.
-if [ "${1:-}" != "" ]; then
-    HELPER_SRC="$1"
-elif [ -f "$PROJECT_DIR/.build/release/Zephyr" ]; then
-    HELPER_SRC="$PROJECT_DIR/.build/release/Zephyr"
-else
-    HELPER_SRC="$PROJECT_DIR/.build/debug/Zephyr"
-fi
+# Resolve the binary to install (explicit arg overrides the default).
+HELPER_SRC="${1:-$DEFAULT_HELPER_SRC}"
 
 if [ ! -f "$HELPER_SRC" ]; then
     echo "Binary not found: $HELPER_SRC (run 'swift build' first)" >&2
@@ -48,8 +59,7 @@ install -o root -g wheel -m 755 "$HELPER_SRC" "$HELPER_DST"
 # Install the launchd plist.
 install -o root -g wheel -m 644 "$PLIST_SRC" "$PLIST_DST"
 
-# Install the Turbo Boost kext (if built) where the helper expects it.
-KEXT_SRC="$PROJECT_DIR/kext/DisableTurboBoost.kext"
+# Install the Turbo Boost kext (if present) where the helper expects it.
 KEXT_DST_DIR="/Library/Application Support/MacBookControl"
 if [ -d "$KEXT_SRC" ]; then
     echo "Installing Turbo Boost kext ..."
@@ -65,7 +75,7 @@ fi
 # daemon (the daemon rejects every other XPC client).
 install -d -o root -g wheel -m 755 "$KEXT_DST_DIR"
 APP_FOR_PIN="/Applications/Zephyr.app"
-[ -d "$APP_FOR_PIN" ] || APP_FOR_PIN="$PROJECT_DIR/Zephyr.app"
+[ -d "$APP_FOR_PIN" ] || APP_FOR_PIN="$DEFAULT_APP_FOR_PIN"
 if [ -d "$APP_FOR_PIN" ]; then
     CDHASH="$(codesign -dvvv "$APP_FOR_PIN" 2>&1 | awk -F= 'tolower($1)=="cdhash"{print $2; exit}')"
     if [ -n "$CDHASH" ]; then
@@ -83,5 +93,4 @@ fi
 # Load it.
 launchctl bootstrap system "$PLIST_DST"
 
-echo "Installed. Daemon will start on first use."
-echo "Verify with:  $PROJECT_DIR/.build/debug/Zephyr --test-helper"
+echo "Installed. Daemon will start on first use — open Zephyr, control is now enabled."

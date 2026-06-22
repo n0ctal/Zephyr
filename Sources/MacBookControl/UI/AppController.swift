@@ -331,9 +331,16 @@ final class AppController: NSObject, NSMenuDelegate {
     }
 
     private func installScriptPath() -> String {
-        // Alongside the app bundle in development; documented in the README otherwise.
-        let bundlePath = Bundle.main.bundleURL.deletingLastPathComponent().path
-        return "\(bundlePath)/scripts/install-helper.sh"
+        // The installer is bundled inside the app (Contents/Resources/scripts),
+        // so the command works wherever the app lives (e.g. /Applications).
+        if let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("scripts/install-helper.sh"),
+           FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled.path
+        }
+        // Dev fallback: scripts sit next to the bundle in the source tree.
+        return Bundle.main.bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("scripts/install-helper.sh").path
     }
 
     @objc private func quit() {
