@@ -24,6 +24,7 @@ final class AppController: NSObject, NSMenuDelegate {
     private var refreshTimer: Timer?
     /// Cached helper availability so we don't probe XPC on every menu open.
     private var helperVersion: String?
+    private var helperRefreshInFlight = false
     /// Per-fan control modes ("auto"/"manual"/"curve") fetched from the helper
     /// (the authoritative source), so the menu is correct even after a restart.
     private var fanModes: [String] = []
@@ -75,9 +76,27 @@ final class AppController: NSObject, NSMenuDelegate {
     // MARK: Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        helperVersion = helper.version()
-        fanModes = helperVersion != nil ? helper.fanModes() : []
+        // Draw from the last known state first: these two XPC round-trips block for
+        // up to 5s and 2s, and doing them here froze the menu on every open.
         rebuildMenu()
+        refreshHelperState()
+    }
+
+    private func refreshHelperState() {
+        guard !helperRefreshInFlight else { return }
+        helperRefreshInFlight = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let version = self.helper.version()
+            let modes = version != nil ? self.helper.fanModes() : []
+            DispatchQueue.main.async {
+                self.helperRefreshInFlight = false
+                let changed = version != self.helperVersion || modes != self.fanModes
+                self.helperVersion = version
+                self.fanModes = modes
+                if changed { self.rebuildMenu() }
+            }
+        }
     }
 
     private func rebuildMenu() {

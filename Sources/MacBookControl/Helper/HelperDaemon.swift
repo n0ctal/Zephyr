@@ -10,6 +10,10 @@ private let kAuthorizedCDHashPath = "/Library/Application Support/MacBookControl
 
 /// The root-side implementation of `HelperProtocol`. A single shared instance
 /// serves every XPC connection. All SMC/pmset work is serialized on one queue.
+/// Above this the firmware must be allowed to take the fan back: a manual hold
+/// blocks its escalation, and no user setting is worth a thermal event.
+let kThermalReleaseCelsius: Double = 90
+
 final class HelperService: NSObject, HelperProtocol {
     private let queue = DispatchQueue(label: "com.n0ctal.macbookcontrol.helper.control")
     private let smc: SMC?
@@ -54,16 +58,26 @@ final class HelperService: NSObject, HelperProtocol {
     func setFanManual(fan: Int, rpm: Int, reply: @escaping (Bool) -> Void) {
         queue.async {
             self.curveFans.removeValue(forKey: fan)   // fixed target overrides curve
+            // (try? x?.f()) is Void?? and reads as success when fans is nil, leaving
+            // the target latched without a single real SMC write.
+            guard let fans = self.fans else { reply(false); return }
+            do {
+                try fans.setManual(fan: fan, rpm: rpm)
+            } catch {
+                helperLog.error("setManual failed for fan \(fan): \(String(describing: error))")
+                reply(false)
+                return
+            }
             self.forcedTargets[fan] = rpm
             self.startControlLoopIfNeeded()
-            let ok = (try? self.fans?.setManual(fan: fan, rpm: rpm)) != nil
-            reply(ok)
+            reply(true)
         }
     }
 
     func setFanCurve(fan: Int, minTemp: Int, maxTemp: Int, reply: @escaping (Bool) -> Void) {
         queue.async {
             self.forcedTargets.removeValue(forKey: fan)
+            guard self.fans != nil else { reply(false); return }
             self.curveFans[fan] = FanCurve(minTemp: Double(minTemp), maxTemp: Double(maxTemp))
             self.startControlLoopIfNeeded()
             self.applyCurve(fan: fan)   // apply immediately
@@ -91,6 +105,30 @@ final class HelperService: NSObject, HelperProtocol {
         }
     }
 
+    /// Synchronous twin of restoreFirmwareControl for the exit path.
+    func restoreFirmwareControlAndWait() {
+        queue.sync {
+            self.forcedTargets.removeAll()
+            self.curveFans.removeAll()
+            self.fans?.setAllAuto()
+            self.controlTimer?.cancel()
+            self.controlTimer = nil
+        }
+    }
+
+    /// Hands every fan back to the firmware. Called when the app's connection
+    /// drops, so a crash or logout cannot leave a manual target latched.
+    func restoreFirmwareControl() {
+        queue.async {
+            guard !self.forcedTargets.isEmpty || !self.curveFans.isEmpty else { return }
+            self.forcedTargets.removeAll()
+            self.curveFans.removeAll()
+            self.fans?.setAllAuto()
+            self.stopControlLoopIfIdle()
+            helperLog.info("client gone — fans returned to firmware control")
+        }
+    }
+
     func setGPUMode(_ rawValue: Int, reply: @escaping (Bool) -> Void) {
         queue.async {
             let mode = GPUMode(rawValue: rawValue) ?? .automatic
@@ -112,8 +150,14 @@ final class HelperService: NSObject, HelperProtocol {
         timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            // Re-assert fixed manual targets.
+            // A fixed target pins the fan against the firmware, which can no
+            // longer raise it, so the hold needs a thermal ceiling of its own.
+            let tooHot = (self.sensors?.cpuTemperature()?.celsius ?? 0) >= kThermalReleaseCelsius
             for (fan, rpm) in self.forcedTargets {
+                if tooHot {
+                    try? self.fans?.setAuto(fan: fan)
+                    continue
+                }
                 try? self.fans?.setManual(fan: fan, rpm: rpm)
             }
             // Recompute and apply curve-driven targets.
@@ -127,9 +171,13 @@ final class HelperService: NSObject, HelperProtocol {
 
     /// Reads the CPU temperature and drives a curve fan to its computed target.
     private func applyCurve(fan: Int) {
-        guard let curve = curveFans[fan],
-              let cpu = sensors?.cpuTemperature(),
-              let reading = fans?.readFan(fan) else { return }
+        guard let curve = curveFans[fan] else { return }
+        // Losing the sensor used to latch the fan at its last target; hand it
+        // back instead, since the firmware still knows the real temperature.
+        guard let cpu = sensors?.cpuTemperature(), let reading = fans?.readFan(fan) else {
+            try? fans?.setAuto(fan: fan)
+            return
+        }
         let target = curve.targetRPM(cpuTemp: cpu.celsius,
                                      fanMin: reading.minRPM,
                                      fanMax: reading.maxRPM)
@@ -152,6 +200,12 @@ final class HelperService: NSObject, HelperProtocol {
 final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
     private let service = HelperService()
 
+    /// Blocks until the fans are back under firmware control, for use on the
+    /// exit path where the process will not be around to finish an async call.
+    func restoreFirmwareControlSynchronously() {
+        service.restoreFirmwareControlAndWait()
+    }
+
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         guard connectionIsAuthorized(newConnection) else {
@@ -160,6 +214,11 @@ final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
         }
         newConnection.exportedInterface = NSXPCInterface(with: HelperProtocol.self)
         newConnection.exportedObject = service
+        // quit() was the only path that ever restored firmware control, so a
+        // crash or logout left the loop re-asserting a manual target forever.
+        let restore = { [service] in service.restoreFirmwareControl() }
+        newConnection.invalidationHandler = restore
+        newConnection.interruptionHandler = restore
         newConnection.resume()
         return true
     }
@@ -202,11 +261,20 @@ private func peerSecCode(for connection: NSXPCConnection) -> SecCode? {
 private func auditToken(of connection: NSXPCConnection) -> audit_token_t? {
     let key = "auditToken"
     guard connection.responds(to: NSSelectorFromString(key)),
-          let value = connection.value(forKey: key) as? NSData,
-          value.length == MemoryLayout<audit_token_t>.size else { return nil }
-    var token = audit_token_t()
-    value.getBytes(&token, length: MemoryLayout<audit_token_t>.size)
-    return token
+          let boxed = connection.value(forKey: key) else { return nil }
+    // KVC boxes the struct as NSValue; the old NSData cast never matched, so
+    // every connection fell through to the PID path, which fails open.
+    if let value = boxed as? NSValue {
+        var token = audit_token_t()
+        value.getValue(&token)
+        return token
+    }
+    if let data = boxed as? Data, data.count == MemoryLayout<audit_token_t>.size {
+        var token = audit_token_t()
+        _ = withUnsafeMutableBytes(of: &token) { data.copyBytes(to: $0) }
+        return token
+    }
+    return nil
 }
 
 private func pinnedCDHash() -> String? {
@@ -219,6 +287,7 @@ private func pinnedCDHash() -> String? {
 /// listener's `delegate` is a *weak* reference, so without a strong owner
 /// here ARC frees the delegate in release builds right after assignment,
 /// and every incoming connection is silently rejected (interrupted, 4097).
+private var gHelperTermSource: DispatchSourceSignal?
 private var gHelperListener: NSXPCListener?
 private var gHelperDelegate: HelperListenerDelegate?
 
@@ -226,6 +295,18 @@ private var gHelperDelegate: HelperListenerDelegate?
 func runHelperDaemon() -> Never {
     helperLog.info("starting, registering machServiceName=\(kHelperMachServiceName, privacy: .public)")
     let delegate = HelperListenerDelegate()
+    // launchctl bootout is how both install and uninstall stop us; without this
+    // the daemon dies with a manual target latched and nothing left to clear it.
+    let term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+    term.setEventHandler {
+        helperLog.info("SIGTERM — returning fans to firmware control before exit")
+        delegate.restoreFirmwareControlSynchronously()
+        exit(0)
+    }
+    signal(SIGTERM, SIG_IGN)
+    term.resume()
+    gHelperTermSource = term
+
     let listener = NSXPCListener(machServiceName: kHelperMachServiceName)
     listener.delegate = delegate
     gHelperDelegate = delegate

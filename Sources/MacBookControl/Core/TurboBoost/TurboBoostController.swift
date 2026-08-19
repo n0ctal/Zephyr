@@ -53,7 +53,9 @@ final class TurboBoostController {
         process.arguments = arguments
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        // Not a Pipe: nothing drains it, and a chatty child would block forever
+        // on the one serial queue that also drives fan control.
+        process.standardError = FileHandle.nullDevice
         do {
             try process.run()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()

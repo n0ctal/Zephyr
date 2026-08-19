@@ -7,20 +7,28 @@ final class HelperClient {
     static let shared = HelperClient()
 
     private var connection: NSXPCConnection?
+    /// XPC handlers arrive on arbitrary queues; without this lock a late handler
+    /// for the old connection nils out the live one, which then leaks.
+    private let lock = NSLock()
 
     private func proxy(_ errorHandler: @escaping (Error) -> Void) -> HelperProtocol? {
+        lock.lock()
+        defer { lock.unlock() }
         if connection == nil {
             let newConnection = NSXPCConnection(
                 machServiceName: kHelperMachServiceName,
                 options: .privileged
             )
             newConnection.remoteObjectInterface = NSXPCInterface(with: HelperProtocol.self)
-            newConnection.invalidationHandler = { [weak self] in
-                self?.connection = nil
+            let drop: () -> Void = { [weak self, weak newConnection] in
+                guard let self, let newConnection else { return }
+                self.lock.lock()
+                // Only clear it if this is still the same connection.
+                if self.connection === newConnection { self.connection = nil }
+                self.lock.unlock()
             }
-            newConnection.interruptionHandler = { [weak self] in
-                self?.connection = nil
-            }
+            newConnection.invalidationHandler = drop
+            newConnection.interruptionHandler = drop
             newConnection.resume()
             connection = newConnection
         }

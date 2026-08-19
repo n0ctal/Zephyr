@@ -118,8 +118,9 @@ final class FanController {
 
     func readFan(_ index: Int) -> FanReading? {
         guard let actual = rpm(index, "Ac") else { return nil }
-        let minRPM = rpm(index, "Mn") ?? 0
-        let maxRPM = rpm(index, "Mx") ?? 0
+        // A failed Mn/Mx read must not read as "this fan may run at 0 rpm": the
+        // clamp in setManual would then command a stop and hold it there.
+        guard let minRPM = rpm(index, "Mn"), let maxRPM = rpm(index, "Mx"), maxRPM > 0 else { return nil }
         let target = rpm(index, "Tg") ?? actual
         return FanReading(
             index: index,
@@ -133,6 +134,9 @@ final class FanController {
 
     private func rpm(_ fan: Int, _ suffix: String) -> Int? {
         guard let value = try? smc.read(key(fan, suffix)), let d = value.double else { return nil }
+        // Int(_:) traps on NaN and out-of-range values, and this runs in the root
+        // daemon's control loop — an unchecked conversion kills it mid-cycle.
+        guard d.isFinite, d >= 0, d <= 65535 else { return nil }
         return Int(d.rounded())
     }
 
@@ -141,6 +145,9 @@ final class FanController {
     /// Switches a fan to manual mode and sets a target RPM (clamped to min/max).
     func setManual(fan: Int, rpm requested: Int) throws {
         guard let current = readFan(fan) else { throw SMCError.keyNotFound(key(fan, "Ac")) }
+        guard current.maxRPM >= current.minRPM, current.maxRPM > 0 else {
+            throw SMCError.keyNotFound(key(fan, "Mx"))
+        }
         let clamped = min(max(requested, current.minRPM), current.maxRPM)
 
         if usesForceBits {
@@ -148,7 +155,10 @@ final class FanController {
         } else {
             try smc.write(key(fan, "Md"), bytes: [1])
         }
-        try smc.write(key(fan, "Tg"), bytes: encodeRPM(clamped, forKey: key(fan, "Tg")))
+        guard let payload = encodeRPM(clamped, forKey: key(fan, "Tg")) else {
+            throw SMCError.keyNotFound(key(fan, "Tg"))
+        }
+        try smc.write(key(fan, "Tg"), bytes: payload)
     }
 
     /// Returns a fan to automatic (firmware-controlled) mode.
@@ -168,8 +178,10 @@ final class FanController {
     /// Encodes an RPM value into the byte layout the target key expects.
     /// Newer Macs use `flt` (native 32-bit float); older ones use `fpe2`
     /// (big-endian, value × 4).
-    private func encodeRPM(_ rpm: Int, forKey keyString: String) -> [UInt8] {
-        let type = (try? smc.read(keyString))?.type ?? "flt "
+    private func encodeRPM(_ rpm: Int, forKey keyString: String) -> [UInt8]? {
+        // Never guess the key type: writing a float into an fpe2 key turns a
+        // 3000 rpm target into ~32 rpm, i.e. a stopped fan.
+        guard let type = (try? smc.read(keyString))?.type else { return nil }
         let typeCode = smcKeyCode(type.padding(toLength: 4, withPad: " ", startingAt: 0))
         switch typeCode {
         case SMCDataType.fpe2:
