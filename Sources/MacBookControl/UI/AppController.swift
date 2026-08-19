@@ -61,6 +61,17 @@ final class AppController: NSObject, NSMenuDelegate {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.updateStatusTitle()
         }
+
+        // The kext sets MSR bit 38 once at load and firmware restores the MSR
+        // across sleep, so on wake Turbo is back while kextstat still says it is
+        // disabled. Ask the daemon to re-apply.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.helper.reapplyTurboAfterWake()
+        }
     }
 
     // MARK: Status-bar title

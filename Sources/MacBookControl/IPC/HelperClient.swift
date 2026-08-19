@@ -93,4 +93,8 @@ final class HelperClient {
     func setTurboBoostEnabled(_ enabled: Bool) {
         proxy { _ in }?.setTurboBoostEnabled(enabled) { _ in }
     }
+
+    func reapplyTurboAfterWake() {
+        proxy { _ in }?.reapplyTurboAfterWake { _ in }
+    }
 }

@@ -44,6 +44,16 @@ final class TurboBoostController {
         }
     }
 
+    /// Re-applies the disable after a wake. The kext writes MSR bit 38 once in
+    /// its start routine, and firmware restores the MSR across sleep, so the bit
+    /// is gone while kextstat still reports the bundle loaded — hence the reload.
+    @discardableResult
+    func reapplyDisableAfterWake() -> Bool {
+        guard isTurboDisabled() else { return true }   // nothing to re-apply
+        guard Self.run("/usr/bin/kmutil", ["unload", "-b", Self.kextIdentifier]) != nil else { return false }
+        return Self.run("/usr/bin/kmutil", ["load", "-p", Self.kextPath]) != nil
+    }
+
     // MARK: Process bridge
 
     @discardableResult

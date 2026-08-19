@@ -5,7 +5,7 @@ let kHelperMachServiceName = "com.n0ctal.macbookcontrol.helper"
 
 /// Bumped when the XPC contract changes; the app compares this against the
 /// running daemon to detect a stale installed helper.
-let kHelperVersion = "2"
+let kHelperVersion = "3"
 
 /// XPC contract between the unprivileged app and the root daemon.
 /// Only operations that genuinely require root live here; all reading
@@ -28,6 +28,10 @@ protocol HelperProtocol {
 
     /// Return a single fan to firmware (automatic) control.
     func setFanAuto(fan: Int, reply: @escaping (Bool) -> Void)
+
+    /// Re-apply the Turbo state after wake. The kext writes MSR bit 38 once at
+    /// load, and firmware clears it across sleep, so the bit has to be set again.
+    func reapplyTurboAfterWake(reply: @escaping (Bool) -> Void)
 
     /// Return all fans to automatic control and stop the control loop.
     func setAllFansAuto(reply: @escaping (Bool) -> Void)

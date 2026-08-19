@@ -136,6 +136,14 @@ final class HelperService: NSObject, HelperProtocol {
         }
     }
 
+    func reapplyTurboAfterWake(reply: @escaping (Bool) -> Void) {
+        queue.async {
+            let ok = self.turbo.reapplyDisableAfterWake()
+            if !ok { helperLog.error("re-applying Turbo disable after wake failed") }
+            reply(ok)
+        }
+    }
+
     func setTurboBoostEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void) {
         queue.async {
             reply(self.turbo.setTurboEnabled(enabled))
