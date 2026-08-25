@@ -57,9 +57,13 @@ final class PowerFeature: Feature {
     }
 
     func applyLimits() {
-        guard isEnabled else { return }
-        PowerLimits.apply(pl1Watts: pl1, pl2Watts: pl2)
-        refreshLimits()
+        guard isEnabled, let raw = PowerLimits.composed(pl1Watts: pl1, pl2Watts: pl2) else { return }
+        helper.setPowerLimit(raw)
+        // The helper writes asynchronously, so read the register back a moment
+        // later rather than displaying what we hoped for.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.refreshLimits()
+        }
     }
 
     func setTurboDisabled(_ disabled: Bool) {

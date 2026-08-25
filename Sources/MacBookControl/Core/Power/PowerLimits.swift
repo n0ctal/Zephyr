@@ -63,11 +63,13 @@ enum PowerLimits {
     /// and clamp bits are the firmware's, and rewriting them from a guess is
     /// how a machine ends up with a power limit that behaves nothing like the
     /// watts printed next to the slider.
-    @discardableResult
-    static func apply(pl1Watts: Double, pl2Watts: Double) -> Bool {
+    /// Composes the new register value. The write itself goes through the
+    /// privileged helper: the sysctl is deliberately root-only, so that the
+    /// CPU's power ceiling is not a lever any process on the machine can pull.
+    static func composed(pl1Watts: Double, pl2Watts: Double) -> UInt64? {
         guard let limit = read(name: "kern.zephyr_power_limit"),
               let unit = read(name: "kern.zephyr_power_unit"),
-              limit & (1 << 63) == 0 else { return false }
+              limit & (1 << 63) == 0 else { return nil }
 
         let stepsPerWatt = Double(1 << (unit & 0xF))
         let pl1 = UInt64(max(1, (pl1Watts * stepsPerWatt).rounded())) & 0x7FFF
@@ -77,7 +79,7 @@ enum PowerLimits {
         value = (value & ~0x7FFF) | pl1
         value = (value & ~(0x7FFF << 32)) | (pl2 << 32)
         value |= (1 << 15) | (1 << 47)   // both limits enabled
-        return write(name: "kern.zephyr_power_limit", value: value)
+        return value
     }
 
     // MARK: sysctl plumbing
@@ -89,8 +91,4 @@ enum PowerLimits {
         return value
     }
 
-    private static func write(name: String, value: UInt64) -> Bool {
-        var value = value
-        return sysctlbyname(name, nil, nil, &value, MemoryLayout<UInt64>.size) == 0
-    }
 }

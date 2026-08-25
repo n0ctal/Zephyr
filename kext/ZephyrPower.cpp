@@ -15,9 +15,17 @@
 // Bit 63 of 0x610 is the lock bit. When the firmware has set it, writes are
 // ignored by the hardware and there is nothing to be done about it — which is
 // exactly why the read is exposed too. Read before promising anything.
+//
+// The value moves through SYSCTL_OUT / SYSCTL_IN rather than the tidier
+// sysctl_io_number: that helper exists in the kernel binary but is not in the
+// symbol set exported to kexts, so a bundle calling it fails to link at load
+// time with "could not find a kext which exports this symbol". The macros
+// resolve to function pointers carried inside the request itself, so they
+// need nothing exported at all.
 
 #include <mach/mach_types.h>
 #include <sys/sysctl.h>
+#include <sys/errno.h>
 #include <i386/proc_reg.h>   // rdmsr64 / wrmsr64
 
 #define MSR_RAPL_POWER_UNIT   0x606u
@@ -42,11 +50,21 @@ static int power_limit_sysctl(__unused struct sysctl_oid *oidp, __unused void *a
                               __unused int arg2, struct sysctl_req *req)
 {
     uint64_t current = rdmsr64(MSR_PKG_POWER_LIMIT);
-    int changed = 0;
-    uint64_t requested = current;
+    int error = SYSCTL_OUT(req, &current, sizeof(current));
+    if (error != 0) {
+        return error;
+    }
+    // A plain read carries no new value; nothing further to do.
+    if (req->newptr == 0 || req->newlen == 0) {
+        return 0;
+    }
+    if (req->newlen != sizeof(uint64_t)) {
+        return EINVAL;
+    }
 
-    int error = sysctl_io_number(req, (long long)current, sizeof(current), &requested, &changed);
-    if (error != 0 || changed == 0) {
+    uint64_t requested = 0;
+    error = SYSCTL_IN(req, &requested, sizeof(requested));
+    if (error != 0) {
         return error;
     }
 
@@ -69,18 +87,22 @@ static int power_unit_sysctl(__unused struct sysctl_oid *oidp, __unused void *ar
                              __unused int arg2, struct sysctl_req *req)
 {
     uint64_t value = rdmsr64(MSR_RAPL_POWER_UNIT);
-    return sysctl_io_number(req, (long long)value, sizeof(value), nullptr, nullptr);
+    return SYSCTL_OUT(req, &value, sizeof(value));
 }
 
 static int power_info_sysctl(__unused struct sysctl_oid *oidp, __unused void *arg1,
                              __unused int arg2, struct sysctl_req *req)
 {
     uint64_t value = rdmsr64(MSR_PKG_POWER_INFO);
-    return sysctl_io_number(req, (long long)value, sizeof(value), nullptr, nullptr);
+    return SYSCTL_OUT(req, &value, sizeof(value));
 }
 
+// Readable by anyone, writable only by root. Any local process being able to
+// re-cap the CPU is not privilege escalation, but it is a lever that should
+// not be lying around: the app reaches the write through its existing
+// privileged helper instead.
 SYSCTL_PROC(_kern, OID_AUTO, zephyr_power_limit,
-            CTLTYPE_QUAD | CTLFLAG_RW | CTLFLAG_LOCKED | CTLFLAG_ANYBODY,
+            CTLTYPE_QUAD | CTLFLAG_RW | CTLFLAG_LOCKED,
             nullptr, 0, power_limit_sysctl, "Q", "Intel MSR_PKG_POWER_LIMIT (0x610)");
 
 SYSCTL_PROC(_kern, OID_AUTO, zephyr_power_unit,

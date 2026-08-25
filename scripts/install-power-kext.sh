@@ -45,7 +45,15 @@ cp -R "$SRC" "$DST_DIR/$NAME.kext"
 chown -R root:wheel "$DST_DIR/$NAME.kext"
 
 echo "Loading ..."
-kmutil load -p "$DST_DIR/$NAME.kext"
+# Leave nothing behind if the load is refused: a bundle sitting in place that
+# never loads is the kind of half-installed state that makes the next failure
+# harder to diagnose.
+if ! kmutil load -p "$DST_DIR/$NAME.kext"; then
+    echo >&2
+    echo "The kernel refused it. Removing the copy so nothing is left half-installed." >&2
+    rm -rf "${DST_DIR:?}/$NAME.kext"
+    exit 1
+fi
 
 # Without this the sysctls disappear at the next reboot and the Power tab
 # quietly goes back to "not available" with no explanation.
@@ -83,6 +91,10 @@ if sysctl -n kern.zephyr_power_limit >/dev/null 2>&1; then
     else
         echo "  Not locked. The Power tab can set the limits."
     fi
+    echo
+    echo "The power limit is written by the privileged helper, which this release"
+    echo "also updates. If the menu still shows an older helper, run:"
+    echo "  sudo \"$SCRIPT_DIR/install-helper.sh\"" 
 else
     echo "  The sysctls did not appear. The kext may have been refused; check:" >&2
     echo "    log show --last 2m --predicate 'sender == \"kernel\"' | grep -i zephyr" >&2

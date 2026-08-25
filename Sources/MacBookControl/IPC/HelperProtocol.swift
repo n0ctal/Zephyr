@@ -5,7 +5,7 @@ let kHelperMachServiceName = "com.n0ctal.macbookcontrol.helper"
 
 /// Bumped when the XPC contract changes; the app compares this against the
 /// running daemon to detect a stale installed helper.
-let kHelperVersion = "4"
+let kHelperVersion = "5"
 
 /// XPC contract between the unprivileged app and the root daemon.
 /// Only operations that genuinely require root live here; all reading
@@ -50,6 +50,11 @@ protocol HelperProtocol {
     /// Cap charging at `percent` (100 restores normal charging). The daemon
     /// remembers the value and re-asserts it after wake.
     func setChargeLimit(_ percent: Int, reply: @escaping (Bool) -> Void)
+
+    /// Writes MSR_PKG_POWER_LIMIT through the sysctl the power kext publishes.
+    /// The register is readable by anyone but writable only by root, so this
+    /// round trip is what stands between the app and the CPU's power ceiling.
+    func setPowerLimit(_ raw: UInt64, reply: @escaping (Bool) -> Void)
 
     /// Firmware clears the charge ceiling across sleep and power loss, the same
     /// way it clears the Turbo bit, so it has to be written again on wake.

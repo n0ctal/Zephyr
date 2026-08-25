@@ -110,6 +110,10 @@ final class HelperClient {
         proxy({ _ in })?.setChargeLimit(percent) { _ in }
     }
 
+    func setPowerLimit(_ raw: UInt64) {
+        proxy { _ in }?.setPowerLimit(raw) { _ in }
+    }
+
     func reapplyChargeLimitAfterWake() {
         proxy({ _ in })?.reapplyChargeLimitAfterWake { _ in }
     }

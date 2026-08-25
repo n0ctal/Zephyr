@@ -168,6 +168,15 @@ final class HelperService: NSObject, HelperProtocol {
         reply(BatteryLimit.apply(percent))
     }
 
+    func setPowerLimit(_ raw: UInt64, reply: @escaping (Bool) -> Void) {
+        // Absent sysctl means the power kext is not loaded, which is a normal
+        // state rather than an error — the caller shows it as unavailable.
+        var value = raw
+        let result = sysctlbyname("kern.zephyr_power_limit", nil, nil,
+                                  &value, MemoryLayout<UInt64>.size)
+        reply(result == 0)
+    }
+
     func reapplyChargeLimitAfterWake(reply: @escaping (Bool) -> Void) {
         guard let wanted = desiredChargeLimit else { reply(true); return }
         reply(BatteryLimit.apply(wanted))
