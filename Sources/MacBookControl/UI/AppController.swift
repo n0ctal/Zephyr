@@ -28,6 +28,7 @@ final class AppController: NSObject, NSMenuDelegate {
             PowerFeature(helper: helper, turbo: turbo, telemetry: telemetry),
             GraphicsFeature(helper: helper, gpu: gpu),
             BatteryFeature(helper: helper, telemetry: telemetry),
+            PointerFeature(),
             AwakeFeature(),
         ])
         super.init()

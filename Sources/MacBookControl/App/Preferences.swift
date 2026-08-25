@@ -112,6 +112,43 @@ enum Preferences {
         set { d.set(newValue, forKey: "graphics.mode") }
     }
 
+    // MARK: Pointer
+
+    static var reverseMouseScroll: Bool {
+        get { d.bool(forKey: "pointer.reverseMouse") }
+        set { d.set(newValue, forKey: "pointer.reverseMouse") }
+    }
+    static var reverseTrackpadScroll: Bool {
+        get { d.bool(forKey: "pointer.reverseTrackpad") }
+        set { d.set(newValue, forKey: "pointer.reverseTrackpad") }
+    }
+    static var linearScrolling: Bool {
+        get { d.bool(forKey: "pointer.linear") }
+        set { d.set(newValue, forKey: "pointer.linear") }
+    }
+    static var scrollLinesPerNotch: Int {
+        get { d.object(forKey: "pointer.lines") as? Int ?? 3 }
+        set { d.set(newValue, forKey: "pointer.lines") }
+    }
+
+    static var flattenPointerAcceleration: Bool {
+        get { d.bool(forKey: "pointer.flatten") }
+        set { d.set(newValue, forKey: "pointer.flatten") }
+    }
+    /// 1.0 is what the device shipped with, 0 removes the curve entirely.
+    static var pointerAccelerationMultiplier: Double {
+        get { d.object(forKey: "pointer.accel") as? Double ?? 0 }
+        set { d.set(newValue, forKey: "pointer.accel") }
+    }
+
+    /// Acceleration values as found before Zephyr changed them. See
+    /// `PointerAcceleration` for why these outlive the process.
+    static var pointerOriginals: [String: Int] {
+        get { (d.dictionary(forKey: "pointer.originals") as? [String: Int]) ?? [:] }
+        set { newValue.isEmpty ? d.removeObject(forKey: "pointer.originals")
+                               : d.set(newValue, forKey: "pointer.originals") }
+    }
+
     // MARK: Awake
 
     /// Whether keeping the machine awake also keeps the screen lit. Off means

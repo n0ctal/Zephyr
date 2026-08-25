@@ -57,7 +57,7 @@ struct SettingsRootView: View {
                 .tag("menubar")
         }
         .padding(12)
-        .frame(minWidth: 540, minHeight: 360)
+        .frame(minWidth: 540, minHeight: 380, idealHeight: 480)
     }
 }
 
@@ -80,9 +80,15 @@ private struct FeatureTab: View {
                     .font(.caption).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Divider()
-                feature.makeView()
-                    .disabled(!feature.isEnabled)
-                    .opacity(feature.isEnabled ? 1 : 0.4)
+                // Scrolls rather than clips: the tabs differ a lot in height,
+                // and Pointer already outgrows a window sized for Battery. A
+                // clipped tab hides controls with nothing saying they exist.
+                ScrollView {
+                    feature.makeView()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .disabled(!feature.isEnabled)
+                        .opacity(feature.isEnabled ? 1 : 0.4)
+                }
             } else {
                 Text(feature.title).font(.headline)
                 Text(feature.unsupportedReason ?? "Not available on this Mac.")

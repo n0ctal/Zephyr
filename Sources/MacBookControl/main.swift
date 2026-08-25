@@ -31,6 +31,11 @@ if arguments.contains("--test-gpu") {
     exit(0)
 }
 
+if arguments.contains("--test-pointer") {
+    runPointerTest(write: arguments.contains("--write"))
+    exit(0)
+}
+
 // Single-instance guard: if another copy (e.g. the login item) is already
 // running, exit so we don't add a second menu-bar icon. (bundleIdentifier is
 // nil for the bare dev binary, so this only applies to the .app.)
@@ -195,4 +200,37 @@ func runGPUTest() {
     let info = gpu.info()
     print("  Policy (gpuswitch): \(info.mode.map { "\($0.rawValue) (\($0.label))" } ?? "unknown")")
     print("  Currently active:   \(info.activeName ?? "—")\(info.activeIsLowPower == true ? " [integrated]" : info.activeIsLowPower == false ? " [discrete]" : "")")
+}
+
+
+// MARK: - Pointer diagnostics
+
+func runPointerTest(write: Bool) {
+    guard let acceleration = PointerAcceleration() else {
+        print("PointerAcceleration: could not resolve the IOKit symbols")
+        return
+    }
+    print("PointerAcceleration: ready")
+    let devices = acceleration.devices()
+    print("devices: \(devices.count)")
+    for device in devices {
+        print(String(format: "  %@ — %@ = %d (%.4f)", device.name, device.key, device.value, device.multiplier))
+    }
+    print("identity candidates:")
+    for key in ["RegistryID", "LocationID", "VendorID", "ProductID", "SerialNumber", "Transport", "DeviceUsagePairs"] {
+        print("  \(key): \(acceleration.probe(key) ?? "—")")
+    }
+    print("stored originals: \(Preferences.pointerOriginals)")
+    guard write else { return }
+    print("applying 0 …")
+    acceleration.apply(multiplier: 0)
+    for device in acceleration.devices() {
+        print(String(format: "  now %@ = %d", device.key, device.value))
+    }
+    print("stored originals: \(Preferences.pointerOriginals)")
+    print("restoring …")
+    acceleration.restore()
+    for device in acceleration.devices() {
+        print(String(format: "  back %@ = %d", device.key, device.value))
+    }
 }
