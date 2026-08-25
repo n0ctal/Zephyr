@@ -46,6 +46,14 @@ let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
 let controller = AppController()
 _ = controller
+// Dev affordance: the Settings window is only reachable by clicking the status
+// item, which nothing automated can do — so a broken tab would only ever be
+// found by hand. This opens it at launch so the build can prove it constructs.
+if let flag = arguments.first(where: { $0.hasPrefix("--open-settings") }) {
+    let parts = flag.split(separator: "=", maxSplits: 1)
+    SettingsWindowController.initialTab = parts.count == 2 ? String(parts[1]) : nil
+    DispatchQueue.main.async { controller.openSettingsForTesting() }
+}
 application.run()
 
 // MARK: - CLI dump
