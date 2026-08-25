@@ -307,6 +307,24 @@ enum SelfTest {
         guard let wide = MenuBarComposer.threadBars(Array(repeating: 0.5, count: 16)) else { return }
         expect(wide.size.width > bars.size.width, "more threads means a wider drawing")
         expect(MenuBarComposer.threadBars([]) == nil, "no threads draws nothing")
+
+        // The bars hang from the top. Standing on the bottom, an idle machine
+        // drew a row of specks along the lower edge that read as dirt rather
+        // than as a graph. Checked by looking at the pixels, since that is the
+        // only thing that can tell which way up a drawing is.
+        guard let idle = MenuBarComposer.threadBars(Array(repeating: 0.02, count: 8)),
+              let tiff = idle.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else {
+            expect(false, "the idle drawing can be inspected")
+            return
+        }
+        func inkInRow(_ y: Int) -> Bool {
+            (0..<bitmap.pixelsWide).contains { x in
+                (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5
+            }
+        }
+        expect(inkInRow(0), "an idle bar reaches the top edge")
+        expect(!inkInRow(bitmap.pixelsHigh - 1), "an idle bar does not touch the bottom edge")
     }
 
     // MARK: Battery colours

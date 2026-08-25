@@ -448,7 +448,7 @@ func runIconDump() {
     // visible at all: on their own they are an alpha mask and read as blank.
     let scale: CGFloat = 4
     let rowHeight: CGFloat = 26
-    let sheetSize = NSSize(width: 420, height: rowHeight * CGFloat(cases.count) + 12)
+    let sheetSize = NSSize(width: 420, height: rowHeight * CGFloat(cases.count + 4) + 24)
     let sheet = NSImage(size: sheetSize)
     sheet.lockFocus()
     NSColor(calibratedWhite: 0.93, alpha: 1).setFill()
@@ -477,6 +477,28 @@ func runIconDump() {
         }
     }
     MenuBarComposer.forcedFillRole = nil
+
+    // The load bars at a few loads, so "does this read as a graph or as dirt"
+    // can be answered by looking rather than by putting it in a menu bar.
+    let loads: [(String, [Double])] = [
+        ("idle", Array(repeating: 0.02, count: 16)),
+        ("light", (0..<16).map { $0 % 4 == 0 ? 0.35 : 0.05 }),
+        ("busy", (0..<16).map { 0.2 + Double($0) / 20 }),
+        ("full", Array(repeating: 0.98, count: 16)),
+    ]
+    var barY = sheetSize.height - CGFloat(cases.count) * rowHeight - 6
+    for (name, values) in loads {
+        barY -= rowHeight
+        (name as NSString).draw(at: NSPoint(x: 8, y: barY + 6), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.black,
+        ])
+        if let bars = MenuBarComposer.threadBars(values) {
+            bars.draw(in: NSRect(x: 110, y: barY + 3,
+                                 width: bars.size.width * 1.6, height: bars.size.height * 1.6),
+                      from: .zero, operation: .sourceOver, fraction: 1)
+        }
+    }
     sheet.unlockFocus()
     if let tiff = sheet.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
        let png = rep.representation(using: .png, properties: [:]) {

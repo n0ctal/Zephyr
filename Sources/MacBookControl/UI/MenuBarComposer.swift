@@ -409,6 +409,12 @@ enum MenuBarComposer {
 
     /// A bar per logical core, the way a system monitor draws it. Sixteen
     /// numbers would not fit and could not be read; sixteen bars can.
+    ///
+    /// The bars hang from the top rather than standing on the bottom. Growing
+    /// upward, an idle machine drew sixteen specks along the lower edge that
+    /// read as dirt on the screen rather than as a graph; hanging down, the
+    /// row lines up with the text beside it and an idle machine is a thin even
+    /// line instead of scattered dots.
     static func threadBars(_ load: [Double]) -> NSImage? {
         guard !load.isEmpty else { return nil }
         let barWidth: CGFloat = 2
@@ -419,9 +425,10 @@ enum MenuBarComposer {
         image.lockFocus()
         NSColor.black.setFill()
         for (index, value) in load.enumerated() {
-            let clamped = max(0.04, min(1, value))   // a visible stub at idle
+            let clamped = max(0.06, min(1, value))   // a visible mark at idle
             let x = CGFloat(index) * (barWidth + gap)
-            NSRect(x: x, y: 0, width: barWidth, height: height * clamped).fill()
+            let barHeight = height * CGFloat(clamped)
+            NSRect(x: x, y: height - barHeight, width: barWidth, height: barHeight).fill()
         }
         image.unlockFocus()
         // Template so macOS inverts it for light and dark menu bars.

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// What the CPU is allowed to draw.
@@ -95,6 +96,15 @@ final class PowerFeature: Feature {
         helper.setTurboBoostEnabled(!disabled)
     }
 
+    /// Built from the running bundle rather than hard-coded, so it is right
+    /// whether Zephyr sits in /Applications or in a build directory.
+    static var kextInstallCommand: String {
+        let script = Bundle.main.resourceURL?
+            .appendingPathComponent("scripts/install-power-kext.sh").path
+            ?? "/Applications/Zephyr.app/Contents/Resources/scripts/install-power-kext.sh"
+        return "sudo \"\(script)\""
+    }
+
     override func makeView() -> AnyView { AnyView(PowerView(feature: self, telemetry: telemetry)) }
 }
 
@@ -166,8 +176,28 @@ private struct PowerLimitControls: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
+                // Saying only "not loaded" leaves the reader at a dead end.
+                // The command is the answer, so it is here rather than in a
+                // document somebody has to find.
                 Text("Not available: the kext that publishes these registers is not loaded. MSRs are ring 0, so there is no way to read them from an ordinary process.")
                     .font(.subheadline).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("It is a deliberate step, not an oversight: it puts code in the kernel and needs System Integrity Protection disabled. Run this once in Terminal, then reopen this tab.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(PowerFeature.kextInstallCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.12)))
+                HStack {
+                    Button("Copy command") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(PowerFeature.kextInstallCommand, forType: .string)
+                    }
+                    Button("Check again") { feature.refreshLimits() }
+                }
+                Text("The script says at the end whether the firmware has locked the register. If it has, the limits can be read but not changed — by anything, not just by Zephyr.")
+                    .font(.caption).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
