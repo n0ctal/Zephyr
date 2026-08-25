@@ -23,6 +23,13 @@ final class ScrollInterceptor {
         var linear = false
         /// Lines per notch when `linear` is on.
         var linesPerNotch = 3
+        /// Extra mouse buttons, by CGEvent button number.
+        var buttons: [Int: ButtonAction] = [:]
+
+        var wantsAnything: Bool {
+            reverseMouse || reverseTrackpad || linear
+                || buttons.values.contains { $0 != .passThrough }
+        }
     }
 
     var options = Options()
@@ -52,7 +59,10 @@ final class ScrollInterceptor {
         guard tap == nil else { return true }
         guard Self.isPermitted else { return false }
 
-        let mask = CGEventMask(1 << CGEventType.scrollWheel.rawValue)
+        let mask = CGEventMask(
+            (1 << CGEventType.scrollWheel.rawValue) |
+            (1 << CGEventType.otherMouseDown.rawValue) |
+            (1 << CGEventType.otherMouseUp.rawValue))
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -94,36 +104,63 @@ final class ScrollInterceptor {
             if let tap = tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
-        guard type == .scrollWheel else { return Unmanaged.passUnretained(event) }
+        switch type {
+        case .scrollWheel:
+            Self.rewrite(event, options: options)
+            return Unmanaged.passUnretained(event)
 
+        case .otherMouseDown, .otherMouseUp:
+            let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            guard let action = options.buttons[button], action != .passThrough else {
+                return Unmanaged.passUnretained(event)
+            }
+            // Swallowed in both directions. Letting the up through after
+            // eating the down leaves apps with an unmatched release, which
+            // some of them treat as a click they never saw begin.
+            if type == .otherMouseDown { action.perform() }
+            return nil
+
+        default:
+            return Unmanaged.passUnretained(event)
+        }
+    }
+
+    /// The transformation itself, separated from the tap so it can be checked
+    /// against a constructed event without owning the input stream.
+    static func rewrite(_ event: CGEvent, options: Options) {
         let isTrackpad = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
-        let shouldReverse = isTrackpad ? options.reverseTrackpad : options.reverseMouse
-
-        if shouldReverse { invert(event) }
-        if options.linear && !isTrackpad { flatten(event) }
-
-        return Unmanaged.passUnretained(event)
+        if isTrackpad ? options.reverseTrackpad : options.reverseMouse { invert(event) }
+        if options.linear && !isTrackpad { flatten(event, linesPerNotch: options.linesPerNotch) }
     }
 
     /// Flips both axes. All three representations of the same delta have to
     /// move together — leaving one un-negated makes the scroll fight itself,
     /// because different apps read different fields.
-    private func invert(_ event: CGEvent) {
+    ///
+    /// Every field is read before any is written. They are not independent:
+    /// writing the line delta makes CoreGraphics recompute the point and
+    /// fixed-point deltas from it, so negating them in sequence negates a
+    /// value that has already changed underneath. Found by a check that
+    /// constructed an event and looked at all three afterwards.
+    private static func invert(_ event: CGEvent) {
         for (line, point, fixed) in Self.axes {
-            event.setIntegerValueField(line, value: -event.getIntegerValueField(line))
-            event.setIntegerValueField(point, value: -event.getIntegerValueField(point))
-            event.setDoubleValueField(fixed, value: -event.getDoubleValueField(fixed))
+            let lineDelta = event.getIntegerValueField(line)
+            let pointDelta = event.getIntegerValueField(point)
+            let fixedDelta = event.getDoubleValueField(fixed)
+            event.setIntegerValueField(line, value: -lineDelta)
+            event.setIntegerValueField(point, value: -pointDelta)
+            event.setDoubleValueField(fixed, value: -fixedDelta)
         }
     }
 
     /// Replaces the accelerated delta with a fixed step per notch. macOS scales
     /// a fast spin far beyond the notches actually turned, which is useful on a
     /// trackpad and unpredictable on a wheel.
-    private func flatten(_ event: CGEvent) {
+    private static func flatten(_ event: CGEvent, linesPerNotch: Int) {
         for (line, point, fixed) in Self.axes {
             let delta = event.getIntegerValueField(line)
             guard delta != 0 else { continue }
-            let step = Int64(options.linesPerNotch) * (delta < 0 ? -1 : 1)
+            let step = Int64(linesPerNotch) * (delta < 0 ? -1 : 1)
             event.setIntegerValueField(line, value: step)
             event.setIntegerValueField(point, value: step * 10)
             event.setDoubleValueField(fixed, value: Double(step))

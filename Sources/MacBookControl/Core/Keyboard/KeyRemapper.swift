@@ -75,23 +75,30 @@ final class KeyRemapper {
         catalogue.first { $0.usage == usage }?.name ?? String(format: "0x%02X", usage)
     }
 
-    /// Every keyboard the mapping will be written to. Shown in the UI so it is
-    /// clear where a swap lands — the Touch Bar registers as a keyboard too.
-    func keyboards() -> [String] {
-        hid.services(matching: [.keyboard]).map { hid.name($0) }
+    /// Every attached keyboard, with the identity its settings are stored
+    /// under. The Touch Bar registers as a keyboard too, which is worth seeing
+    /// rather than discovering when a swap lands somewhere unexpected.
+    func keyboards() -> [InputDevice] {
+        hid.services(matching: [.keyboard]).map {
+            InputDevice(identity: hid.identity($0), name: hid.name($0))
+        }
     }
 
-    /// Replaces the whole mapping table. Partial edits are not possible: the
-    /// property is the complete list, so anything left out is unmapped.
-    func apply(_ mappings: [Mapping]) {
-        let pairs = mappings.map {
-            ["HIDKeyboardModifierMappingSrc": Self.wireValue(forUsage: $0.source),
-             "HIDKeyboardModifierMappingDst": Self.wireValue(forUsage: $0.destination)]
-        }
+    /// Writes each keyboard its own table. Partial edits are not possible:
+    /// the property is the complete list for that device, so anything left out
+    /// of a device's table is unmapped on that device.
+    func apply(_ store: DeviceScopedStore<[Mapping]>) {
+        var anyApplied = false
         for service in hid.services(matching: [.keyboard]) {
+            let mappings = store[hid.identity(service)]
+            let pairs = mappings.map {
+                ["HIDKeyboardModifierMappingSrc": Self.wireValue(forUsage: $0.source),
+                 "HIDKeyboardModifierMappingDst": Self.wireValue(forUsage: $0.destination)]
+            }
             hid.set(service, "HIDKeyboardModifierMappingPairs", pairs as CFArray)
+            anyApplied = anyApplied || !mappings.isEmpty
         }
-        Preferences.keyboardMappingApplied = !mappings.isEmpty
+        Preferences.keyboardMappingApplied = anyApplied
     }
 
     /// Back to the keys as printed. Called when the feature is switched off,
@@ -104,10 +111,15 @@ final class KeyRemapper {
         Preferences.keyboardMappingApplied = false
     }
 
-    /// Reads back what the first keyboard actually holds, so the UI can show
-    /// the state of the hardware rather than the state of our own intentions.
-    func liveMappings() -> [Mapping] {
-        guard let service = hid.services(matching: [.keyboard]).first,
+    /// Reads back what a keyboard actually holds, so the UI can show the state
+    /// of the hardware rather than the state of our own intentions. With no
+    /// identity given, the first keyboard answers.
+    func liveMappings(for identity: String? = nil) -> [Mapping] {
+        let services = hid.services(matching: [.keyboard])
+        let service = identity.flatMap { wanted in
+            services.first { hid.identity($0) == wanted }
+        } ?? services.first
+        guard let service = service,
               let pairs = hid.get(service, "HIDKeyboardModifierMappingPairs") as? [[String: Int]]
         else { return [] }
         return pairs.compactMap { pair in

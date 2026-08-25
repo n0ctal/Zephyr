@@ -1,29 +1,34 @@
 import SwiftUI
 
-/// Key-for-key swaps, written below the window server.
+/// Key-for-key swaps, written below the window server, per keyboard.
 ///
 /// Deliberately the simple half of what Karabiner does. Layers, chords and
 /// hold-versus-tap need an event tap, which macOS shuts out of password fields
 /// and the login window — so a Caps Lock that became Escape would stop being
 /// Escape at exactly the moment it is least expected. Plain swaps go through
 /// the HID layer instead, where they hold everywhere.
+///
+/// Each keyboard gets its own table because an external board and a built-in
+/// one are two different opinions about where Control belongs.
 final class KeyboardFeature: Feature {
     private let remapper = KeyRemapper()
 
-    @Published var mappings: [KeyRemapper.Mapping] {
+    @Published var store: DeviceScopedStore<[KeyRemapper.Mapping]> {
         didSet {
-            Preferences.keyMappings = mappings
+            Preferences.keyboardStore = store
             guard isEnabled else { return }
-            remapper.apply(mappings)
+            remapper.apply(store)
         }
     }
-    @Published private(set) var keyboards: [String] = []
+    @Published private(set) var devices: [InputDevice] = []
+    /// nil means the defaults every keyboard follows unless it has its own.
+    @Published var scope: String?
 
     init() {
-        mappings = Preferences.keyMappings
+        store = Preferences.keyboardStore
         super.init(id: "keyboard",
                    title: "Keyboard",
-                   summary: "Swap keys for other keys. Applied below the window server, so it holds on the login screen and in password fields.")
+                   summary: "Swap keys for other keys, per keyboard. Applied below the window server, so it holds on the login screen and in password fields.")
         // A previous run may have been killed with a mapping live. The keys
         // stay swapped until logout, and nothing else knows to undo it.
         if Preferences.keyboardMappingApplied && !isEnabled {
@@ -37,29 +42,53 @@ final class KeyboardFeature: Feature {
     }
 
     override func activate() {
-        remapper.apply(mappings)
         refresh()
+        remapper.apply(store)
     }
 
     override func deactivate() {
         remapper.clear()
     }
 
-    func refresh() { keyboards = remapper.keyboards() }
-
-    /// What the hardware actually holds, which is not always what we asked for.
-    func liveMappings() -> [KeyRemapper.Mapping] { remapper.liveMappings() }
-
-    func add() {
-        mappings.append(KeyRemapper.Mapping(source: 0x39, destination: 0x29))
+    func refresh() {
+        devices = remapper.keyboards()
+        // Forget devices that are gone, so the store does not accumulate every
+        // keyboard ever attached.
+        var pruned = store
+        pruned.prune(keeping: Set(devices.map(\.identity)))
+        if pruned != store { store = pruned }
+        if let scope = scope, !devices.contains(where: { $0.identity == scope }) {
+            self.scope = nil
+        }
     }
+
+    /// What the hardware actually holds for the selected keyboard, which is
+    /// not always what we asked for.
+    func liveMappings() -> [KeyRemapper.Mapping] { remapper.liveMappings(for: scope) }
+
+    // MARK: Editing the selected scope
+
+    var mappings: [KeyRemapper.Mapping] {
+        get { scope.map { store[$0] } ?? store.defaults }
+        set {
+            if let scope = scope { store[scope] = newValue } else { store.defaults = newValue }
+        }
+    }
+
+    var scopeIsCustomised: Bool { scope.map { store.isCustomised($0) } ?? false }
+
+    func followDefaults() {
+        guard let scope = scope else { return }
+        var updated = store
+        updated.revertToDefaults(scope)
+        store = updated
+    }
+
+    func add() { mappings.append(KeyRemapper.Mapping(source: 0x39, destination: 0x29)) }
 
     func remove(at index: Int) {
         guard mappings.indices.contains(index) else { return }
         mappings.remove(at: index)
-        // An empty list still has to be written: the property is the whole
-        // table, so dropping the last row only takes effect once it is sent.
-        if isEnabled { remapper.apply(mappings) }
     }
 
     func applyPreset(_ preset: [KeyRemapper.Mapping]) { mappings = preset }
@@ -81,6 +110,30 @@ private struct KeyboardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Picker("These apply to", selection: Binding(
+                    get: { feature.scope ?? "" },
+                    set: { feature.scope = $0.isEmpty ? nil : $0 }
+                )) {
+                    Text("Every keyboard").tag("")
+                    ForEach(feature.devices) { device in
+                        Text(device.name + (feature.store.isCustomised(device.identity) ? " ·" : ""))
+                            .tag(device.identity)
+                    }
+                }
+                if feature.scopeIsCustomised {
+                    Button("Follow the default") { feature.followDefaults() }
+                }
+            }
+            Text(feature.scope == nil
+                 ? "The default table. Any keyboard without one of its own follows this."
+                 : (feature.scopeIsCustomised
+                    ? "This keyboard has its own table."
+                    : "This keyboard follows the default. Editing here gives it a table of its own."))
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
             Text("Common swaps").font(.headline)
             HStack {
                 ForEach(Self.presets, id: \.0) { name, preset in
@@ -110,23 +163,16 @@ private struct KeyboardView: View {
             }
 
             Divider()
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Applies to: \(feature.keyboards.isEmpty ? "no keyboards found" : feature.keyboards.joined(separator: ", "))")
-                    .font(.caption).foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("macOS forgets these when a keyboard re-enumerates, so Zephyr writes them again at login. Turn on Launch at login if you rely on a swap.")
-                    .font(.caption).foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text("macOS forgets these when a keyboard re-enumerates, so Zephyr writes them again at login. Turn on Launch at login if you rely on a swap.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { feature.refresh() }
     }
 
     private func keyPicker(index: Int, isSource: Bool) -> some View {
         Picker("", selection: Binding(
-            get: {
-                isSource ? feature.mappings[index].source : feature.mappings[index].destination
-            },
+            get: { isSource ? feature.mappings[index].source : feature.mappings[index].destination },
             set: { usage in
                 var mapping = feature.mappings[index]
                 if isSource { mapping.source = usage } else { mapping.destination = usage }

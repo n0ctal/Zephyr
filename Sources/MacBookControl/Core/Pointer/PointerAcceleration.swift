@@ -29,9 +29,14 @@ final class PointerAcceleration {
     }
 
     struct Device {
+        let identity: String
         let name: String
         let key: String
         let value: Int
+        /// A trackpad names its curve `HIDTrackpadAcceleration`, a mouse
+        /// `HIDMouseAcceleration`. The device says which it is, so nothing has
+        /// to be guessed from the product name.
+        var isTrackpad: Bool { key.localizedCaseInsensitiveContains("trackpad") }
         /// 1.0 is the shipped curve for that device; 0 is no acceleration.
         var multiplier: Double { Double(value) / 65536.0 }
     }
@@ -41,7 +46,8 @@ final class PointerAcceleration {
         pointerServices().compactMap { service in
             guard let key = hid.string(service, "HIDPointerAccelerationType"),
                   let value = hid.int(service, key) else { return nil }
-            return Device(name: hid.name(service), key: key, value: value)
+            return Device(identity: hid.identity(service), name: hid.name(service),
+                          key: key, value: value)
         }
     }
 
@@ -51,11 +57,15 @@ final class PointerAcceleration {
     /// Applies `multiplier` to every pointing device, remembering what each
     /// one had first. Re-applying is cheap and expected: a mouse plugged in
     /// later arrives with the system curve and has to be caught.
-    func apply(multiplier: Double) {
+    /// Applies a per-device multiplier. Returning nil for a device leaves it
+    /// alone entirely — which is different from applying 1.0, because the
+    /// shipped curve is not the same number on every device.
+    func apply(_ multiplierFor: (String) -> Double?) {
         var captured = originals
         for service in pointerServices() {
             guard let key = hid.string(service, "HIDPointerAccelerationType") else { continue }
             let id = hid.identity(service)
+            guard let multiplier = multiplierFor(id) else { continue }
             if captured[id] == nil, let current = hid.int(service, key) {
                 captured[id] = current
             }

@@ -52,6 +52,11 @@ if arguments.contains("--test-keyboard") {
     exit(0)
 }
 
+if arguments.contains("--test-scroll") {
+    runScrollTest()
+    exit(0)
+}
+
 if arguments.contains("--test-pointer") {
     runPointerTest(write: arguments.contains("--write"))
     exit(0)
@@ -240,6 +245,10 @@ func runPointerTest(write: Bool) {
         return
     }
     print("PointerAcceleration: ready")
+    print("Accessibility trusted: \(ScrollInterceptor.isPermitted)")
+    let probe = ScrollInterceptor()
+    print("event tap can be created: \(probe.start())")
+    probe.stop()
     let devices = acceleration.devices()
     print("devices: \(devices.count)")
     for device in devices {
@@ -252,7 +261,7 @@ func runPointerTest(write: Bool) {
     print("stored originals: \(Preferences.pointerOriginals)")
     guard write else { return }
     print("applying 0 …")
-    acceleration.apply(multiplier: 0)
+    acceleration.apply { _ in 0 }
     for device in acceleration.devices() {
         print(String(format: "  now %@ = %d", device.key, device.value))
     }
@@ -273,8 +282,17 @@ func runKeyboardTest(write: Bool) {
         print("KeyRemapper: could not resolve the HID interfaces")
         return
     }
-    print("keyboards: \(remapper.keyboards().joined(separator: ", "))")
+    print("keyboards: \(remapper.keyboards().map { "\($0.name) [\($0.identity)]" }.joined(separator: ", "))")
     func show(_ label: String) {
+        for device in remapper.keyboards() {
+            let live = remapper.liveMappings(for: device.identity)
+            let text = live.isEmpty ? "none" : live.map {
+                "\(KeyRemapper.name(forUsage: $0.source)) -> \(KeyRemapper.name(forUsage: $0.destination))"
+            }.joined(separator: ", ")
+            print("  \(label) — \(device.name): \(text)")
+        }
+    }
+    func showFirst(_ label: String) {
         let live = remapper.liveMappings()
         let text = live.isEmpty ? "none" : live.map {
             "\(KeyRemapper.name(forUsage: $0.source)) -> \(KeyRemapper.name(forUsage: $0.destination))"
@@ -283,7 +301,16 @@ func runKeyboardTest(write: Bool) {
     }
     show("before")
     guard write else { return }
-    remapper.apply([KeyRemapper.Mapping(source: 0x39, destination: 0x29)])
+    var store = DeviceScopedStore<[KeyRemapper.Mapping]>(defaults: [
+        KeyRemapper.Mapping(source: 0x39, destination: 0x29)
+    ])
+    if CommandLine.arguments.contains("--first-only"), let first = remapper.keyboards().first {
+        // Proves the per-device path: only this one keyboard is remapped.
+        store = DeviceScopedStore<[KeyRemapper.Mapping]>(defaults: [])
+        store[first.identity] = [KeyRemapper.Mapping(source: 0x39, destination: 0x29)]
+        print("  scoping the swap to \(first.name)")
+    }
+    remapper.apply(store)
     show("after applying Caps Lock -> Escape")
     print("  applied flag: \(Preferences.keyboardMappingApplied)")
     if CommandLine.arguments.contains("--leave") {
@@ -367,3 +394,6 @@ func runTimingTest() {
     time("HelperClient.version (XPC round trip)") { _ = helper.version() }
     time("PowerLimits.current (sysctl)") { _ = PowerLimits.current() }
 }
+
+
+// MARK: - What identifies the device that sent an event

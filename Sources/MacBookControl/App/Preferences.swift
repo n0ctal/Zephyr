@@ -174,6 +174,28 @@ enum Preferences {
         set { d.set(newValue, forKey: "pointer.lines") }
     }
 
+    static var pointerStore: DeviceScopedStore<PointerProfile> {
+        get {
+            if let data = d.data(forKey: "pointer.store"),
+               let decoded = try? JSONDecoder().decode(DeviceScopedStore<PointerProfile>.self, from: data) {
+                return decoded
+            }
+            // Carry the single-set-of-settings version forward as the
+            // defaults, so an upgrade does not quietly stop doing anything.
+            var profile = PointerProfile()
+            profile.reverseScroll = d.bool(forKey: "pointer.reverseMouse")
+            profile.linearScroll = d.bool(forKey: "pointer.linear")
+            profile.linesPerNotch = d.object(forKey: "pointer.lines") as? Int ?? 3
+            profile.flattenAcceleration = d.bool(forKey: "pointer.flatten")
+            profile.accelerationMultiplier = d.object(forKey: "pointer.accel") as? Double ?? 0
+            return DeviceScopedStore<PointerProfile>(defaults: profile)
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "pointer.store")
+        }
+    }
+
     static var flattenPointerAcceleration: Bool {
         get { d.bool(forKey: "pointer.flatten") }
         set { d.set(newValue, forKey: "pointer.flatten") }
@@ -194,16 +216,24 @@ enum Preferences {
 
     // MARK: Keyboard
 
-    static var keyMappings: [KeyRemapper.Mapping] {
+    static var keyboardStore: DeviceScopedStore<[KeyRemapper.Mapping]> {
         get {
-            guard let data = d.data(forKey: "keyboard.mappings"),
-                  let decoded = try? JSONDecoder().decode([KeyRemapper.Mapping].self, from: data)
-            else { return [] }
-            return decoded
+            if let data = d.data(forKey: "keyboard.store"),
+               let decoded = try? JSONDecoder().decode(DeviceScopedStore<[KeyRemapper.Mapping]>.self, from: data) {
+                return decoded
+            }
+            // Carry a single-table setup forward as the defaults, so an
+            // upgrade does not quietly stop swapping keys.
+            var store = DeviceScopedStore<[KeyRemapper.Mapping]>(defaults: [])
+            if let data = d.data(forKey: "keyboard.mappings"),
+               let legacy = try? JSONDecoder().decode([KeyRemapper.Mapping].self, from: data) {
+                store.defaults = legacy
+            }
+            return store
         }
         set {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
-            d.set(data, forKey: "keyboard.mappings")
+            d.set(data, forKey: "keyboard.store")
         }
     }
 

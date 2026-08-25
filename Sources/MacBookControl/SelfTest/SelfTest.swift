@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Regression checks that run without Xcode.
@@ -35,6 +36,7 @@ enum SelfTest {
         keyMappingWireFormat()
         sliderTickBudget()
         fanCurve()
+        scrollRewriting()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -210,6 +212,70 @@ enum SelfTest {
         expect(ticks(20...100, 5) != nil, "a charge ceiling keeps its ticks")
         expect(ticks(0...2, 0.05) != nil, "acceleration keeps its ticks")
         expect(ticks(10...90, 1) == nil, "an 80-step watt range goes continuous")
+    }
+
+    // MARK: Scroll rewriting
+
+    private static func scrollRewriting() {
+        // Built rather than captured: the transformation is what is under
+        // test, not the tap that delivers events to it.
+        func scrollEvent(lines: Int64, continuous: Bool) -> CGEvent? {
+            guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .line,
+                                      wheelCount: 1, wheel1: Int32(lines), wheel2: 0, wheel3: 0)
+            else { return nil }
+            event.setIntegerValueField(.scrollWheelEventIsContinuous, value: continuous ? 1 : 0)
+            return event
+        }
+
+        guard let mouse = scrollEvent(lines: 3, continuous: false),
+              let trackpad = scrollEvent(lines: 3, continuous: true) else {
+            expect(false, "scroll events can be constructed")
+            return
+        }
+
+        // A mouse and a trackpad must be able to disagree — that is the entire
+        // point of the tab, and macOS offers one switch for both.
+        var options = ScrollInterceptor.Options()
+        options.reverseMouse = true
+        options.reverseTrackpad = false
+        ScrollInterceptor.rewrite(mouse, options: options)
+        ScrollInterceptor.rewrite(trackpad, options: options)
+        expectEqual(mouse.getIntegerValueField(.scrollWheelEventDeltaAxis1), -3,
+                    "a mouse scroll is inverted")
+        expectEqual(trackpad.getIntegerValueField(.scrollWheelEventDeltaAxis1), 3,
+                    "a trackpad scroll is left alone by the mouse setting")
+
+        // All three representations of the same delta have to move together;
+        // leaving one un-negated makes the scroll fight itself, because
+        // different apps read different fields.
+        guard let signs = scrollEvent(lines: 5, continuous: false) else { return }
+        signs.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: 50)
+        signs.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: 5)
+        var invert = ScrollInterceptor.Options()
+        invert.reverseMouse = true
+        ScrollInterceptor.rewrite(signs, options: invert)
+        expectEqual(signs.getIntegerValueField(.scrollWheelEventDeltaAxis1), -5, "line delta flips")
+        expectEqual(signs.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), -50, "point delta flips")
+        expectEqual(signs.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1), -5, "fixed-point delta flips")
+
+        // Flattening applies to notched wheels only. A trackpad is a
+        // continuous surface and pinning it to a step would feel broken.
+        guard let fast = scrollEvent(lines: 12, continuous: false),
+              let surface = scrollEvent(lines: 12, continuous: true) else { return }
+        var linear = ScrollInterceptor.Options()
+        linear.linear = true
+        linear.linesPerNotch = 3
+        ScrollInterceptor.rewrite(fast, options: linear)
+        ScrollInterceptor.rewrite(surface, options: linear)
+        expectEqual(fast.getIntegerValueField(.scrollWheelEventDeltaAxis1), 3,
+                    "a fast wheel spin is flattened to the chosen step")
+        expectEqual(surface.getIntegerValueField(.scrollWheelEventDeltaAxis1), 12,
+                    "a trackpad is never flattened")
+
+        guard let backwards = scrollEvent(lines: -12, continuous: false) else { return }
+        ScrollInterceptor.rewrite(backwards, options: linear)
+        expectEqual(backwards.getIntegerValueField(.scrollWheelEventDeltaAxis1), -3,
+                    "flattening keeps the direction")
     }
 
     // MARK: Fan curve
