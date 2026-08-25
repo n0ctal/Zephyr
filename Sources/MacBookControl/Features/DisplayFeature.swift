@@ -7,6 +7,11 @@ final class DisplayFeature: Feature {
 
     @Published private(set) var screens: [DisplayControl.Screen] = []
     @Published var dimming: [CGDirectDisplayID: Double] = [:]
+    /// Cached per display. Enumerating modes asks CoreGraphics for every
+    /// variant — 210 of them on this machine before de-duplication — and a
+    /// SwiftUI Picker asks its data source on every render, so computing it in
+    /// the body made simply opening the tab expensive.
+    @Published private(set) var modeCache: [CGDirectDisplayID: [DisplayControl.Mode]] = [:]
 
     private var refreshTimer: Timer?
 
@@ -44,7 +49,13 @@ final class DisplayFeature: Feature {
         dimming.removeAll()
     }
 
-    func refresh() { screens = control.screens() }
+    func refresh() {
+        let screens = control.screens()
+        self.screens = screens
+        for screen in screens where modeCache[screen.id] == nil {
+            modeCache[screen.id] = control.modes(for: screen.id)
+        }
+    }
 
     func setBrightness(_ value: Double, on display: CGDirectDisplayID) {
         control.setBrightness(Float(value), on: display)
@@ -61,7 +72,7 @@ final class DisplayFeature: Feature {
     }
 
     func modes(for display: CGDirectDisplayID) -> [DisplayControl.Mode] {
-        control.modes(for: display)
+        modeCache[display] ?? []
     }
 
     func currentMode(for display: CGDirectDisplayID) -> DisplayControl.Mode? {
@@ -70,7 +81,9 @@ final class DisplayFeature: Feature {
 
     func apply(_ mode: DisplayControl.Mode, to display: CGDirectDisplayID) {
         control.apply(mode, to: display)
-        refresh()
+        // The mode list itself does not change with the current mode, so the
+        // cache stands; only the screen summary needs re-reading.
+        screens = control.screens()
     }
 
     override func makeView() -> AnyView { AnyView(DisplayView(feature: self)) }

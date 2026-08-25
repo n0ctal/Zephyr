@@ -33,7 +33,16 @@ final class CoolingFeature: Feature {
                    summary: "Drive the fans yourself instead of leaving them to the firmware, and see when heat is capping the CPU.")
     }
 
-    override var isSupported: Bool { !telemetry.fans.isEmpty }
+    /// Latched on the first sighting. Fan presence is a fact about the
+    /// machine, not a reading: letting a momentarily empty poll answer this
+    /// would make the whole tab vanish behind "no fans found" and stay there,
+    /// since nothing re-asks.
+    private lazy var hasFans: Bool = !telemetry.fans.isEmpty
+
+    override var isSupported: Bool {
+        if !hasFans && !telemetry.fans.isEmpty { hasFans = true }
+        return hasFans
+    }
     override var unsupportedReason: String? {
         isSupported ? nil : "No controllable fans were found. Fanless Macs cool passively, so there is nothing here to drive."
     }

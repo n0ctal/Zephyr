@@ -23,6 +23,7 @@ final class AppController: NSObject, NSMenuDelegate {
     override init() {
         let telemetry = self.telemetry
         let helper = self.helper
+        let buildStart = Date()
         let profiles = ProfilesFeature()
         registry = FeatureRegistry(features: [
             CoolingFeature(helper: helper, telemetry: telemetry),
@@ -38,24 +39,44 @@ final class AppController: NSObject, NSMenuDelegate {
         // The engine drives the other features, so it cannot be built
         // alongside them — it needs the finished registry.
         profiles.attach(registry: registry, telemetry: telemetry)
+        if ProcessInfo.processInfo.arguments.contains("--time-phases") {
+            FileHandle.standardError.write(Data(String(
+                format: "  %6.0f ms  building all features\n",
+                Date().timeIntervalSince(buildStart) * 1000).utf8))
+        }
         super.init()
         configure()
     }
 
+    /// Temporary instrumentation, on stderr so it survives being killed.
+    private func phase(_ label: String, _ start: Date) -> Date {
+        if ProcessInfo.processInfo.arguments.contains("--time-phases") {
+            FileHandle.standardError.write(Data(String(
+                format: "  %6.0f ms  %@\n", Date().timeIntervalSince(start) * 1000, label).utf8))
+        }
+        return Date()
+    }
+
     private func configure() {
+        var t = Date()
         Preferences.migrateLegacyKeys()
         statusItem.button?.title = "…"
         menu.delegate = self
         statusItem.menu = menu
 
+        t = phase("status item + menu", t)
         telemetry.start()
+        t = phase("telemetry.start", t)
         helperVersion = helper.version()
+        t = phase("helper.version", t)
         // Features come up only after telemetry has read once: `isSupported`
         // asks the hardware, and a feature that checks before the first poll
         // would see an empty fan list and disable itself.
         registry.applyStoredState()
+        t = phase("applyStoredState", t)
 
         updateStatusTitle()
+        t = phase("updateStatusTitle", t)
         refreshTimer = Timer.scheduledTimer(withTimeInterval: Telemetry.interval, repeats: true) { [weak self] _ in
             self?.updateStatusTitle()
         }
@@ -67,6 +88,9 @@ final class AppController: NSObject, NSMenuDelegate {
             // believes they are set, so the settings lapse silently overnight.
             self?.helper.reapplyTurboAfterWake()
             self?.helper.reapplyChargeLimitAfterWake()
+            // The cached kext state can only be stale after a wake, so this is
+            // the one place it is worth re-reading.
+            (self?.registry.feature(id: "power") as? PowerFeature)?.refreshTurboState()
         }
     }
 

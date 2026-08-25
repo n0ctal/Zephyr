@@ -21,10 +21,26 @@ final class TurboBoostController {
 
     // MARK: Read (unprivileged)
 
+    /// Cached because asking costs 813 ms, measured: `kextstat` walks every
+    /// loaded extension, and this is asked on init and on every menu open.
+    /// Nothing else on the machine loads or unloads this bundle, so our own
+    /// writes are the only thing that can invalidate it.
+    private var cachedDisabled: Bool?
+
     /// Whether Turbo Boost is currently disabled (i.e. the kext is loaded).
     func isTurboDisabled() -> Bool {
-        guard let output = Self.run("/usr/sbin/kextstat", ["-l"]) else { return false }
-        return output.contains(Self.kextIdentifier)
+        if let cached = cachedDisabled { return cached }
+        return refreshTurboState()
+    }
+
+    /// Asks the system and re-primes the cache. Call this off the main thread
+    /// at startup, and after a wake — the firmware restores the register
+    /// across sleep while the bundle stays loaded.
+    @discardableResult
+    func refreshTurboState() -> Bool {
+        let loaded = Self.run("/usr/sbin/kextstat", ["-l"])?.contains(Self.kextIdentifier) ?? false
+        cachedDisabled = loaded
+        return loaded
     }
 
     var isTurboEnabled: Bool { !isTurboDisabled() }
@@ -37,10 +53,14 @@ final class TurboBoostController {
     func setTurboEnabled(_ enabled: Bool) -> Bool {
         if enabled {
             guard isTurboDisabled() else { return true }   // already on
-            return Self.run("/usr/bin/kmutil", ["unload", "-b", Self.kextIdentifier]) != nil
+            let ok = Self.run("/usr/bin/kmutil", ["unload", "-b", Self.kextIdentifier]) != nil
+            if ok { cachedDisabled = false }
+            return ok
         } else {
             guard !isTurboDisabled() else { return true }  // already off
-            return Self.run("/usr/bin/kmutil", ["load", "-p", Self.kextPath]) != nil
+            let ok = Self.run("/usr/bin/kmutil", ["load", "-p", Self.kextPath]) != nil
+            if ok { cachedDisabled = true }
+            return ok
         }
     }
 

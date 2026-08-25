@@ -74,10 +74,12 @@ final class GraphicsFeature: Feature {
 
     private func reassertIfDrifted() {
         guard isEnabled, mode != .automatic else { return }
-        info = gpu.info()
-        guard let activeIsLowPower = info.activeIsLowPower else { return }
-        let wantsLowPower = (mode == .integratedOnly)
-        guard activeIsLowPower != wantsLowPower else {
+        // Compares the *policy*, not which GPU is rendering. Asking Metal which
+        // device is active means creating one, and creating a Metal device can
+        // itself wake the discrete GPU — a watchdog that woke the very thing it
+        // was guarding against would be worse than no watchdog. Reading the
+        // policy costs a millisecond and touches nothing.
+        guard let live = gpu.currentMode(), live != mode else {
             lastReassert = nil
             return
         }
@@ -101,7 +103,9 @@ final class GraphicsFeature: Feature {
         newMode == .automatic ? stopWatchdog() : startWatchdog()
     }
 
-    func refresh() { info = gpu.info() }
+    /// Called when the tab is on screen. This is the one place that asks
+    /// which GPU is rendering, because asking costs a Metal device.
+    func refresh() { info = gpu.info(includeActive: true) }
 
     override func makeView() -> AnyView { AnyView(GraphicsView(feature: self)) }
 }
@@ -142,5 +146,6 @@ private struct GraphicsView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .onAppear { feature.refresh() }
     }
 }

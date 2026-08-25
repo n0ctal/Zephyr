@@ -21,7 +21,11 @@ final class PowerFeature: Feature {
         self.helper = helper
         self.turbo = turbo
         self.telemetry = telemetry
-        self.turboDisabled = turbo.isTurboDisabled()
+        // Asking the system costs 813 ms, measured — `kextstat` walks every
+        // loaded extension. Paying that in init delays the menu-bar icon
+        // appearing at all, so the last known answer is used and corrected
+        // from a background read a moment later.
+        self.turboDisabled = Preferences.lastKnownTurboDisabled
         let reading = PowerLimits.current()
         self.limits = reading
         self.pl1 = reading?.pl1Watts ?? 0
@@ -39,7 +43,25 @@ final class PowerFeature: Feature {
     /// Re-asserts the stored choice. Enabling the feature must not silently
     /// change the CPU: if the user never asked for turbo off, leave it on.
     override func activate() {
-        helper.setTurboBoostEnabled(!turboDisabled)
+        // Deferred until the real state is known: acting on a stale cached
+        // value could flip Turbo Boost the wrong way at launch.
+        refreshTurboState { [weak self] in
+            guard let self = self, self.isEnabled else { return }
+            self.helper.setTurboBoostEnabled(!self.turboDisabled)
+        }
+    }
+
+    /// Reads the live state off the main thread and publishes it back.
+    func refreshTurboState(then completion: (() -> Void)? = nil) {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            let disabled = self.turbo.refreshTurboState()
+            DispatchQueue.main.async {
+                self.turboDisabled = disabled
+                Preferences.lastKnownTurboDisabled = disabled
+                completion?()
+            }
+        }
     }
 
     /// Turbo Boost back on. Leaving a machine derated by a feature the user
@@ -68,6 +90,7 @@ final class PowerFeature: Feature {
 
     func setTurboDisabled(_ disabled: Bool) {
         turboDisabled = disabled
+        Preferences.lastKnownTurboDisabled = disabled
         guard isEnabled else { return }
         helper.setTurboBoostEnabled(!disabled)
     }

@@ -52,8 +52,12 @@ final class GPUController {
         CGDirectDisplayCopyCurrentMetalDevice(CGMainDisplayID())
     }
 
-    func info() -> GPUInfo {
-        let active = activeDevice()
+    /// `includeActive` instantiates a Metal device to learn which GPU is
+    /// rendering. That is the only way to ask — and it can itself wake the
+    /// discrete GPU, so it is off by default and requested only by the tab
+    /// that displays the answer, never by anything on a timer.
+    func info(includeActive: Bool = false) -> GPUInfo {
+        let active = includeActive ? activeDevice() : nil
         return GPUInfo(
             integratedName: integratedName,
             discreteName: discreteName,
@@ -67,6 +71,11 @@ final class GPUController {
 
     /// Reads the current `gpuswitch` policy by parsing `pmset -g` (unprivileged).
     func currentMode() -> GPUMode? {
+        // `pmset -g` costs 228 ms measured on this machine, and the GPU
+        // watchdog asks every five seconds — that alone made the whole app
+        // feel sticky. The same value sits in the preferences file pmset
+        // itself writes, and reading it costs 1 ms.
+        if let mode = Self.modeFromPreferences() { return mode }
         guard let output = Self.runPmset(["-g"]) else { return nil }
         for line in output.split(separator: "\n") where line.contains("gpuswitch") {
             if let value = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap({ Int($0) }).first {
@@ -74,6 +83,24 @@ final class GPUController {
             }
         }
         return nil
+    }
+
+    /// Digs `GPUSwitch` out of the power-management preferences. The file
+    /// nests it under a profile key that differs by machine, so it is searched
+    /// for rather than addressed — a wrong guess would silently read nothing
+    /// and fall back to the slow path forever.
+    private static func modeFromPreferences() -> GPUMode? {
+        let path = "/Library/Preferences/com.apple.PowerManagement.plist"
+        guard let root = NSDictionary(contentsOfFile: path) as? [String: Any] else { return nil }
+        func search(_ any: Any) -> Int? {
+            guard let dict = any as? [String: Any] else { return nil }
+            if let value = dict["GPUSwitch"] as? Int { return value }
+            for (_, nested) in dict {
+                if let found = search(nested) { return found }
+            }
+            return nil
+        }
+        return search(root).flatMap(GPUMode.init(rawValue:))
     }
 
     // MARK: Policy (write — requires root)

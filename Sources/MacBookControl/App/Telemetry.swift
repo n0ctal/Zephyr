@@ -27,6 +27,13 @@ final class Telemetry: ObservableObject {
     private let batteryReader = BatteryReader()
     private var timer: Timer?
 
+    /// Reading happens here, never on the main thread. The SMC answers one key
+    /// per IOKit round trip and this reads a few dozen of them; doing that
+    /// where the UI lives makes every tick a visible stall, which is exactly
+    /// how the settings window came to feel slow to open.
+    private let queue = DispatchQueue(label: "com.n0ctal.zephyr.telemetry", qos: .utility)
+    private var isReading = false
+
     /// Seconds between reads. Also the unit `ThermalStats` integrates over, so
     /// changing it here keeps the "held back for" figure honest.
     static let interval: TimeInterval = 2
@@ -39,7 +46,11 @@ final class Telemetry: ObservableObject {
 
     func start() {
         guard timer == nil else { return }
-        refresh()
+        // One synchronous read before anything else runs. Costs about 45 ms
+        // against a launch that takes 670, and without it every feature that
+        // asks "does this machine have fans" at startup gets told no — then
+        // never asks again, because a tab observes its feature and not this.
+        readNow()
         let timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             self?.refresh()
         }
@@ -54,15 +65,42 @@ final class Telemetry: ObservableObject {
         timer = nil
     }
 
-    var cpuTemperature: TemperatureReading? { sensors?.cpuTemperature() }
+    /// Served from the last poll rather than read on demand: callers are view
+    /// bodies and the menu-bar title, both of which ask often.
+    var cpuTemperature: TemperatureReading? {
+        temperatures.first { $0.key == "TC0F" || $0.key == "TC0P" || $0.key == "TC0D" }
+            ?? temperatures.max { $0.celsius < $1.celsius }
+    }
 
-    private func refresh() {
+    /// Blocking read, for the one moment where a wrong answer is permanent.
+    private func readNow() {
         temperatures = sensors?.readTemperatures() ?? []
         fans = fanController?.readFans() ?? []
         battery = batteryReader.read()
         let status = thermalMonitor.read()
         thermal = status
         stats.record(status, interval: Int(Self.interval))
-        objectWillChange.send()
+    }
+
+    private func refresh() {
+        // A slow read must not queue up behind itself. Skipping a tick is
+        // harmless; stacking them turns a busy machine into a growing backlog.
+        guard !isReading else { return }
+        isReading = true
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let temperatures = self.sensors?.readTemperatures() ?? []
+            let fans = self.fanController?.readFans() ?? []
+            let battery = self.batteryReader.read()
+            let status = self.thermalMonitor.read()
+            DispatchQueue.main.async {
+                self.temperatures = temperatures
+                self.fans = fans
+                self.battery = battery
+                self.thermal = status
+                self.stats.record(status, interval: Int(Self.interval))
+                self.isReading = false
+            }
+        }
     }
 }

@@ -1,10 +1,12 @@
-import Foundation
 import AppKit
+import CoreGraphics
+import Foundation
 
 // Entry point. A hidden `--dump-smc` flag runs a one-shot CLI sensor dump
 // (handy for debugging and for open-source users); otherwise the menu-bar
 // app launches.
 let arguments = CommandLine.arguments
+let launchedAt = Date()
 
 // Launched by launchd as the privileged root daemon.
 if arguments.contains("--helper-daemon") {
@@ -28,6 +30,11 @@ if arguments.contains("--test-fans") {
 
 if arguments.contains("--test-gpu") {
     runGPUTest()
+    exit(0)
+}
+
+if arguments.contains("--test-timing") {
+    runTimingTest()
     exit(0)
 }
 
@@ -67,7 +74,14 @@ _ = controller
 if let flag = arguments.first(where: { $0.hasPrefix("--open-settings") }) {
     let parts = flag.split(separator: "=", maxSplits: 1)
     SettingsWindowController.initialTab = parts.count == 2 ? String(parts[1]) : nil
-    DispatchQueue.main.async { controller.openSettingsForTesting() }
+    DispatchQueue.main.async {
+        controller.openSettingsForTesting()
+        // stdout is buffered and the harness kills this process, so the line
+        // would never be flushed; stderr is unbuffered.
+        FileHandle.standardError.write(Data(String(
+            format: "settings window ready %.0f ms after launch\n",
+            Date().timeIntervalSince(launchedAt) * 1000).utf8))
+    }
 }
 application.run()
 
@@ -311,4 +325,41 @@ func runProfilesTest() {
                           conditions: [.onExternalPower(true), .appRunning("Finder")],
                           actions: [.turboDisabled(false)])
     print("\nprofile \"\(profile.name)\" matches: \(profile.matches(context))")
+}
+
+
+// MARK: - Where the time goes
+
+func runTimingTest() {
+    func time(_ label: String, _ body: () -> Void) {
+        let start = Date()
+        body()
+        print(String(format: "  %6.0f ms  %@", Date().timeIntervalSince(start) * 1000, label))
+    }
+    print("one-off cost of each thing the settings window touches:")
+    let smc = try? SMC()
+    if let smc = smc {
+        let sensors = SensorReader(smc: smc)
+        let fans = FanController(smc: smc)
+        time("SensorReader.readTemperatures") { _ = sensors.readTemperatures() }
+        time("FanController.readFans") { _ = fans.readFans() }
+    }
+    let battery = BatteryReader()
+    time("BatteryReader.read") { _ = battery.read() }
+    let thermal = ThermalMonitor()
+    time("ThermalMonitor.read") { _ = thermal.read() }
+    let gpu = GPUController()
+    time("GPUController.info (runs pmset)") { _ = gpu.info() }
+    let turbo = TurboBoostController()
+    time("TurboBoost.isTurboDisabled (runs kextstat)") { _ = turbo.isTurboDisabled() }
+    let display = DisplayControl()
+    time("DisplayControl.screens") { _ = display.screens() }
+    time("DisplayControl.modes for main display") { _ = display.modes(for: CGMainDisplayID()) }
+    let remapper = KeyRemapper()
+    time("KeyRemapper.keyboards") { _ = remapper.keyboards() }
+    let pointer = PointerAcceleration()
+    time("PointerAcceleration.devices") { _ = pointer.devices() }
+    let helper = HelperClient()
+    time("HelperClient.version (XPC round trip)") { _ = helper.version() }
+    time("PowerLimits.current (sysctl)") { _ = PowerLimits.current() }
 }

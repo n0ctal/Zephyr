@@ -105,6 +105,13 @@ enum Preferences {
         set { d.set(newValue, forKey: "battery.limitPercent") }
     }
 
+    /// Last answer from the expensive kext-state query, so a launch can show
+    /// something truthful before the background read lands.
+    static var lastKnownTurboDisabled: Bool {
+        get { d.bool(forKey: "power.turboDisabled") }
+        set { d.set(newValue, forKey: "power.turboDisabled") }
+    }
+
     // MARK: Graphics
 
     static var gpuMode: Int {

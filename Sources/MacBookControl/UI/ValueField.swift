@@ -26,12 +26,33 @@ struct ValueField: View {
                     .multilineTextAlignment(.trailing)
                 Text(suffix).font(.subheadline).foregroundColor(.secondary)
             }
-            Slider(value: $value, in: range, step: step)
+            if let tickStep = tickStep {
+                Slider(value: $value, in: range, step: tickStep)
+            } else {
+                // Continuous: no tick marks to draw at all, with the rounding
+                // done here instead.
+                Slider(value: Binding(
+                    get: { value },
+                    set: { value = (($0 - range.lowerBound) / step).rounded() * step + range.lowerBound }
+                ), in: range)
+            }
         }
         .onAppear { text = format(value) }
         // Keeps the field honest while the slider is dragged. Without it the
         // number would freeze at whatever was last typed.
         .onChange(of: value) { text = format($0) }
+    }
+
+    /// A stepped `Slider` draws one tick per step. Asked for a step of 1 over
+    /// a fan's 1836–5616 rpm range that is nearly four thousand ticks, and
+    /// macOS spends **seventeen seconds** drawing them — measured, and it is
+    /// what made the Cooling tab look like it had hung. Past a few dozen the
+    /// marks are unreadable anyway, so wide ranges get a continuous slider and
+    /// the rounding is done in the binding.
+    private var tickStep: Double? {
+        let span = range.upperBound - range.lowerBound
+        guard step > 0 else { return nil }
+        return span / step <= 40 ? step : nil
     }
 
     private func format(_ value: Double) -> String {

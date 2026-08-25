@@ -87,10 +87,16 @@ final class FeatureRegistry: ObservableObject {
 
     func applyStoredState() { features.forEach { $0.applyStoredState() } }
 
-    /// Hand everything back to the firmware. Called on quit — leaving fans
+    /// Hand back what we are actually holding. Called on quit — leaving fans
     /// pinned by a process that no longer exists is the one failure mode that
     /// can cook the machine.
-    func deactivateAll() { features.forEach { $0.deactivate() } }
+    ///
+    /// Only enabled features. Deactivating the rest looks tidy and is wrong:
+    /// `PowerFeature.deactivate` re-enables Turbo Boost, so quitting Zephyr
+    /// used to switch it back on for someone who had never enabled the tab and
+    /// had turned turbo off by other means. A feature that was never asked to
+    /// touch the machine must not touch it on the way out either.
+    func deactivateAll() { features.filter(\.isEnabled).forEach { $0.deactivate() } }
 
     func feature(id: String) -> Feature? { features.first { $0.id == id } }
 }
