@@ -5,7 +5,7 @@ let kHelperMachServiceName = "com.n0ctal.macbookcontrol.helper"
 
 /// Bumped when the XPC contract changes; the app compares this against the
 /// running daemon to detect a stale installed helper.
-let kHelperVersion = "3"
+let kHelperVersion = "4"
 
 /// XPC contract between the unprivileged app and the root daemon.
 /// Only operations that genuinely require root live here; all reading
@@ -42,4 +42,16 @@ protocol HelperProtocol {
     /// Enable (true) or disable (false) Intel Turbo Boost by unloading /
     /// loading the kext.
     func setTurboBoostEnabled(_ enabled: Bool, reply: @escaping (Bool) -> Void)
+
+    /// Current SMC charge ceiling in percent (100 = unlimited), or -1 when the
+    /// machine does not expose the key.
+    func chargeLimit(reply: @escaping (Int) -> Void)
+
+    /// Cap charging at `percent` (100 restores normal charging). The daemon
+    /// remembers the value and re-asserts it after wake.
+    func setChargeLimit(_ percent: Int, reply: @escaping (Bool) -> Void)
+
+    /// Firmware clears the charge ceiling across sleep and power loss, the same
+    /// way it clears the Turbo bit, so it has to be written again on wake.
+    func reapplyChargeLimitAfterWake(reply: @escaping (Bool) -> Void)
 }

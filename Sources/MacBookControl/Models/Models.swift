@@ -82,3 +82,56 @@ enum SensorLabels {
         temperature[key] ?? key
     }
 }
+
+/// How hard the system says it is currently being held back thermally.
+/// Mirrors `ProcessInfo.ThermalState`, but as a type this app owns so the
+/// menu can name the levels in its own words.
+enum ThermalPressure: String {
+    case nominal, fair, serious, critical
+
+    init(_ state: ProcessInfo.ThermalState) {
+        switch state {
+        case .nominal:  self = .nominal
+        case .fair:     self = .fair
+        case .serious:  self = .serious
+        case .critical: self = .critical
+        @unknown default: self = .nominal
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .nominal:  return "normal"
+        case .fair:     return "warm"
+        case .serious:  return "throttling"
+        case .critical: return "critical"
+        }
+    }
+}
+
+/// Firmware-imposed CPU limits. `speedLimitPercent` below 100 means the SMC is
+/// actively capping clocks — the thing that makes a machine feel slow while
+/// every temperature still looks survivable.
+struct ThermalStatus {
+    let speedLimitPercent: Int?
+    let schedulerLimitPercent: Int?
+    let availableCPUs: Int?
+    let pressure: ThermalPressure
+
+    /// True when the firmware is holding the CPU below its full speed.
+    var isThrottling: Bool { (speedLimitPercent ?? 100) < 100 }
+}
+
+/// Battery state as the menu shows it.
+struct BatteryStatus {
+    let percent: Int
+    let isCharging: Bool
+    let isPluggedIn: Bool
+    /// Full-charge capacity as a share of the design capacity, when readable.
+    let healthPercent: Int?
+
+    var stateLabel: String {
+        if isCharging { return "charging" }
+        return isPluggedIn ? "on charger" : "on battery"
+    }
+}

@@ -152,6 +152,27 @@ final class HelperService: NSObject, HelperProtocol {
 
     // MARK: Control loop (re-asserts manual fan targets every 0.5s)
 
+    // MARK: Charge ceiling
+
+    /// The limit the user asked for, so it can be written again after wake.
+    /// nil means "never set in this daemon's lifetime" — we do not touch the
+    /// key at all in that case, leaving whatever the firmware has.
+    private var desiredChargeLimit: Int?
+
+    func chargeLimit(reply: @escaping (Int) -> Void) {
+        reply(BatteryLimit.current() ?? -1)
+    }
+
+    func setChargeLimit(_ percent: Int, reply: @escaping (Bool) -> Void) {
+        desiredChargeLimit = percent
+        reply(BatteryLimit.apply(percent))
+    }
+
+    func reapplyChargeLimitAfterWake(reply: @escaping (Bool) -> Void) {
+        guard let wanted = desiredChargeLimit else { reply(true); return }
+        reply(BatteryLimit.apply(wanted))
+    }
+
     private func startControlLoopIfNeeded() {
         guard controlTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)

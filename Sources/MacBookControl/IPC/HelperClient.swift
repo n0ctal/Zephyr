@@ -94,6 +94,26 @@ final class HelperClient {
         proxy { _ in }?.setTurboBoostEnabled(enabled) { _ in }
     }
 
+    /// Returns nil when the helper is unreachable or the Mac has no such key.
+    func chargeLimit(timeout: TimeInterval = 2) -> Int? {
+        var result: Int?
+        let done = DispatchSemaphore(value: 0)
+        proxy({ _ in done.signal() })?.chargeLimit { value in
+            result = value >= 0 ? value : nil
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + timeout)
+        return result
+    }
+
+    func setChargeLimit(_ percent: Int) {
+        proxy({ _ in })?.setChargeLimit(percent) { _ in }
+    }
+
+    func reapplyChargeLimitAfterWake() {
+        proxy({ _ in })?.reapplyChargeLimitAfterWake { _ in }
+    }
+
     func reapplyTurboAfterWake() {
         proxy { _ in }?.reapplyTurboAfterWake { _ in }
     }

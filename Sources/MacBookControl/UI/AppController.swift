@@ -19,6 +19,8 @@ final class AppController: NSObject, NSMenuDelegate {
     private let fans: FanController?
     private let gpu = GPUController()
     private let turbo = TurboBoostController()
+    private let thermal = ThermalMonitor()
+    private let battery = BatteryReader()
     private let helper = HelperClient.shared
 
     private var refreshTimer: Timer?
@@ -71,6 +73,7 @@ final class AppController: NSObject, NSMenuDelegate {
             queue: .main
         ) { [weak self] _ in
             self?.helper.reapplyTurboAfterWake()
+            self?.helper.reapplyChargeLimitAfterWake()
         }
     }
 
@@ -116,13 +119,104 @@ final class AppController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         buildTemperatureSection()
         menu.addItem(.separator())
+        buildThermalSection()
+        menu.addItem(.separator())
         buildFanSection()
         menu.addItem(.separator())
         buildGPUSection()
         menu.addItem(.separator())
         buildTurboBoostSection()
         menu.addItem(.separator())
+        buildBatterySection()
+        menu.addItem(.separator())
         buildFooter()
+    }
+
+    // MARK: Throttling monitor
+
+    private func buildThermalSection() {
+        let toggle = NSMenuItem(title: "Throttling monitor",
+                                action: #selector(toggleThrottlingMonitor),
+                                keyEquivalent: "")
+        toggle.target = self
+        toggle.state = Settings.throttlingMonitorEnabled ? .on : .off
+        menu.addItem(toggle)
+
+        guard Settings.throttlingMonitorEnabled else { return }
+        let status = thermal.read()
+
+        if let limit = status.speedLimitPercent {
+            // Below 100 the firmware is capping clocks — the reason a machine
+            // feels slow while every sensor still reads survivable.
+            let note = status.isThrottling ? "  ← held back" : ""
+            menu.addItem(disabledItem(String(format: "   CPU speed limit: %d %%%@", limit, note)))
+        } else {
+            menu.addItem(disabledItem("   CPU speed limit: unavailable"))
+        }
+        if let cpus = status.availableCPUs {
+            menu.addItem(disabledItem("   Available cores: \(cpus)"))
+        }
+        menu.addItem(disabledItem("   Thermal pressure: \(status.pressure.label)"))
+    }
+
+    @objc private func toggleThrottlingMonitor() {
+        Settings.throttlingMonitorEnabled.toggle()
+        rebuildMenu()
+    }
+
+    // MARK: Charge ceiling
+
+    private func buildBatterySection() {
+        guard BatteryLimit.isSupported() else { return }
+
+        let toggle = NSMenuItem(title: "Charge limit",
+                                action: #selector(toggleChargeLimit),
+                                keyEquivalent: "")
+        toggle.target = self
+        toggle.state = Settings.chargeLimitEnabled ? .on : .off
+        menu.addItem(toggle)
+
+        if let b = battery.read() {
+            var line = String(format: "   Battery: %d %% (%@)", b.percent, b.stateLabel)
+            if let health = b.healthPercent { line += String(format: ", health %d %%", health) }
+            menu.addItem(disabledItem(line))
+        }
+
+        guard Settings.chargeLimitEnabled else { return }
+
+        let choice = NSMenuItem(title: "   Stop charging at", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for percent in [60, 70, 75, 80, 85, 90] {
+            let item = NSMenuItem(title: "\(percent) %",
+                                  action: #selector(selectChargeLimit(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.tag = percent
+            item.state = (percent == Settings.chargeLimitPercent) ? .on : .off
+            sub.addItem(item)
+        }
+        choice.submenu = sub
+        menu.addItem(choice)
+
+        // A ceiling below the current charge does not discharge the battery:
+        // the machine simply stops charging and waits, which reads as a fault
+        // unless we say so.
+        if let b = battery.read(), b.percent > Settings.chargeLimitPercent, b.isPluggedIn {
+            menu.addItem(disabledItem("   Above the limit — will drift down in use"))
+        }
+    }
+
+    @objc private func toggleChargeLimit() {
+        Settings.chargeLimitEnabled.toggle()
+        helper.setChargeLimit(Settings.chargeLimitEnabled ? Settings.chargeLimitPercent
+                                                          : BatteryLimit.unlimited)
+        rebuildMenu()
+    }
+
+    @objc private func selectChargeLimit(_ sender: NSMenuItem) {
+        Settings.chargeLimitPercent = sender.tag
+        if Settings.chargeLimitEnabled { helper.setChargeLimit(sender.tag) }
+        rebuildMenu()
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {
