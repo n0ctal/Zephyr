@@ -7,6 +7,8 @@ A single menu-bar app for **Intel** MacBooks that combines the everyday jobs of
 - 🌀 **Fan control** — per-fan automatic / manual targets, held reliably by a control loop.
 - 🎛️ **GPU switching** — force integrated-only, discrete-only, or automatic on dual-GPU machines.
 - ⚡ **Turbo Boost** — enable / disable Intel Turbo Boost (cooler & quieter when off).
+- 🐢 **Throttling monitor** — the firmware's own CPU speed cap, the number that explains why a cool-looking machine feels slow.
+- 🔋 **Charge ceiling** — stop charging at 80 % (or wherever you like) to slow battery wear, the way AlDente does.
 
 Native Swift + AppKit. No Xcode required to build, no third-party dependencies.
 
@@ -17,6 +19,8 @@ Native Swift + AppKit. No Xcode required to build, no third-party dependencies.
   the legacy `FS!` force bitmask on pre-T2 Macs, and the per-fan `F{i}Md`
   mode key on T2 Macs (2018+).
 - GPU switching applies to dual-GPU models (e.g. MacBook Pro with Intel + AMD).
+- The charge ceiling needs the SMC key `BCLM`, present on most Intel laptops.
+  Machines without it simply do not show the section.
 
 ## Privilege model — three different tiers
 
@@ -24,6 +28,8 @@ Native Swift + AppKit. No Xcode required to build, no third-party dependencies.
 |---|---|---|
 | Read temps / fan RPM / active GPU | none | in-process IOKit + Metal |
 | Write fan speed, switch GPU (`pmset gpuswitch`) | **root** | privileged LaunchDaemon over XPC |
+| Read the CPU speed cap / thermal pressure | none | in-process IOKit |
+| Set the charge ceiling (SMC `BCLM`) | **root** | same privileged LaunchDaemon |
 | Enable/disable Turbo Boost (MSR `0x1A0`) | **ring-0** | bundled **kernel extension** (needs SIP disabled) |
 
 Fan and GPU control use the same **sanctioned privileged-helper pattern** as
@@ -38,7 +44,31 @@ fully and the Turbo Boost section simply stays hidden.
 
 > Undervolting (Volta / VoltageShift) is intentionally **not** included: same
 > kext requirement, and on 2019+ Macs the undervolt MSR is locked by Apple's
-> Plundervolt (CVE-2019-11157) firmware mitigation anyway.
+> Plundervolt (CVE-2019-11157) firmware mitigation anyway. On those machines it
+> is not a matter of effort — the mailbox the tools write to no longer answers.
+
+## What the two newer sections are for
+
+**Throttling monitor.** When the package runs hot, or the charger cannot supply
+what the CPU wants, the firmware caps clock speed. Nothing in macOS surfaces
+this: every sensor still reads survivable and the machine merely feels slow.
+`IOPMCopyCPUPowerStatus` reports that cap — the same number `pmset -g therm`
+prints — so the menu shows it next to the thermal pressure and the number of
+cores the scheduler is still allowed to use. 100 % means nothing is being held
+back. This is read-only; Zephyr never changes the cap.
+
+**Charge ceiling.** Keeping a lithium cell at 100 % is what ages it fastest,
+and a laptop that lives on a desk does exactly that. The SMC accepts a ceiling
+in `BCLM`, so the daemon can hold charging at 80 % — the same mechanism the
+dedicated tools use. Two details are worth knowing:
+
+- The firmware clears the key across sleep and power loss, so Zephyr writes it
+  again on wake, next to the Turbo Boost bit.
+- A ceiling **below** the current charge does not discharge anything. The
+  machine simply stops charging and waits for normal use to bring it down,
+  which looks like a fault until you know it is deliberate. The menu says so.
+
+Turning the toggle off restores unlimited charging immediately.
 
 ## Build
 
@@ -110,7 +140,9 @@ Zephyr.app  (user)                  LaunchDaemon (root)
 │ SensorReader   (read temps) │         │  • SMC fan writes + loop   │
 │ FanController  (read RPM)   │         │  • pmset gpuswitch         │
 │ GPUController  (detect/read)│         │  • kmutil load/unload kext │──▶ DisableTurboBoost.kext
-│ TurboBoost     (read state) │         └───────────────────────────┘     (MSR 0x1A0, ring-0)
+│ TurboBoost     (read state) │         │  • SMC charge ceiling      │──▶ DisableTurboBoost.kext
+│ ThermalMonitor (speed cap)  │         └───────────────────────────┘     (MSR 0x1A0, ring-0)
+│ BatteryReader  (charge)     │
 │ HelperClient   (XPC proxy)  │
 └────────────────────────────┘
         unprivileged                          (same binary, --helper-daemon)
