@@ -16,6 +16,9 @@ final class Telemetry: ObservableObject {
     /// nothing is capped" are different answers, and a fake nominal reading
     /// would show a reassuring dash before the first poll.
     @Published private(set) var thermal: ThermalStatus?
+    /// Nil until two samples exist: load is a rate, and the first reading has
+    /// nothing to subtract from.
+    @Published private(set) var load: SystemLoad.Snapshot?
 
     /// Accumulated across the session, so "is it throttling" can be answered
     /// for the time nobody was looking.
@@ -25,6 +28,7 @@ final class Telemetry: ObservableObject {
     private let fanController: FanController?
     private let thermalMonitor = ThermalMonitor()
     private let batteryReader = BatteryReader()
+    private let systemLoad = SystemLoad()
     private var timer: Timer?
 
     /// Reading happens here, never on the main thread. The SMC answers one key
@@ -77,6 +81,7 @@ final class Telemetry: ObservableObject {
         temperatures = sensors?.readTemperatures() ?? []
         fans = fanController?.readFans() ?? []
         battery = batteryReader.read()
+        load = systemLoad.read()
         let status = thermalMonitor.read()
         thermal = status
         stats.record(status, interval: Int(Self.interval))
@@ -92,11 +97,13 @@ final class Telemetry: ObservableObject {
             let temperatures = self.sensors?.readTemperatures() ?? []
             let fans = self.fanController?.readFans() ?? []
             let battery = self.batteryReader.read()
+            let load = self.systemLoad.read()
             let status = self.thermalMonitor.read()
             DispatchQueue.main.async {
                 self.temperatures = temperatures
                 self.fans = fans
                 self.battery = battery
+                self.load = load
                 self.thermal = status
                 self.stats.record(status, interval: Int(Self.interval))
                 self.isReading = false

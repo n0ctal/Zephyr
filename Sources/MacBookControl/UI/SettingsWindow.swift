@@ -108,27 +108,129 @@ private struct FeatureTab: View {
 /// the machine, only what you can see without opening anything.
 private struct MenuBarTab: View {
     @ObservedObject var telemetry: Telemetry
-    @State private var temperature = Preferences.showTemperatureInMenuBar
-    @State private var fan = Preferences.showFanInMenuBar
-    @State private var battery = Preferences.showBatteryInMenuBar
-    @State private var throttle = Preferences.showThrottleInMenuBar
+    /// Bumped on every edit so the preview below re-reads the preferences,
+    /// which are plain statics rather than published state.
+    @State private var revision = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Show in the menu bar").font(.headline)
-            Toggle("CPU temperature", isOn: $temperature)
-                .onChange(of: temperature) { Preferences.showTemperatureInMenuBar = $0 }
-            Toggle("Fan speed", isOn: $fan)
-                .onChange(of: fan) { Preferences.showFanInMenuBar = $0 }
-            Toggle("Battery percentage", isOn: $battery)
-                .onChange(of: battery) { Preferences.showBatteryInMenuBar = $0 }
-            Toggle("A mark while the CPU is capped", isOn: $throttle)
-                .onChange(of: throttle) { Preferences.showThrottleInMenuBar = $0 }
-            Text("The cap mark only appears while the firmware is actually holding the CPU back, so an empty menu bar means nothing is wrong.")
+        VStack(alignment: .leading, spacing: 12) {
+            preview
+
+            Divider()
+            Group {
+                Toggle("Temperature", isOn: bind(.showTemperature))
+                if Preferences.showTemperatureInMenuBar {
+                    Picker("Sensor", selection: bindSensor()) {
+                        Text("Whatever looks like the CPU").tag("")
+                        ForEach(telemetry.temperatures) { reading in
+                            Text("\(reading.label) — \(Int(reading.celsius)) °C").tag(reading.key)
+                        }
+                    }
+                    .padding(.leading, 18)
+                }
+                Toggle("Fan speed", isOn: bind(.showFan))
+            }
+
+            Divider()
+            Picker("Battery", selection: bindBattery()) {
+                ForEach(MenuBarComposer.BatteryStyle.allCases, id: \.rawValue) {
+                    Text($0.label).tag($0.rawValue)
+                }
+            }
+            Toggle("Power in watts, signed", isOn: bind(.showPower))
+            Text("Plus while the battery is filling, minus while it is carrying the machine. The sign is the whole message.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+            Picker("CPU speed", selection: bindSpeed()) {
+                ForEach(MenuBarComposer.SpeedStyle.allCases, id: \.rawValue) {
+                    Text($0.label).tag($0.rawValue)
+                }
+            }
+            Text("macOS on Intel does not publish the live clock, so the frequency shown is the nominal speed times the ceiling the firmware currently allows — what is permitted, not what is running.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Picker("CPU load", selection: bindLoad()) {
+                ForEach(MenuBarComposer.LoadStyle.allCases, id: \.rawValue) {
+                    Text($0.label).tag($0.rawValue)
+                }
+            }
+            Picker("Memory", selection: bindMemory()) {
+                ForEach(MenuBarComposer.MemoryStyle.allCases, id: \.rawValue) {
+                    Text($0.label).tag($0.rawValue)
+                }
+            }
+
+            Divider()
+            Toggle("A mark while the CPU is capped", isOn: bind(.showThrottle))
+            Text("Only appears while the firmware is actually holding the CPU back, and is hidden when the speed is already shown — the same number twice reads as a bug.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
         .padding(4)
+    }
+
+    /// Shows the actual composed result rather than describing it, so the
+    /// effect of a choice is visible without hunting for the menu bar.
+    private var preview: some View {
+        let content = MenuBarComposer.compose(telemetry: telemetry)
+        return HStack(spacing: 6) {
+            Text("Now showing:").font(.caption).foregroundColor(.secondary)
+            if let image = content.image {
+                Image(nsImage: image)
+            }
+            Text(content.title).font(.system(.body, design: .monospaced))
+        }
+        .id(revision)
+    }
+
+    // MARK: Binding plumbing
+
+    private enum Flag { case showTemperature, showFan, showPower, showThrottle }
+
+    private func bind(_ flag: Flag) -> Binding<Bool> {
+        Binding(
+            get: {
+                switch flag {
+                case .showTemperature: return Preferences.showTemperatureInMenuBar
+                case .showFan: return Preferences.showFanInMenuBar
+                case .showPower: return Preferences.showPowerInMenuBar
+                case .showThrottle: return Preferences.showThrottleInMenuBar
+                }
+            },
+            set: { value in
+                switch flag {
+                case .showTemperature: Preferences.showTemperatureInMenuBar = value
+                case .showFan: Preferences.showFanInMenuBar = value
+                case .showPower: Preferences.showPowerInMenuBar = value
+                case .showThrottle: Preferences.showThrottleInMenuBar = value
+                }
+                revision += 1
+            }
+        )
+    }
+
+    private func bindSensor() -> Binding<String> {
+        Binding(get: { Preferences.temperatureSensorKey },
+                set: { Preferences.temperatureSensorKey = $0; revision += 1 })
+    }
+    private func bindBattery() -> Binding<String> {
+        Binding(get: { Preferences.batteryStyle.rawValue },
+                set: { Preferences.batteryStyle = .init(rawValue: $0) ?? .off; revision += 1 })
+    }
+    private func bindSpeed() -> Binding<String> {
+        Binding(get: { Preferences.cpuSpeedStyle.rawValue },
+                set: { Preferences.cpuSpeedStyle = .init(rawValue: $0) ?? .off; revision += 1 })
+    }
+    private func bindLoad() -> Binding<String> {
+        Binding(get: { Preferences.cpuLoadStyle.rawValue },
+                set: { Preferences.cpuLoadStyle = .init(rawValue: $0) ?? .off; revision += 1 })
+    }
+    private func bindMemory() -> Binding<String> {
+        Binding(get: { Preferences.memoryStyle.rawValue },
+                set: { Preferences.memoryStyle = .init(rawValue: $0) ?? .off; revision += 1 })
     }
 }

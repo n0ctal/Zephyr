@@ -27,6 +27,10 @@ enum Preferences {
         // actually turned on becomes an enabled feature, so upgrading does not
         // silently stop doing what it was doing.
         if d.bool(forKey: "chargeLimitEnabled") { setFeatureEnabled("battery", true) }
+        // The battery display grew from a switch into a choice of styles.
+        if d.bool(forKey: "menubar.battery"), d.string(forKey: "menubar.batteryStyle") == nil {
+            d.set(MenuBarComposer.BatteryStyle.percent.rawValue, forKey: "menubar.batteryStyle")
+        }
         d.set(true, forKey: "migrated.1.3")
     }
 
@@ -64,6 +68,38 @@ enum Preferences {
     static var showThrottleInMenuBar: Bool {
         get { d.object(forKey: "menubar.throttle") as? Bool ?? true }
         set { d.set(newValue, forKey: "menubar.throttle") }
+    }
+
+    /// Which sensor the temperature reading comes from. Empty means "whatever
+    /// looks like the CPU", which is the right default on a machine whose
+    /// sensor names nobody has memorised.
+    static var temperatureSensorKey: String {
+        get { d.string(forKey: "menubar.sensor") ?? "" }
+        set { d.set(newValue, forKey: "menubar.sensor") }
+    }
+
+    /// Signed watts: plus while charging, minus while the battery carries the
+    /// machine.
+    static var showPowerInMenuBar: Bool {
+        get { d.bool(forKey: "menubar.power") }
+        set { d.set(newValue, forKey: "menubar.power") }
+    }
+
+    static var batteryStyle: MenuBarComposer.BatteryStyle {
+        get { MenuBarComposer.BatteryStyle(rawValue: d.string(forKey: "menubar.batteryStyle") ?? "") ?? .off }
+        set { d.set(newValue.rawValue, forKey: "menubar.batteryStyle") }
+    }
+    static var cpuSpeedStyle: MenuBarComposer.SpeedStyle {
+        get { MenuBarComposer.SpeedStyle(rawValue: d.string(forKey: "menubar.speedStyle") ?? "") ?? .off }
+        set { d.set(newValue.rawValue, forKey: "menubar.speedStyle") }
+    }
+    static var cpuLoadStyle: MenuBarComposer.LoadStyle {
+        get { MenuBarComposer.LoadStyle(rawValue: d.string(forKey: "menubar.loadStyle") ?? "") ?? .off }
+        set { d.set(newValue.rawValue, forKey: "menubar.loadStyle") }
+    }
+    static var memoryStyle: MenuBarComposer.MemoryStyle {
+        get { MenuBarComposer.MemoryStyle(rawValue: d.string(forKey: "menubar.memoryStyle") ?? "") ?? .off }
+        set { d.set(newValue.rawValue, forKey: "menubar.memoryStyle") }
     }
 
     // MARK: Cooling

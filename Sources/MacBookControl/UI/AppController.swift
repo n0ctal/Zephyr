@@ -97,22 +97,12 @@ final class AppController: NSObject, NSMenuDelegate {
     // MARK: Status title
 
     private func updateStatusTitle() {
-        var parts: [String] = []
-        if Preferences.showTemperatureInMenuBar, let cpu = telemetry.cpuTemperature {
-            parts.append(String(format: "%.0f°", cpu.celsius))
-        }
-        if Preferences.showFanInMenuBar, let fastest = telemetry.fans.map(\.actualRPM).max() {
-            parts.append("\(fastest) rpm")
-        }
-        if Preferences.showBatteryInMenuBar, let battery = telemetry.battery {
-            parts.append("\(battery.percent) %")
-        }
-        if Preferences.showThrottleInMenuBar,
-           let thermal = telemetry.thermal, thermal.isThrottling,
-           let limit = thermal.speedLimitPercent {
-            parts.append("↓\(limit) %")
-        }
-        statusItem.button?.title = parts.isEmpty ? "Zephyr" : parts.joined(separator: "  ")
+        let content = MenuBarComposer.compose(telemetry: telemetry)
+        statusItem.button?.image = content.image
+        // An icon alone needs no gap; an icon with text does.
+        statusItem.button?.imagePosition = content.image == nil ? .noImage
+            : (content.title.isEmpty ? .imageOnly : .imageLeading)
+        statusItem.button?.title = content.title
     }
 
     // MARK: Menu
