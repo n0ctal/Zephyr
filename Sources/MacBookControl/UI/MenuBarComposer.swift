@@ -22,13 +22,12 @@ enum MenuBarComposer {
         }
     }
 
-    /// Which battery drawing to use. The system glyph is the familiar one; the
-    /// bar and the ring exist because at a glance a shape reads faster than a
-    /// number, and people disagree about which shape.
+    /// Which battery drawing to use.
     enum BatteryIcon: String, CaseIterable {
-        case system, bar, ring
+        case iOS, system, bar, ring
         var label: String {
             switch self {
+            case .iOS: return "iPhone style"
             case .system: return "System battery"
             case .bar: return "Filled bar"
             case .ring: return "Ring"
@@ -94,8 +93,12 @@ enum MenuBarComposer {
         case .icon:
             image = batteryImage(battery)
         case .iconAndPercent:
-            image = batteryImage(battery)
-            if let battery = battery { parts.append("\(battery.percent) %") }
+            // The iPhone puts the number inside the battery; every other icon
+            // here needs it written beside. Printing it twice would be the
+            // obvious bug.
+            let inside = Preferences.batteryIcon == .iOS
+            image = batteryImage(battery, showingPercentage: inside)
+            if !inside, let battery = battery { parts.append("\(battery.percent) %") }
         }
 
         // Signed on purpose: the sign is the whole message. A plus means the
@@ -167,9 +170,10 @@ enum MenuBarComposer {
 
     // MARK: Drawing
 
-    static func batteryImage(_ battery: BatteryStatus?) -> NSImage? {
+    static func batteryImage(_ battery: BatteryStatus?, showingPercentage: Bool = false) -> NSImage? {
         guard let battery = battery else { return nil }
         switch Preferences.batteryIcon {
+        case .iOS: return iOSBattery(battery, showingPercentage: showingPercentage)
         case .system: return systemBatteryGlyph(battery)
         case .bar: return drawnBattery(battery, rounded: false)
         case .ring: return drawnRing(battery)
@@ -191,6 +195,124 @@ enum MenuBarComposer {
         }
         let image = NSImage(systemSymbolName: name, accessibilityDescription: "Battery")
         image?.isTemplate = true
+        return image
+    }
+
+    /// The iPhone battery, iOS 27 style.
+    ///
+    /// The shape changed with that release and the difference matters when
+    /// drawing it: there is no outline any more. The pill is solid, the filled
+    /// part carries the colour and the *empty* part is grey rather than
+    /// transparent — so a half-full battery is half coloured and half grey,
+    /// not a coloured stub inside an outline.
+    ///
+    /// Colours: green while charging, yellow in Low Power Mode, red at twenty
+    /// percent or less with nothing plugged in, otherwise the ordinary label
+    /// colour. Red was not asked for, but leaving it out would make this
+    /// *nearly* the iPhone.
+    ///
+    /// A coloured image cannot be a template one: macOS repaints templates to
+    /// match the menu bar and the colour would be thrown away. So the neutral
+    /// state stays a template and adapts to a light or dark bar on its own,
+    /// while the coloured states opt out and carry their own paint.
+    /// Which colour the fill takes. Separated from the drawing so the rule
+    /// can be checked without inspecting pixels — the rule is the part that
+    /// can be wrong in a way nobody notices until the charger is unplugged.
+    enum FillRole: Equatable {
+        case charging, lowPower, critical, neutral
+
+        var colour: NSColor? {
+            switch self {
+            case .charging: return .systemGreen
+            case .lowPower: return .systemYellow
+            case .critical: return .systemRed
+            case .neutral: return nil   // template: painted by the system
+            }
+        }
+    }
+
+    static func fillRole(percent: Int, isCharging: Bool,
+                         isPluggedIn: Bool, lowPower: Bool) -> FillRole {
+        // Order matters and follows the phone: charging wins over everything,
+        // Low Power Mode is yellow at any level, and red is only for a battery
+        // that is nearly empty with nothing plugged in.
+        if isCharging { return .charging }
+        if lowPower { return .lowPower }
+        if percent <= 20 && !isPluggedIn { return .critical }
+        return .neutral
+    }
+
+    static var isLowPowerMode: Bool {
+        if #available(macOS 12.0, *) { return ProcessInfo.processInfo.isLowPowerModeEnabled }
+        return false
+    }
+
+    /// Set only by the icon dump, so a state the machine is not currently in
+    /// can still be drawn and compared against a reference.
+    static var forcedFillRole: FillRole?
+
+    private static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool) -> NSImage {
+        let height: CGFloat = 13
+        // Wider when it has to hold a number, as on the phone.
+        let bodyWidth: CGFloat = showingPercentage ? 30 : 22
+        let capWidth: CGFloat = 2
+        let capGap: CGFloat = 1.2
+        let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
+        let fraction = max(0, min(1, Double(battery.percent) / 100))
+
+        let fill = (Self.forcedFillRole
+            ?? fillRole(percent: battery.percent, isCharging: battery.isCharging,
+                        isPluggedIn: battery.isPluggedIn, lowPower: isLowPowerMode)).colour
+        let paint = fill ?? NSColor.black
+        // The empty part. On a template image this has to be an alpha level
+        // rather than a grey, because the system repaints every opaque pixel.
+        let empty = fill == nil ? NSColor.black.withAlphaComponent(0.35)
+                                : NSColor.systemGray.withAlphaComponent(0.55)
+
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        let body = NSRect(x: 0, y: 0, width: bodyWidth, height: height)
+        let radius = height * 0.34
+        let pill = NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius)
+
+        empty.setFill()
+        pill.fill()
+
+        if fraction > 0 {
+            // Clipped to the pill so the fill keeps the rounded ends instead
+            // of squaring off where it stops.
+            NSGraphicsContext.saveGraphicsState()
+            pill.addClip()
+            paint.setFill()
+            NSRect(x: 0, y: 0, width: bodyWidth * CGFloat(fraction), height: height).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        // The cap follows the empty colour until the battery is full, which is
+        // what the phone does.
+        (fraction >= 1 ? paint : empty).setFill()
+        NSBezierPath(roundedRect: NSRect(x: bodyWidth + capGap, y: height / 2 - 2,
+                                         width: capWidth, height: 4),
+                     xRadius: 1, yRadius: 1).fill()
+
+        if showingPercentage {
+            // Punched through rather than painted on: the digits then read
+            // against both the filled part and the grey remainder, and against
+            // a light or dark menu bar, without picking a colour for each case.
+            let text = "\(battery.percent)" as NSString
+            let font = NSFont.systemFont(ofSize: 9, weight: .bold)
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+            let measured = text.size(withAttributes: attributes)
+            let origin = NSPoint(x: (bodyWidth - measured.width) / 2,
+                                 y: (height - measured.height) / 2)
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            text.draw(at: origin, withAttributes: attributes)
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+        }
+
+        image.unlockFocus()
+        image.isTemplate = (fill == nil)
         return image
     }
 
@@ -279,7 +401,9 @@ enum MenuBarComposer {
         right.draw(in: NSRect(x: left.size.width + gap, y: (height - right.size.height) / 2,
                               width: right.size.width, height: right.size.height))
         combined.unlockFocus()
-        combined.isTemplate = true
+        // Only a template if both halves were: forcing it would repaint a
+        // coloured battery to match the menu bar and lose the colour.
+        combined.isTemplate = left.isTemplate && right.isTemplate
         return combined
     }
 

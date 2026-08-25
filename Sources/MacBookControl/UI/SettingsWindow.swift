@@ -26,7 +26,11 @@ final class SettingsWindowController {
         // either crops the tall ones or leaves the short ones half empty.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 840, height: 700))
         window.center()
+        // Remembers whatever size it is dragged to, so a preference about the
+        // window is stated once rather than every launch.
+        window.setFrameAutosaveName("ZephyrSettings")
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
@@ -52,7 +56,11 @@ struct SettingsRootView: View {
                     .tabItem { Text(feature.title) }
                     .tag(feature.id)
             }
-            MenuBarTab(telemetry: telemetry)
+            // Scrolled like every feature tab. Without this its content
+            // stretched the TabView until the row of tabs was pushed off the
+            // top of the window, and the only way back was to guess that the
+            // window needed resizing.
+            ScrollView { MenuBarTab(telemetry: telemetry) }
                 .tabItem { Text("Menu Bar") }
                 .tag("menubar")
         }
@@ -91,6 +99,7 @@ private struct FeatureTab: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .disabled(!feature.isEnabled)
                         .opacity(feature.isEnabled ? 1 : 0.4)
+                        .padding(.bottom, 8)
                 }
             } else {
                 Text(feature.title).font(.headline)

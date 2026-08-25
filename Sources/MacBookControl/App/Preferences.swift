@@ -90,7 +90,7 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "menubar.batteryStyle") }
     }
     static var batteryIcon: MenuBarComposer.BatteryIcon {
-        get { MenuBarComposer.BatteryIcon(rawValue: d.string(forKey: "menubar.batteryIcon") ?? "") ?? .system }
+        get { MenuBarComposer.BatteryIcon(rawValue: d.string(forKey: "menubar.batteryIcon") ?? "") ?? .iOS }
         set { d.set(newValue.rawValue, forKey: "menubar.batteryIcon") }
     }
     static var cpuSpeedStyle: MenuBarComposer.SpeedStyle {

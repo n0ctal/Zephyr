@@ -33,6 +33,11 @@ if arguments.contains("--test-gpu") {
     exit(0)
 }
 
+if arguments.contains("--dump-icons") {
+    runIconDump()
+    exit(0)
+}
+
 if arguments.contains("--self-test") {
     exit(SelfTest.run())
 }
@@ -403,3 +408,80 @@ func runTimingTest() {
 
 
 // MARK: - What identifies the device that sent an event
+
+
+// MARK: - Icon rendering, to a file rather than the menu bar
+
+/// Renders the battery at the states that matter and writes them out, so the
+/// drawing can be looked at without putting it in the menu bar and taking a
+/// picture of somebody's screen.
+func runIconDump() {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("zephyr-icons")
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+    // Roles are forced rather than taken from the machine's current state:
+    // this Mac is in Low Power Mode, which would paint every row yellow and
+    // hide whether the other three colours are right at all.
+    let cases: [(String, Int, Bool, Bool, MenuBarComposer.FillRole?)] = [
+        ("100 neutral", 100, false, true, .neutral),
+        ("75 neutral", 75, false, false, .neutral),
+        ("50 neutral", 50, false, false, .neutral),
+        ("20 critical", 20, false, false, .critical),
+        ("5 critical", 5, false, false, .critical),
+        ("60 low power", 60, false, false, .lowPower),
+        ("60 charging", 60, true, true, .charging),
+    ]
+    for (name, percent, charging, plugged, role) in cases {
+        MenuBarComposer.forcedFillRole = role
+        let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
+                                   healthPercent: 82, cycleCount: 393, power: nil)
+        for withNumber in [false, true] {
+            guard let image = MenuBarComposer.batteryImage(status, showingPercentage: withNumber),
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { continue }
+            let file = directory.appendingPathComponent("\(name.replacingOccurrences(of: " ", with: "-"))\(withNumber ? "-pct" : "").png")
+            try? png.write(to: file)
+        }
+    }
+    // One sheet, on a dark ground like the menu bar, so template images are
+    // visible at all: on their own they are an alpha mask and read as blank.
+    let scale: CGFloat = 4
+    let rowHeight: CGFloat = 26
+    let sheetSize = NSSize(width: 420, height: rowHeight * CGFloat(cases.count) + 12)
+    let sheet = NSImage(size: sheetSize)
+    sheet.lockFocus()
+    NSColor(calibratedWhite: 0.93, alpha: 1).setFill()
+    NSRect(origin: .zero, size: sheetSize).fill()
+
+    for (index, entry) in cases.enumerated() {
+        let (name, percent, charging, plugged, role) = entry
+        MenuBarComposer.forcedFillRole = role
+        let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
+                                   healthPercent: 82, cycleCount: 393, power: nil)
+        let y = sheetSize.height - CGFloat(index + 1) * rowHeight
+        (name as NSString).draw(at: NSPoint(x: 8, y: y + 6), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.black,
+        ])
+        var x: CGFloat = 110
+        for withNumber in [false, true] {
+            guard let icon = MenuBarComposer.batteryImage(status, showingPercentage: withNumber) else { continue }
+            // Template images are masks; paint them white as the menu bar would.
+            // Drawn as-is. A template image renders as its black mask, which
+            // is visible on a light ground — trying to repaint it here was
+            // what turned the whole sheet into white blocks.
+            let target = NSRect(x: x, y: y + 4, width: icon.size.width * 1.6, height: icon.size.height * 1.6)
+            icon.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1)
+            x += target.width + 24
+        }
+    }
+    MenuBarComposer.forcedFillRole = nil
+    sheet.unlockFocus()
+    if let tiff = sheet.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+       let png = rep.representation(using: .png, properties: [:]) {
+        try? png.write(to: directory.appendingPathComponent("sheet.png"))
+    }
+    _ = scale
+    print(directory.path)
+}

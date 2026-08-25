@@ -39,6 +39,7 @@ enum SelfTest {
         fanCurve()
         scrollRewriting()
         menuBarDrawing()
+        batteryColours()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -306,6 +307,34 @@ enum SelfTest {
         guard let wide = MenuBarComposer.threadBars(Array(repeating: 0.5, count: 16)) else { return }
         expect(wide.size.width > bars.size.width, "more threads means a wider drawing")
         expect(MenuBarComposer.threadBars([]) == nil, "no threads draws nothing")
+    }
+
+    // MARK: Battery colours
+
+    private static func batteryColours() {
+        typealias Role = MenuBarComposer.FillRole
+        func role(_ percent: Int, charging: Bool = false,
+                  plugged: Bool = false, lowPower: Bool = false) -> Role {
+            MenuBarComposer.fillRole(percent: percent, isCharging: charging,
+                                     isPluggedIn: plugged, lowPower: lowPower)
+        }
+
+        expectEqual(role(60, charging: true, plugged: true), .charging, "charging is green")
+        // Charging outranks Low Power Mode, as on the phone: a battery that is
+        // filling is green even in Low Power Mode.
+        expectEqual(role(60, charging: true, plugged: true, lowPower: true), .charging,
+                    "charging outranks low power")
+        expectEqual(role(60, lowPower: true), .lowPower, "low power is yellow at any level")
+        expectEqual(role(15, lowPower: true), .lowPower, "low power outranks nearly empty")
+        expectEqual(role(15), .critical, "nearly empty on battery is red")
+        expectEqual(role(20), .critical, "twenty percent still counts as nearly empty")
+        expectEqual(role(21), .neutral, "one percent more does not")
+        // Plugged in but not charging is a full battery sitting on a charger,
+        // and that is not an alarming state.
+        expectEqual(role(15, plugged: true), .neutral, "nearly empty on the charger is not red")
+        expectEqual(role(80), .neutral, "an ordinary level takes the system colour")
+        expect(Role.neutral.colour == nil, "the neutral role stays a template image")
+        expect(Role.charging.colour != nil, "a coloured role carries its own paint")
     }
 
     // MARK: Fan curve
