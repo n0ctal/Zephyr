@@ -167,14 +167,16 @@ private struct PointerView: View {
                 get: { feature.flattenAcceleration }, set: { feature.flattenAcceleration = $0 }))
             if feature.flattenAcceleration {
                 VStack(alignment: .leading, spacing: 4) {
+                    ValueField(title: "Acceleration, against the shipped curve",
+                               range: 0...2, step: 0.05, suffix: "×",
+                               value: Binding(
+                                get: { feature.accelerationMultiplier },
+                                set: { feature.accelerationMultiplier = $0 }
+                               ))
                     Text(feature.accelerationMultiplier == 0
-                         ? "The cursor tracks the hand one to one."
-                         : String(format: "Acceleration at %.2f of the shipped curve.", feature.accelerationMultiplier))
-                        .font(.subheadline)
-                    Slider(value: Binding(
-                        get: { feature.accelerationMultiplier },
-                        set: { feature.accelerationMultiplier = $0 }
-                    ), in: 0...2, step: 0.05)
+                         ? "Zero means the cursor tracks the hand one to one."
+                         : "One is what the device shipped with.")
+                        .font(.caption).foregroundColor(.secondary)
                 }
                 ForEach(feature.devices, id: \.name) { device in
                     Text(String(format: "%@ — %@ at %.2f", device.name, device.key, device.multiplier))

@@ -130,14 +130,14 @@ private struct PowerLimitControls: View {
                     Text(String(format: "Currently PL1 %.0f W, PL2 %.0f W", reading.pl1Watts, reading.pl2Watts))
                         .font(.subheadline)
                 } else {
-                    Text(String(format: "Sustained (PL1) %.0f W", feature.pl1)).font(.subheadline)
-                    Slider(value: Binding(get: { feature.pl1 }, set: { feature.pl1 = $0 }),
-                           in: 10...(reading.maxWatts ?? 90), step: 1,
-                           onEditingChanged: { editing in if !editing { feature.applyLimits() } })
-                    Text(String(format: "Burst (PL2) %.0f W", feature.pl2)).font(.subheadline)
-                    Slider(value: Binding(get: { feature.pl2 }, set: { feature.pl2 = $0 }),
-                           in: 10...(reading.maxWatts ?? 120), step: 1,
-                           onEditingChanged: { editing in if !editing { feature.applyLimits() } })
+                    ValueField(title: "Sustained (PL1)", range: 10...(reading.maxWatts ?? 90),
+                               step: 1, suffix: "W",
+                               value: Binding(get: { feature.pl1 },
+                                              set: { feature.pl1 = $0; feature.applyLimits() }))
+                    ValueField(title: "Burst (PL2)", range: 10...(reading.maxWatts ?? 120),
+                               step: 1, suffix: "W",
+                               value: Binding(get: { feature.pl2 },
+                                              set: { feature.pl2 = $0; feature.applyLimits() }))
                     Text("Lowering the sustained limit is the substitute for undervolting on this machine: the undervolt register is locked by the firmware's Plundervolt mitigation, while this one is a mechanism Intel intends to be used.")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

@@ -88,12 +88,10 @@ private struct CoolingView: View {
 
             if feature.mode == "curve" {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Start lifting the fans at \(Int(feature.curveMin)) °C")
-                        .font(.subheadline)
-                    Slider(value: $feature.curveMin, in: 40...80, step: 1)
-                    Text("Reach full speed at \(Int(feature.curveMax)) °C")
-                        .font(.subheadline)
-                    Slider(value: $feature.curveMax, in: 60...100, step: 1)
+                    ValueField(title: "Start lifting the fans at", range: 40...80, step: 1,
+                               suffix: "°C", value: $feature.curveMin)
+                    ValueField(title: "Reach full speed at", range: 60...100, step: 1,
+                               suffix: "°C", value: $feature.curveMax)
                     Text("The curve reads CPU temperature and interpolates between each fan's own minimum and maximum, so it fits whatever fans this machine has.")
                         .font(.caption).foregroundColor(.secondary)
                 }
@@ -101,18 +99,13 @@ private struct CoolingView: View {
 
             if feature.mode == "manual" {
                 ForEach(telemetry.fans, id: \.index) { fan in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Fan \(fan.index + 1) — \(fan.actualRPM) rpm now")
-                            .font(.subheadline)
-                        Slider(
-                            value: Binding(
-                                get: { Double(feature.manualRPM[fan.index] ?? fan.actualRPM) },
-                                set: { feature.setManual(fan: fan.index, rpm: Int($0)) }
-                            ),
-                            in: Double(fan.minRPM)...Double(fan.maxRPM),
-                            step: 50
-                        )
-                    }
+                    IntField(title: "Fan \(fan.index + 1) — \(fan.actualRPM) rpm now",
+                             range: fan.minRPM...fan.maxRPM,
+                             suffix: "rpm",
+                             value: Binding(
+                                get: { feature.manualRPM[fan.index] ?? fan.actualRPM },
+                                set: { feature.setManual(fan: fan.index, rpm: $0) }
+                             ))
                 }
             }
 

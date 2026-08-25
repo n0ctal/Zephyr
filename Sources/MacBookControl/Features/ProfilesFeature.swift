@@ -125,6 +125,9 @@ private struct ProfilesView: View {
                 Divider()
                 editor
             }
+            .onAppear {
+                if feature.selection == nil { feature.selection = feature.profiles.first?.id }
+            }
         }
     }
 
@@ -152,7 +155,10 @@ private struct ProfilesView: View {
     }
 
     @ViewBuilder private var editor: some View {
-        if let id = feature.selection, let profile = feature.binding(for: id) {
+        // Nothing selected leaves half the tab blank next to a list that is
+        // plainly not empty, which reads as broken rather than as a prompt.
+        if let id = feature.selection ?? feature.profiles.first?.id,
+           let profile = feature.binding(for: id) {
             ProfileEditor(profile: profile, onDelete: { feature.remove(id) })
         } else {
             Text("Pick a profile, or add one.").foregroundColor(.secondary)
@@ -178,25 +184,27 @@ private struct ProfileEditor: View {
                 Text("any of these hold").tag(false)
             }
 
-            ForEach(Array(profile.conditions.enumerated()), id: \.offset) { index, condition in
-                HStack {
-                    Text("• \(condition.label)").font(.subheadline)
-                    Spacer()
-                    Button("Remove") { profile.conditions.remove(at: index) }
-                        .buttonStyle(BorderlessButtonStyle())
-                }
+            ForEach(Array(profile.conditions.enumerated()), id: \.offset) { index, _ in
+                ConditionRow(
+                    condition: Binding(
+                        get: { profile.conditions[index] },
+                        set: { profile.conditions[index] = $0 }
+                    ),
+                    onRemove: { profile.conditions.remove(at: index) }
+                )
             }
             conditionMenu
 
             Divider()
             Text("Then set").font(.headline)
-            ForEach(Array(profile.actions.enumerated()), id: \.offset) { index, action in
-                HStack {
-                    Text("• \(action.label)").font(.subheadline)
-                    Spacer()
-                    Button("Remove") { profile.actions.remove(at: index) }
-                        .buttonStyle(BorderlessButtonStyle())
-                }
+            ForEach(Array(profile.actions.enumerated()), id: \.offset) { index, _ in
+                ActionRow(
+                    action: Binding(
+                        get: { profile.actions[index] },
+                        set: { profile.actions[index] = $0 }
+                    ),
+                    onRemove: { profile.actions.remove(at: index) }
+                )
             }
             actionMenu
 
@@ -214,7 +222,9 @@ private struct ProfileEditor: View {
             Button("External display attached") { profile.conditions.append(.externalDisplayAttached(true)) }
             Button("No external display") { profile.conditions.append(.externalDisplayAttached(false)) }
             Button("CPU above 80 °C") { profile.conditions.append(.cpuHotterThan(80)) }
-            Button("Between 22:00 and 08:00") { profile.conditions.append(.timeBetween(startMinutes: 22 * 60, endMinutes: 8 * 60)) }
+            Button("Between two times") { profile.conditions.append(.timeBetween(startMinutes: 22 * 60, endMinutes: 8 * 60)) }
+            Button("An app is running") { profile.conditions.append(.appRunning("Xcode")) }
+            Button("On a named Wi-Fi network") { profile.conditions.append(.wifiNetwork("")) }
         }
         .frame(width: 200)
     }
@@ -227,11 +237,198 @@ private struct ProfileEditor: View {
             Button("Fans to the firmware") { profile.actions.append(.coolingMode("auto")) }
             Button("Integrated graphics only") { profile.actions.append(.gpuMode(GPUMode.integratedOnly.rawValue)) }
             Button("Discrete graphics only") { profile.actions.append(.gpuMode(GPUMode.discreteOnly.rawValue)) }
-            Button("Stop charging at 80 %") { profile.actions.append(.chargeLimit(80)) }
+            Button("Stop charging at a level") { profile.actions.append(.chargeLimit(80)) }
+            Button("Fan curve range") { profile.actions.append(.fanCurve(min: 55, max: 85)) }
+            Button("Pointer acceleration") { profile.actions.append(.pointerAcceleration(0)) }
             Button("Charge to full") { profile.actions.append(.chargeLimit(100)) }
             Button("Keep awake") { profile.actions.append(.keepAwake(true)) }
             Button("Allow sleep") { profile.actions.append(.keepAwake(false)) }
         }
         .frame(width: 200)
+    }
+}
+
+/// One condition, editable where it stands.
+///
+/// The menu that adds these can only offer a starting value — "battery below
+/// 30 %" is a guess at what someone meant. Being able to change it to 50, or
+/// to type which app matters, is the difference between rules that are yours
+/// and rules that are a fixed list someone else chose.
+private struct ConditionRow: View {
+    @Binding var condition: Condition
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            editor
+            Spacer()
+            Button("Remove", action: onRemove).buttonStyle(BorderlessButtonStyle())
+        }
+    }
+
+    @ViewBuilder private var editor: some View {
+        switch condition {
+        case .onExternalPower(let on):
+            Text("Power is").font(.subheadline)
+            Picker("", selection: Binding(
+                get: { on }, set: { condition = .onExternalPower($0) }
+            )) {
+                Text("mains").tag(true)
+                Text("battery").tag(false)
+            }
+            .labelsHidden().frame(width: 110)
+
+        case .batteryBelow(let percent):
+            Text("Battery below").font(.subheadline)
+            CompactNumberField(range: 1...100, suffix: "%", value: Binding(
+                get: { percent }, set: { condition = .batteryBelow($0) }
+            ))
+
+        case .externalDisplayAttached(let attached):
+            Text("External display").font(.subheadline)
+            Picker("", selection: Binding(
+                get: { attached }, set: { condition = .externalDisplayAttached($0) }
+            )) {
+                Text("attached").tag(true)
+                Text("absent").tag(false)
+            }
+            .labelsHidden().frame(width: 110)
+
+        case .appRunning(let name):
+            Text("App running").font(.subheadline)
+            TextField("name", text: Binding(
+                get: { name }, set: { condition = .appRunning($0) }
+            )).frame(width: 140)
+
+        case .wifiNetwork(let ssid):
+            Text("Wi-Fi network").font(.subheadline)
+            TextField("SSID", text: Binding(
+                get: { ssid }, set: { condition = .wifiNetwork($0) }
+            )).frame(width: 140)
+
+        case .timeBetween(let start, let end):
+            Text("Between").font(.subheadline)
+            TimeField(minutes: Binding(
+                get: { start }, set: { condition = .timeBetween(startMinutes: $0, endMinutes: end) }
+            ))
+            Text("and").font(.subheadline)
+            TimeField(minutes: Binding(
+                get: { end }, set: { condition = .timeBetween(startMinutes: start, endMinutes: $0) }
+            ))
+
+        case .cpuHotterThan(let celsius):
+            Text("CPU above").font(.subheadline)
+            CompactNumberField(range: 40...105, suffix: "°C", value: Binding(
+                get: { Int(celsius) }, set: { condition = .cpuHotterThan(Double($0)) }
+            ))
+        }
+    }
+}
+
+/// One setting a profile applies, editable in place for the same reason.
+private struct ActionRow: View {
+    @Binding var action: Action
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            editor
+            Spacer()
+            Button("Remove", action: onRemove).buttonStyle(BorderlessButtonStyle())
+        }
+    }
+
+    @ViewBuilder private var editor: some View {
+        switch action {
+        case .coolingMode(let mode):
+            Text("Fans follow").font(.subheadline)
+            Picker("", selection: Binding(
+                get: { mode }, set: { action = .coolingMode($0) }
+            )) {
+                Text("firmware").tag("auto")
+                Text("curve").tag("curve")
+                Text("fixed").tag("manual")
+            }
+            .labelsHidden().frame(width: 120)
+
+        case .fanCurve(let low, let high):
+            Text("Curve").font(.subheadline)
+            CompactNumberField(range: 40...80, suffix: "°C", value: Binding(
+                get: { Int(low) }, set: { action = .fanCurve(min: Double($0), max: high) }
+            ))
+            Text("to").font(.subheadline)
+            CompactNumberField(range: 60...105, suffix: "°C", value: Binding(
+                get: { Int(high) }, set: { action = .fanCurve(min: low, max: Double($0)) }
+            ))
+
+        case .turboDisabled(let off):
+            Text("Turbo Boost").font(.subheadline)
+            Picker("", selection: Binding(
+                get: { off }, set: { action = .turboDisabled($0) }
+            )) {
+                Text("off").tag(true)
+                Text("on").tag(false)
+            }
+            .labelsHidden().frame(width: 90)
+
+        case .gpuMode(let raw):
+            Text("Graphics").font(.subheadline)
+            Picker("", selection: Binding(
+                get: { raw }, set: { action = .gpuMode($0) }
+            )) {
+                ForEach(GPUMode.allCases, id: \.rawValue) { mode in
+                    Text(mode.label).tag(mode.rawValue)
+                }
+            }
+            .labelsHidden().frame(width: 150)
+
+        case .chargeLimit(let percent):
+            Text("Stop charging at").font(.subheadline)
+            CompactNumberField(range: 20...100, suffix: "%", value: Binding(
+                get: { percent }, set: { action = .chargeLimit($0) }
+            ))
+
+        case .keepAwake(let on):
+            Text("Sleep").font(.subheadline)
+            Picker("", selection: Binding(
+                get: { on }, set: { action = .keepAwake($0) }
+            )) {
+                Text("prevented").tag(true)
+                Text("allowed").tag(false)
+            }
+            .labelsHidden().frame(width: 110)
+
+        case .pointerAcceleration(let value):
+            Text("Pointer acceleration").font(.subheadline)
+            CompactNumberField(range: 0...200, suffix: "%", value: Binding(
+                get: { Int(value * 100) }, set: { action = .pointerAcceleration(Double($0) / 100) }
+            ))
+        }
+    }
+}
+
+/// Minutes since midnight, typed as a clock. Two number boxes would be
+/// technically equivalent and nobody thinks of half past ten as 630.
+private struct TimeField: View {
+    @Binding var minutes: Int
+    @State private var text = ""
+
+    var body: some View {
+        TextField("HH:MM", text: $text, onCommit: commit)
+            .frame(width: 62)
+            .multilineTextAlignment(.center)
+            .onAppear { text = Condition.clock(minutes) }
+            .onChange(of: minutes) { text = Condition.clock($0) }
+    }
+
+    private func commit() {
+        let parts = text.split(separator: ":")
+        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]),
+              (0...23).contains(hour), (0...59).contains(minute)
+        else {
+            text = Condition.clock(minutes)   // unparseable: put back what it was
+            return
+        }
+        minutes = hour * 60 + minute
     }
 }

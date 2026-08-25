@@ -53,15 +53,13 @@ private struct BatteryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Stop charging at \(feature.limitPercent) %").font(.subheadline)
-                Slider(
-                    value: Binding(
-                        get: { Double(feature.limitPercent) },
-                        set: { feature.setLimit(Int($0)) }
-                    ),
-                    in: Double(BatteryLimit.minimumPercent)...Double(BatteryLimit.unlimited),
-                    step: 5
-                )
+                IntField(title: "Stop charging at",
+                         range: BatteryLimit.minimumPercent...BatteryLimit.unlimited,
+                         suffix: "%",
+                         value: Binding(
+                            get: { feature.limitPercent },
+                            set: { feature.setLimit($0) }
+                         ))
                 Text("Setting a ceiling below the current charge does not discharge the battery — the machine simply runs off the adapter until the level drifts down on its own.")
                     .font(.caption).foregroundColor(.secondary)
             }
