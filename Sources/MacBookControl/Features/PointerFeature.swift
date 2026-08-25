@@ -81,6 +81,13 @@ final class PointerFeature: Feature {
 
     func refreshDevices() { devices = acceleration.devices() }
 
+    /// Asked for by a profile — see `AwakeFeature.setEnabledByProfile`.
+    func setAccelerationByProfile(_ multiplier: Double) {
+        guard isEnabled else { return }
+        flattenAcceleration = true
+        accelerationMultiplier = multiplier
+    }
+
     private func reapplyAcceleration() {
         guard isEnabled, acceleration.isAvailable else { return }
         if flattenAcceleration {

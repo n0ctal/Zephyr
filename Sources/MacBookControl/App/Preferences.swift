@@ -171,6 +171,21 @@ enum Preferences {
         set { d.set(newValue, forKey: "keyboard.applied") }
     }
 
+    // MARK: Profiles
+
+    static var profiles: [Profile] {
+        get {
+            guard let data = d.data(forKey: "profiles.list"),
+                  let decoded = try? JSONDecoder().decode([Profile].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "profiles.list")
+        }
+    }
+
     // MARK: Awake
 
     /// Whether keeping the machine awake also keeps the screen lit. Off means

@@ -22,9 +22,17 @@ final class AwakeFeature: Feature {
     }
 
     override func activate() { reapply() }
+
+    /// Asked for by a profile. Deliberately does nothing while the feature is
+    /// off: a rule may decide *when* the Mac is held awake, not *whether* the
+    /// user allowed it to be.
+    func setEnabledByProfile(_ on: Bool) {
+        guard isEnabled else { return }
+        on ? reapply() : inhibitor.releaseAll()
+    }
     override func deactivate() { inhibitor.releaseAll() }
 
-    private func reapply() {
+    func reapply() {
         guard isEnabled else { return }
         inhibitor.apply(keepSystemAwake: true,
                         keepDisplayOn: keepDisplayOn,

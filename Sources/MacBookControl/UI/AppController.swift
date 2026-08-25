@@ -23,15 +23,21 @@ final class AppController: NSObject, NSMenuDelegate {
     override init() {
         let telemetry = self.telemetry
         let helper = self.helper
+        let profiles = ProfilesFeature()
         registry = FeatureRegistry(features: [
             CoolingFeature(helper: helper, telemetry: telemetry),
             PowerFeature(helper: helper, turbo: turbo, telemetry: telemetry),
             GraphicsFeature(helper: helper, gpu: gpu),
             BatteryFeature(helper: helper, telemetry: telemetry),
+            DisplayFeature(),
             KeyboardFeature(),
             PointerFeature(),
             AwakeFeature(),
+            profiles,
         ])
+        // The engine drives the other features, so it cannot be built
+        // alongside them — it needs the finished registry.
+        profiles.attach(registry: registry, telemetry: telemetry)
         super.init()
         configure()
     }

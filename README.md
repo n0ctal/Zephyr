@@ -47,28 +47,62 @@ fully and the Turbo Boost section simply stays hidden.
 > Plundervolt (CVE-2019-11157) firmware mitigation anyway. On those machines it
 > is not a matter of effort — the mailbox the tools write to no longer answers.
 
-## What the two newer sections are for
+## What each tab does
 
-**Throttling monitor.** When the package runs hot, or the charger cannot supply
-what the CPU wants, the firmware caps clock speed. Nothing in macOS surfaces
-this: every sensor still reads survivable and the machine merely feels slow.
-`IOPMCopyCPUPowerStatus` reports that cap — the same number `pmset -g therm`
-prints — so the menu shows it next to the thermal pressure and the number of
-cores the scheduler is still allowed to use. 100 % means nothing is being held
-back. This is read-only; Zephyr never changes the cap.
+The menu bar stays at four items — Settings, the helper's state, Launch at
+login, Quit — and everything else lives in one window, a tab per function, each
+behind its own **Enable**.
 
-**Charge ceiling.** Keeping a lithium cell at 100 % is what ages it fastest,
-and a laptop that lives on a desk does exactly that. The SMC accepts a ceiling
-in `BCLM`, so the daemon can hold charging at 80 % — the same mechanism the
-dedicated tools use. Two details are worth knowing:
+The checkbox is a promise rather than a display preference: a function that is
+off leaves the hardware exactly as it found it. Switching **Cooling** off hands
+the fans back to the firmware; switching **Battery** off lifts the charge
+ceiling. Anything less strands the machine in a state with nothing in the UI to
+explain it, which is how a battery ends up capped at 80 % for a year because an
+app was uninstalled.
 
-- The firmware clears the key across sleep and power loss, so Zephyr writes it
-  again on wake, next to the Turbo Boost bit.
-- A ceiling **below** the current charge does not discharge anything. The
-  machine simply stops charging and waits for normal use to bring it down,
-  which looks like a fault until you know it is deliberate. The menu says so.
+| Tab | What it replaces | What it does |
+|---|---|---|
+| **Cooling** | Macs Fan Control, Hot | Fans on a temperature curve or a fixed speed, plus how far the firmware has capped the CPU and for how long this session |
+| **Power** | Turbo Boost Switcher, VoltageShift | Turbo Boost off, the Intel package power limit, live wattage |
+| **Graphics** | gSwitch | Pins the integrated or discrete GPU — and *holds* the choice, re-asserting when macOS hands the other one out |
+| **Battery** | AlDente | Charge ceiling enforced by the SMC, plus wear, cycles and where the watts are going |
+| **Display** | BetterDisplay | Brightness, dimming past the panel's own minimum, and the resolutions the Displays pane hides |
+| **Keyboard** | Karabiner-Elements | Key-for-key swaps written below the window server, so they hold on the login screen |
+| **Pointer** | LinearMouse | Separate scroll directions for mouse and trackpad, fixed distance per notch, no pointer acceleration |
+| **Awake** | Amphetamine | Holds the Mac awake, optionally with the display off or through a closed lid |
+| **Profiles** | — | Rules that set several of the above at once when the circumstances call for it |
 
-Turning the toggle off restores unlimited charging immediately.
+### Why Profiles is the point
+
+Nothing above is hard to find on its own. What no separate utility can do is
+notice that the machine is on mains, docked to an external display, and running
+something heavy — because none of them can see the others' business. A profile
+says "when these hold, set those", and it is the only reason to have one process
+instead of nine.
+
+A profile is applied when it takes over, and not again until the circumstances
+change. That matters: re-applying every tick would mean the app silently undoing
+anything you changed by hand. When several profiles match, the first in the list
+wins, so ordering is how "specific above general" gets expressed.
+
+A profile can only drive functions you have already enabled. A rule may decide
+*when* the Mac is held awake; it may not decide *whether* you allowed it to be.
+
+### What is deliberately not here
+
+**Undervolting.** The register is locked by the firmware's Plundervolt
+mitigation (CVE-2019-11157) on every Mac built after 2018. The Power tab offers
+the package power limit instead, which is a mechanism Intel intends to be used
+and gets you the same practical result: cooler, quieter, less throttling.
+
+**Karabiner's conditional rules.** Layers, chords and hold-versus-tap need to
+watch the event stream, and macOS shuts event taps out of password fields and
+the login window. A Caps Lock that had become Escape would stop being Escape at
+exactly the moment it is least expected. Plain swaps go through the HID layer,
+where they hold everywhere.
+
+**DDC/CI for external monitors.** Written blind it fails silently, and there was
+no external display to test against.
 
 ## Build
 
@@ -110,6 +144,21 @@ it only if you want the feature.
 3. **Approve the kext** — the first load prompts *"System Extension Blocked"*;
    approve it in *System Settings → Privacy & Security*, then reboot. After
    that the app toggles Turbo Boost freely.
+
+## Enabling the power limit (also requires SIP disabled)
+
+The Intel package power limit lives in MSR 0x610, which is ring 0. A small kext
+publishes it over three sysctls:
+
+```
+sudo "/Applications/Zephyr.app/Contents/Resources/scripts/install-power-kext.sh"
+```
+
+It refuses to do anything if SIP is enabled, installs a boot-time loader so the
+sysctls survive a reboot, and finishes by telling you whether the firmware has
+**locked** the register. If it has, Zephyr can read the limits but not change
+them — and neither can anything else. That is a hardware decision, not a
+limitation of this app.
 
 ## Uninstall
 

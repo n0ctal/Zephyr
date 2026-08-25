@@ -31,6 +31,11 @@ if arguments.contains("--test-gpu") {
     exit(0)
 }
 
+if arguments.contains("--test-profiles") {
+    runProfilesTest()
+    exit(0)
+}
+
 if arguments.contains("--test-keyboard") {
     runKeyboardTest(write: arguments.contains("--write"))
     exit(0)
@@ -270,4 +275,40 @@ func runKeyboardTest(write: Bool) {
     remapper.clear()
     show("after clearing")
     print("  applied flag: \(Preferences.keyboardMappingApplied)")
+}
+
+
+// MARK: - Profiles diagnostics
+
+func runProfilesTest() {
+    let telemetry = Telemetry()
+    telemetry.start()
+    // One tick so the battery and temperature have been read at least once.
+    RunLoop.current.run(until: Date().addingTimeInterval(2.5))
+    let context = Context.sample(telemetry: telemetry)
+    print("context now:")
+    print("  on external power: \(context.onExternalPower)")
+    print("  battery: \(context.batteryPercent.map { "\($0) %" } ?? "unknown")")
+    print("  external displays: \(context.externalDisplayCount)")
+    print("  wi-fi: \(context.wifiSSID ?? "unknown (needs Location permission)")")
+    print("  clock: \(Condition.clock(context.minutesSinceMidnight))")
+    print("  cpu: \(context.cpuCelsius.map { String(format: "%.0f °C", $0) } ?? "unknown")")
+    print("  apps running: \(context.runningApps.count)")
+
+    let samples: [Condition] = [
+        .onExternalPower(true), .onExternalPower(false),
+        .batteryBelow(30), .externalDisplayAttached(true), .externalDisplayAttached(false),
+        .cpuHotterThan(50), .cpuHotterThan(95),
+        .timeBetween(startMinutes: 0, endMinutes: 24 * 60 - 1),
+        .appRunning("Finder"), .appRunning("NoSuchApplication"),
+    ]
+    print("\nconditions against it:")
+    for condition in samples {
+        print("  \(condition.holds(in: context) ? "yes" : "no ") — \(condition.label)")
+    }
+
+    let profile = Profile(name: "Desk", requiresAll: true,
+                          conditions: [.onExternalPower(true), .appRunning("Finder")],
+                          actions: [.turboDisabled(false)])
+    print("\nprofile \"\(profile.name)\" matches: \(profile.matches(context))")
 }

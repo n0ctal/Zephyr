@@ -62,11 +62,14 @@ echo "==> Bundling helper installer + kext"
 mkdir -p "$APP_DIR/Contents/Resources/scripts"
 cp "$PROJECT_DIR/scripts/install-helper.sh" \
    "$PROJECT_DIR/scripts/uninstall-helper.sh" \
+   "$PROJECT_DIR/scripts/install-power-kext.sh" \
    "$PROJECT_DIR/scripts/$BUNDLE_ID.helper.plist" \
    "$APP_DIR/Contents/Resources/scripts/" 2>/dev/null || true
-if [ -d "$PROJECT_DIR/kext/DisableTurboBoost.kext" ]; then
-    cp -R "$PROJECT_DIR/kext/DisableTurboBoost.kext" "$APP_DIR/Contents/Resources/"
-fi
+for k in DisableTurboBoost ZephyrPower; do
+    if [ -d "$PROJECT_DIR/kext/$k.kext" ]; then
+        cp -R "$PROJECT_DIR/kext/$k.kext" "$APP_DIR/Contents/Resources/"
+    fi
+done
 
 # Ad-hoc signature (no Developer ID needed for local use).
 echo "==> Ad-hoc codesign"

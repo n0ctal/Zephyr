@@ -9,8 +9,15 @@ cd "$(dirname "$0")"
 SDK="$(xcrun --show-sdk-path)"
 KHDRS="$SDK/System/Library/Frameworks/Kernel.framework/Headers"
 KPRIV="$SDK/System/Library/Frameworks/Kernel.framework/PrivateHeaders"
-NAME="DisableTurboBoost"
+
+# Which bundle to build. Two kexts live here now: the turbo one, whose model is
+# "loaded means disabled", and the power-limit one, which stays loaded and
+# carries values over sysctl. Keeping them apart means a change to one cannot
+# alter when the other is loaded.
+NAME="${1:-DisableTurboBoost}"
 BUNDLE="$NAME.kext"
+PLIST="Info.plist"
+[ "$NAME" = "ZephyrPower" ] && PLIST="Info-ZephyrPower.plist"
 
 echo "Compiling $NAME.cpp ..."
 clang \
@@ -39,7 +46,7 @@ clang \
 echo "Assembling bundle ..."
 rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS"
-cp Info.plist "$BUNDLE/Contents/Info.plist"
+cp "$PLIST" "$BUNDLE/Contents/Info.plist"
 cp "$NAME" "$BUNDLE/Contents/MacOS/$NAME"
 
 # kmutil/kextload want sane ownership; ad-hoc sign so the bundle is well-formed.
@@ -48,4 +55,4 @@ codesign --force --sign - "$BUNDLE" 2>/dev/null || true
 rm -f "$NAME.o" "$NAME.lto.o" "$NAME"
 
 echo "Built $BUNDLE"
-echo "Validate with:  kmutil inspect -b com.n0ctal.DisableTurboBoost --bundle-path $BUNDLE 2>/dev/null; codesign -dv $BUNDLE"
+echo "Validate with:  kmutil inspect -b com.n0ctal.$NAME --bundle-path $BUNDLE 2>/dev/null; codesign -dv $BUNDLE"
