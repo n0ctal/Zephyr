@@ -65,6 +65,15 @@ private struct BatteryView: View {
             }
 
             Divider()
+            Toggle("Show where the watts are going", isOn: Binding(
+                get: { Preferences.showPowerFlow },
+                set: { Preferences.showPowerFlow = $0; feature.objectWillChange.send() }
+            ))
+            if Preferences.showPowerFlow, let draw = telemetry.battery?.power {
+                PowerFlowView(draw: draw, isPluggedIn: telemetry.battery?.isPluggedIn ?? false)
+            }
+
+            Divider()
             if let battery = telemetry.battery {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(battery.percent) % · \(battery.stateLabel)").font(.headline)

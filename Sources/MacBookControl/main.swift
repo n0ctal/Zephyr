@@ -334,6 +334,12 @@ func runProfilesTest() {
     print("context now:")
     print("  on external power: \(context.onExternalPower)")
     print("  battery: \(context.batteryPercent.map { "\($0) %" } ?? "unknown")")
+    if let draw = telemetry.battery?.power {
+        print("    system: \(draw.systemWatts.map { String(format: "%.2f W", $0) } ?? "—")")
+        print("    adapter: \(draw.adapterWatts.map { String(format: "%.2f W", $0) } ?? "—")")
+        print("    battery: \(draw.batteryWatts.map { String(format: "%+.2f W", $0) } ?? "—")")
+    }
+    print("    on charger: \(telemetry.battery?.isPluggedIn ?? false), charging: \(telemetry.battery?.isCharging ?? false)")
     print("  external displays: \(context.externalDisplayCount)")
     print("  wi-fi: \(context.wifiSSID ?? "unknown (needs Location permission)")")
     print("  clock: \(Condition.clock(context.minutesSinceMidnight))")

@@ -89,6 +89,10 @@ enum Preferences {
         get { MenuBarComposer.BatteryStyle(rawValue: d.string(forKey: "menubar.batteryStyle") ?? "") ?? .off }
         set { d.set(newValue.rawValue, forKey: "menubar.batteryStyle") }
     }
+    static var batteryIcon: MenuBarComposer.BatteryIcon {
+        get { MenuBarComposer.BatteryIcon(rawValue: d.string(forKey: "menubar.batteryIcon") ?? "") ?? .system }
+        set { d.set(newValue.rawValue, forKey: "menubar.batteryIcon") }
+    }
     static var cpuSpeedStyle: MenuBarComposer.SpeedStyle {
         get { MenuBarComposer.SpeedStyle(rawValue: d.string(forKey: "menubar.speedStyle") ?? "") ?? .off }
         set { d.set(newValue.rawValue, forKey: "menubar.speedStyle") }
@@ -146,6 +150,13 @@ enum Preferences {
     static var lastKnownTurboDisabled: Bool {
         get { d.bool(forKey: "power.turboDisabled") }
         set { d.set(newValue, forKey: "power.turboDisabled") }
+    }
+
+    /// The flow diagram in the Battery tab. Off by default: it answers a
+    /// question not everyone is asking, and it costs vertical space.
+    static var showPowerFlow: Bool {
+        get { d.bool(forKey: "battery.showFlow") }
+        set { d.set(newValue, forKey: "battery.showFlow") }
     }
 
     // MARK: Graphics

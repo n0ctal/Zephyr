@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -37,6 +38,7 @@ enum SelfTest {
         sliderTickBudget()
         fanCurve()
         scrollRewriting()
+        menuBarDrawing()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -276,6 +278,34 @@ enum SelfTest {
         ScrollInterceptor.rewrite(backwards, options: linear)
         expectEqual(backwards.getIntegerValueField(.scrollWheelEventDeltaAxis1), -3,
                     "flattening keeps the direction")
+    }
+
+    // MARK: Menu bar drawing
+
+    private static func menuBarDrawing() {
+        // A status item carries one image. Dropping the thread bars because a
+        // battery icon was already there made an explicit choice silently do
+        // nothing — which is exactly how it was reported.
+        guard let bars = MenuBarComposer.threadBars([0.1, 0.9, 0.5, 0.2]) else {
+            expect(false, "thread bars can be drawn")
+            return
+        }
+        expect(bars.size.width > 0 && bars.size.height > 0, "the bars have a size")
+
+        let icon = NSImage(size: NSSize(width: 24, height: 12))
+        let joined = MenuBarComposer.join(icon, bars)
+        expect(joined.size.width >= icon.size.width + bars.size.width,
+               "joining puts both drawings side by side")
+        expect(joined.size.height >= max(icon.size.height, bars.size.height),
+               "joining keeps the taller of the two")
+        expectEqual(MenuBarComposer.join(nil, bars).size.width, bars.size.width,
+                    "with nothing to join to, the bars stand alone")
+
+        // Sixteen threads is what this machine has; the drawing must scale to
+        // whatever it is given rather than assuming a count.
+        guard let wide = MenuBarComposer.threadBars(Array(repeating: 0.5, count: 16)) else { return }
+        expect(wide.size.width > bars.size.width, "more threads means a wider drawing")
+        expect(MenuBarComposer.threadBars([]) == nil, "no threads draws nothing")
     }
 
     // MARK: Fan curve

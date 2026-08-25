@@ -23,7 +23,7 @@ final class BatteryReader {
             isPluggedIn: props["ExternalConnected"] as? Bool ?? false,
             healthPercent: health(props),
             cycleCount: props["CycleCount"] as? Int,
-            power: power()
+            power: power(batteryWatts: batteryWatts(props))
         )
     }
 
@@ -40,14 +40,27 @@ final class BatteryReader {
     /// Where the power is going right now. The SMC publishes these as floats:
     /// what the system draws, what the adapter supplies, and what the battery
     /// is contributing (or absorbing).
-    private func power() -> PowerDraw? {
+    /// Battery flow in watts, signed. Positive while charging, negative while
+    /// the battery carries the machine.
+    ///
+    /// From IOKit rather than the SMC: the SMC's `PPBR` reports the magnitude
+    /// only, so a discharging machine read as a positive number and the menu
+    /// bar claimed the battery was filling while the charger was unplugged.
+    /// `Amperage` is signed and `Voltage` is in millivolts, so the product is
+    /// in microwatts.
+    private func batteryWatts(_ props: [String: Any]) -> Double? {
+        guard let milliAmps = props["Amperage"] as? Int,
+              let milliVolts = props["Voltage"] as? Int else { return nil }
+        return Double(milliAmps) * Double(milliVolts) / 1_000_000
+    }
+
+    private func power(batteryWatts: Double?) -> PowerDraw? {
         guard let smc = try? SMC() else { return nil }
         defer { smc.close() }
         let system = (try? smc.read("PSTR"))?.double
         let adapter = (try? smc.read("PDTR"))?.double
-        let battery = (try? smc.read("PPBR"))?.double
-        guard system != nil || adapter != nil || battery != nil else { return nil }
-        return PowerDraw(systemWatts: system, adapterWatts: adapter, batteryWatts: battery)
+        guard system != nil || adapter != nil || batteryWatts != nil else { return nil }
+        return PowerDraw(systemWatts: system, adapterWatts: adapter, batteryWatts: batteryWatts)
     }
 
     /// AppleSmartBattery carries the numbers IOPowerSources rounds away.

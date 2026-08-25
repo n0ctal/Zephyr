@@ -137,6 +137,18 @@ private struct MenuBarTab: View {
                     Text($0.label).tag($0.rawValue)
                 }
             }
+            if Preferences.batteryStyle == .icon || Preferences.batteryStyle == .iconAndPercent {
+                Picker("Icon", selection: bindBatteryIcon()) {
+                    ForEach(MenuBarComposer.BatteryIcon.allCases, id: \.rawValue) {
+                        Text($0.label).tag($0.rawValue)
+                    }
+                }
+                .padding(.leading, 18)
+                Text("The bar and the ring are drawn rather than taken from the symbol set, so they fill continuously instead of stepping between five stock images.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .padding(.leading, 18)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Toggle("Power in watts, signed", isOn: bind(.showPower))
             Text("Plus while the battery is filling, minus while it is carrying the machine. The sign is the whole message.")
                 .font(.caption).foregroundColor(.secondary)
@@ -220,6 +232,10 @@ private struct MenuBarTab: View {
     private func bindBattery() -> Binding<String> {
         Binding(get: { Preferences.batteryStyle.rawValue },
                 set: { Preferences.batteryStyle = .init(rawValue: $0) ?? .off; revision += 1 })
+    }
+    private func bindBatteryIcon() -> Binding<String> {
+        Binding(get: { Preferences.batteryIcon.rawValue },
+                set: { Preferences.batteryIcon = .init(rawValue: $0) ?? .system; revision += 1 })
     }
     private func bindSpeed() -> Binding<String> {
         Binding(get: { Preferences.cpuSpeedStyle.rawValue },
