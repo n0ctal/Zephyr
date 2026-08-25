@@ -30,7 +30,7 @@ final class ProfileEngine {
     func evaluate(_ profiles: [Profile]) -> Bool {
         hasEvaluated = true
         let context = Context.sample(telemetry: telemetry)
-        let winner = profiles.first { $0.matches(context) }
+        let winner = Profile.firstMatching(profiles, in: context)
         guard winner?.id != activeProfile?.id else { return false }
         activeProfile = winner
         if let winner = winner { apply(winner) }

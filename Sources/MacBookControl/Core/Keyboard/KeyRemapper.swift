@@ -33,7 +33,7 @@ final class KeyRemapper {
         let name: String
         let usage: Int
         var id: Int { usage }
-        var wireValue: Int { 0x700000000 | usage }
+        var wireValue: Int { KeyRemapper.wireValue(forUsage: usage) }
     }
 
     /// Curated rather than exhaustive: the full HID table is a thousand
@@ -65,6 +65,12 @@ final class KeyRemapper {
         Key(name: "Up Arrow", usage: 0x52),
     ] + (1...12).map { Key(name: "F\($0)", usage: 0x3A + $0 - 1) }
 
+    /// The property expects the HID usage with the keyboard page in the high
+    /// word. One function so the value written to the hardware and the value
+    /// shown in the UI cannot drift apart — and so a check of one is a check
+    /// of both.
+    static func wireValue(forUsage usage: Int) -> Int { 0x700000000 | usage }
+
     static func name(forUsage usage: Int) -> String {
         catalogue.first { $0.usage == usage }?.name ?? String(format: "0x%02X", usage)
     }
@@ -79,8 +85,8 @@ final class KeyRemapper {
     /// property is the complete list, so anything left out is unmapped.
     func apply(_ mappings: [Mapping]) {
         let pairs = mappings.map {
-            ["HIDKeyboardModifierMappingSrc": 0x700000000 | $0.source,
-             "HIDKeyboardModifierMappingDst": 0x700000000 | $0.destination]
+            ["HIDKeyboardModifierMappingSrc": Self.wireValue(forUsage: $0.source),
+             "HIDKeyboardModifierMappingDst": Self.wireValue(forUsage: $0.destination)]
         }
         for service in hid.services(matching: [.keyboard]) {
             hid.set(service, "HIDKeyboardModifierMappingPairs", pairs as CFArray)

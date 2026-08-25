@@ -19,6 +19,15 @@ APP_DIR="$PROJECT_DIR/$APP_NAME.app"
 echo "==> swift build -c $CONFIG"
 swift build -c "$CONFIG"
 
+# A suite nothing runs guards nothing. This is the gate: the binary that is
+# about to be bundled runs its own regression checks, and a failure stops the
+# build before anything is signed or shipped.
+echo "==> self-test"
+if ! "$(swift build -c "$CONFIG" --show-bin-path)/Zephyr" --self-test; then
+    echo "Self-test failed — not building the bundle." >&2
+    exit 1
+fi
+
 echo "==> Assembling $APP_NAME.app"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"

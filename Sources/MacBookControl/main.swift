@@ -33,6 +33,10 @@ if arguments.contains("--test-gpu") {
     exit(0)
 }
 
+if arguments.contains("--self-test") {
+    exit(SelfTest.run())
+}
+
 if arguments.contains("--test-timing") {
     runTimingTest()
     exit(0)

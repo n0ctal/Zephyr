@@ -136,6 +136,14 @@ extension Condition {
 }
 
 extension Profile {
+    /// Which profile takes over. The first match wins, because order in the
+    /// list is how "specific above general" is expressed without asking anyone
+    /// to maintain priority numbers. Shared with the engine so a check of this
+    /// is a check of what actually runs.
+    static func firstMatching(_ profiles: [Profile], in context: Context) -> Profile? {
+        profiles.first { $0.matches(context) }
+    }
+
     func matches(_ context: Context) -> Bool {
         guard isEnabled, !conditions.isEmpty else { return false }
         return requiresAll

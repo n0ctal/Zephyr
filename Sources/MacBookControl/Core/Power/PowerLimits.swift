@@ -68,14 +68,26 @@ enum PowerLimits {
     /// CPU's power ceiling is not a lever any process on the machine can pull.
     static func composed(pl1Watts: Double, pl2Watts: Double) -> UInt64? {
         guard let limit = read(name: "kern.zephyr_power_limit"),
-              let unit = read(name: "kern.zephyr_power_unit"),
-              limit & (1 << 63) == 0 else { return nil }
+              let unit = read(name: "kern.zephyr_power_unit") else { return nil }
+        return compose(current: limit, unit: unit, pl1Watts: pl1Watts, pl2Watts: pl2Watts)
+    }
+
+    /// The bit work, separated from the sysctl reads so it can be checked
+    /// without a kext loaded. Read-modify-write rather than composing a fresh
+    /// value: the time windows and clamp bits are the firmware's, and
+    /// rewriting them from a guess is how a machine ends up with a power limit
+    /// behaving nothing like the watts printed beside the slider.
+    static func compose(current: UInt64, unit: UInt64,
+                        pl1Watts: Double, pl2Watts: Double) -> UInt64? {
+        // Locked by the firmware: the hardware ignores the write, so returning
+        // a value would only produce a UI that lies about what happened.
+        guard current & (1 << 63) == 0 else { return nil }
 
         let stepsPerWatt = Double(1 << (unit & 0xF))
         let pl1 = UInt64(max(1, (pl1Watts * stepsPerWatt).rounded())) & 0x7FFF
         let pl2 = UInt64(max(1, (pl2Watts * stepsPerWatt).rounded())) & 0x7FFF
 
-        var value = limit
+        var value = current
         value = (value & ~0x7FFF) | pl1
         value = (value & ~(0x7FFF << 32)) | (pl2 << 32)
         value |= (1 << 15) | (1 << 47)   // both limits enabled

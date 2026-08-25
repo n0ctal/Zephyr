@@ -49,7 +49,9 @@ struct ValueField: View {
     /// what made the Cooling tab look like it had hung. Past a few dozen the
     /// marks are unreadable anyway, so wide ranges get a continuous slider and
     /// the rounding is done in the binding.
-    private var tickStep: Double? {
+    private var tickStep: Double? { Self.tickStep(range: range, step: step) }
+
+    static func tickStep(range: ClosedRange<Double>, step: Double) -> Double? {
         let span = range.upperBound - range.lowerBound
         guard step > 0 else { return nil }
         return span / step <= 40 ? step : nil
