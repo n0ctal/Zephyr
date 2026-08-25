@@ -21,6 +21,20 @@ enum Settings {
         set { d.set(newValue, forKey: "chargeLimitEnabled") }
     }
 
+    /// Show the battery percentage next to the temperature in the menu bar.
+    static var batteryInMenuBar: Bool {
+        get { d.bool(forKey: "batteryInMenuBar") }
+        set { d.set(newValue, forKey: "batteryInMenuBar") }
+    }
+
+    /// Mark the menu bar while the firmware is capping the CPU. Off by default
+    /// because the mark only ever appears when something is wrong, and some
+    /// people would rather not watch for it.
+    static var throttleInMenuBar: Bool {
+        get { d.object(forKey: "throttleInMenuBar") as? Bool ?? true }
+        set { d.set(newValue, forKey: "throttleInMenuBar") }
+    }
+
     /// The ceiling to apply when enabled. 80 is the usual longevity compromise.
     static var chargeLimitPercent: Int {
         get { d.object(forKey: "chargeLimitPercent") as? Int ?? 80 }

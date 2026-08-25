@@ -21,6 +21,8 @@ final class AppController: NSObject, NSMenuDelegate {
     private let turbo = TurboBoostController()
     private let thermal = ThermalMonitor()
     private let battery = BatteryReader()
+    /// What the throttling monitor has seen since launch.
+    private var thermalStats = ThermalStats()
     private let helper = HelperClient.shared
 
     private var refreshTimer: Timer?
@@ -80,11 +82,24 @@ final class AppController: NSObject, NSMenuDelegate {
     // MARK: Status-bar title
 
     private func updateStatusTitle() {
-        guard let cpu = sensors?.cpuTemperature() else {
-            statusItem.button?.title = "n/a"
-            return
+        // Sampled on the same 2 s tick that redraws the title, so the session
+        // statistics below the monitor cost nothing extra.
+        let status = thermal.read()
+        thermalStats.record(status, interval: 2)
+
+        var parts: [String] = []
+        if let cpu = sensors?.cpuTemperature() {
+            parts.append(String(format: "%.0f°", cpu.celsius))
         }
-        statusItem.button?.title = String(format: "%.0f°", cpu.celsius)
+        if Settings.batteryInMenuBar, let b = battery.read() {
+            parts.append("\(b.percent) %")
+        }
+        // Only shown while it is actually happening: a permanent "100 %" would
+        // be noise, and the point is to notice the moment it drops.
+        if Settings.throttleInMenuBar, status.isThrottling, let limit = status.speedLimitPercent {
+            parts.append("↓\(limit) %")
+        }
+        statusItem.button?.title = parts.isEmpty ? "n/a" : parts.joined(separator: "  ")
     }
 
     // MARK: Menu
@@ -157,6 +172,27 @@ final class AppController: NSObject, NSMenuDelegate {
             menu.addItem(disabledItem("   Available cores: \(cpus)"))
         }
         menu.addItem(disabledItem("   Thermal pressure: \(status.pressure.label)"))
+
+        // A single reading only says "right now". What usually matters is
+        // whether it dropped while you were looking at something else.
+        if thermalStats.everThrottled {
+            menu.addItem(disabledItem("   Lowest this session: \(thermalStats.lowestSpeedLimit) %"))
+            menu.addItem(disabledItem("   Held back for: \(thermalStats.throttledLabel)"))
+        } else {
+            menu.addItem(disabledItem("   Never held back this session"))
+        }
+
+        let mark = NSMenuItem(title: "   Mark the menu bar when throttled",
+                              action: #selector(toggleThrottleInMenuBar), keyEquivalent: "")
+        mark.target = self
+        mark.state = Settings.throttleInMenuBar ? .on : .off
+        menu.addItem(mark)
+    }
+
+    @objc private func toggleThrottleInMenuBar() {
+        Settings.throttleInMenuBar.toggle()
+        updateStatusTitle()
+        rebuildMenu()
     }
 
     @objc private func toggleThrottlingMonitor() {
@@ -177,9 +213,29 @@ final class AppController: NSObject, NSMenuDelegate {
         menu.addItem(toggle)
 
         if let b = battery.read() {
-            var line = String(format: "   Battery: %d %% (%@)", b.percent, b.stateLabel)
-            if let health = b.healthPercent { line += String(format: ", health %d %%", health) }
-            menu.addItem(disabledItem(line))
+            menu.addItem(disabledItem(String(format: "   Battery: %d %% (%@)", b.percent, b.stateLabel)))
+
+            var wear = ""
+            if let health = b.healthPercent { wear += String(format: "health %d %%", health) }
+            if let cycles = b.cycleCount {
+                wear += wear.isEmpty ? "" : ", "
+                wear += "\(cycles) cycles"
+            }
+            if !wear.isEmpty { menu.addItem(disabledItem("   " + wear)) }
+
+            if let p = b.power {
+                var draw: [String] = []
+                if let w = p.systemWatts  { draw.append(String(format: "system %.1f W", w)) }
+                if let w = p.adapterWatts { draw.append(String(format: "adapter %.1f W", w)) }
+                if let w = p.batteryWatts, abs(w) >= 0.1 { draw.append(String(format: "battery %.1f W", w)) }
+                if !draw.isEmpty { menu.addItem(disabledItem("   " + draw.joined(separator: ", "))) }
+            }
+
+            let show = NSMenuItem(title: "   Show battery in menu bar",
+                                  action: #selector(toggleBatteryInMenuBar), keyEquivalent: "")
+            show.target = self
+            show.state = Settings.batteryInMenuBar ? .on : .off
+            menu.addItem(show)
         }
 
         guard Settings.chargeLimitEnabled else { return }
@@ -204,6 +260,12 @@ final class AppController: NSObject, NSMenuDelegate {
         if let b = battery.read(), b.percent > Settings.chargeLimitPercent, b.isPluggedIn {
             menu.addItem(disabledItem("   Above the limit — will drift down in use"))
         }
+    }
+
+    @objc private func toggleBatteryInMenuBar() {
+        Settings.batteryInMenuBar.toggle()
+        updateStatusTitle()
+        rebuildMenu()
     }
 
     @objc private func toggleChargeLimit() {

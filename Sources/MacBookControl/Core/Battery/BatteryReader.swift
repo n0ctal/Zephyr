@@ -1,45 +1,63 @@
 import Foundation
+import IOKit
 import IOKit.ps
 
-/// Unprivileged view of the battery: charge, health and whether the charger is
-/// actually pushing current right now.
+/// Unprivileged view of the battery: charge, wear, cycles and where the watts
+/// are actually going.
 ///
-/// The charge *limit* itself lives in the SMC and is written by the daemon
-/// (see `BatteryLimit`); this type only reports state so the menu can explain
-/// what the limit is doing — a machine parked at 80 % with the charger plugged
-/// in looks broken until you can see that it is deliberate.
+/// The charge *ceiling* itself lives in the SMC and is written by the daemon
+/// (see `BatteryLimit`); this type only reports state, so the menu can explain
+/// what the ceiling is doing — a machine parked at 80 % with the charger
+/// plugged in looks broken until you can see that it is deliberate.
 final class BatteryReader {
     func read() -> BatteryStatus? {
-        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
-        else { return nil }
+        guard let props = smartBatteryProperties() else { return nil }
 
-        for source in sources {
-            guard let d = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue() as? [String: Any],
-                  (d[kIOPSTypeKey] as? String) == kIOPSInternalBatteryType
-            else { continue }
+        let current = props["CurrentCapacity"] as? Int ?? 0
+        let max = props["MaxCapacity"] as? Int ?? 0
+        let percent = max > 0 ? Int((Double(current) / Double(max) * 100).rounded()) : 0
 
-            let current = d[kIOPSCurrentCapacityKey] as? Int ?? 0
-            let max = d[kIOPSMaxCapacityKey] as? Int ?? 100
-            return BatteryStatus(
-                percent: max > 0 ? Int((Double(current) / Double(max) * 100).rounded()) : current,
-                isCharging: d[kIOPSIsChargingKey] as? Bool ?? false,
-                isPluggedIn: (d[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue,
-                healthPercent: designCapacityPercent()
-            )
-        }
-        return nil
+        return BatteryStatus(
+            percent: percent,
+            isCharging: props["IsCharging"] as? Bool ?? false,
+            isPluggedIn: props["ExternalConnected"] as? Bool ?? false,
+            healthPercent: health(props),
+            cycleCount: props["CycleCount"] as? Int,
+            power: power()
+        )
     }
 
-    /// Health from the SMC's own full-charge vs design capacity. IOKit reports
-    /// a coarse "Good/Fair/Poor" string; the raw ratio is more useful.
-    private func designCapacityPercent() -> Int? {
+    /// Wear is the *raw* full-charge capacity against the design capacity.
+    /// The SMC's own `B0DC` is not in the same units as `B0FC` — using it
+    /// produced a health figure of 33 % on a battery that is actually at 82 %.
+    private func health(_ props: [String: Any]) -> Int? {
+        guard let design = props["DesignCapacity"] as? Int, design > 0,
+              let raw = (props["AppleRawMaxCapacity"] as? Int) ?? (props["MaxCapacity"] as? Int)
+        else { return nil }
+        return Int((Double(raw) / Double(design) * 100).rounded())
+    }
+
+    /// Where the power is going right now. The SMC publishes these as floats:
+    /// what the system draws, what the adapter supplies, and what the battery
+    /// is contributing (or absorbing).
+    private func power() -> PowerDraw? {
         guard let smc = try? SMC() else { return nil }
         defer { smc.close() }
-        guard let full = (try? smc.read("B0FC"))?.double,
-              let design = (try? smc.read("B0DC"))?.double,
-              design > 0
+        let system = (try? smc.read("PSTR"))?.double
+        let adapter = (try? smc.read("PDTR"))?.double
+        let battery = (try? smc.read("PPBR"))?.double
+        guard system != nil || adapter != nil || battery != nil else { return nil }
+        return PowerDraw(systemWatts: system, adapterWatts: adapter, batteryWatts: battery)
+    }
+
+    /// AppleSmartBattery carries the numbers IOPowerSources rounds away.
+    private func smartBatteryProperties() -> [String: Any]? {
+        let service = IOServiceGetMatchingService(0, IOServiceMatching("AppleSmartBattery"))
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+        var raw: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &raw, kCFAllocatorDefault, 0) == KERN_SUCCESS
         else { return nil }
-        return Int((full / design * 100).rounded())
+        return raw?.takeRetainedValue() as? [String: Any]
     }
 }

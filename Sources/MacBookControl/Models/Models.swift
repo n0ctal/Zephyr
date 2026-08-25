@@ -122,6 +122,15 @@ struct ThermalStatus {
     var isThrottling: Bool { (speedLimitPercent ?? 100) < 100 }
 }
 
+/// Where the watts are going, as the SMC reports them.
+struct PowerDraw {
+    let systemWatts: Double?
+    let adapterWatts: Double?
+    /// Positive while the battery is being charged, negative while it carries
+    /// the machine. Near zero on a full battery sitting on the charger.
+    let batteryWatts: Double?
+}
+
 /// Battery state as the menu shows it.
 struct BatteryStatus {
     let percent: Int
@@ -129,9 +138,37 @@ struct BatteryStatus {
     let isPluggedIn: Bool
     /// Full-charge capacity as a share of the design capacity, when readable.
     let healthPercent: Int?
+    let cycleCount: Int?
+    let power: PowerDraw?
 
     var stateLabel: String {
         if isCharging { return "charging" }
         return isPluggedIn ? "on charger" : "on battery"
+    }
+}
+
+/// What the throttling monitor has seen since the app started.
+///
+/// A single reading only answers "is it capped right now". The interesting
+/// question on a laptop is whether it *has been* capped while you were doing
+/// something else, so the lowest cap and the time spent below full speed are
+/// accumulated here.
+struct ThermalStats {
+    private(set) var lowestSpeedLimit = 100
+    private(set) var throttledSeconds = 0
+    private(set) var samples = 0
+
+    mutating func record(_ status: ThermalStatus, interval: Int) {
+        samples += 1
+        guard let limit = status.speedLimitPercent else { return }
+        lowestSpeedLimit = min(lowestSpeedLimit, limit)
+        if limit < 100 { throttledSeconds += interval }
+    }
+
+    var everThrottled: Bool { lowestSpeedLimit < 100 }
+
+    var throttledLabel: String {
+        if throttledSeconds < 60 { return "\(throttledSeconds) s" }
+        return "\(throttledSeconds / 60) min"
     }
 }
