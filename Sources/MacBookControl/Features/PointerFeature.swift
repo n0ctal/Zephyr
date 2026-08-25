@@ -40,13 +40,13 @@ final class PointerFeature: Feature {
         // A previous run may have been killed mid-flight, leaving devices on a
         // curve we chose. Put them back before doing anything else, so the
         // machine never carries a setting from a session that ended badly.
-        if let acceleration = acceleration, acceleration.hasUnrestored,
+        if acceleration.isAvailable, acceleration.hasUnrestored,
            !(isEnabled && flattenAcceleration) {
             acceleration.restore()
         }
     }
 
-    override var isSupported: Bool { acceleration != nil }
+    override var isSupported: Bool { acceleration.isAvailable }
     override var unsupportedReason: String? {
         isSupported ? nil : "This build of macOS does not expose the pointer interfaces Zephyr needs."
     }
@@ -65,7 +65,7 @@ final class PointerFeature: Feature {
         // Hand the shipped curve back. Leaving a device on a value we chose
         // after the feature is off would be a pointer that behaves oddly with
         // nothing in the UI admitting responsibility.
-        acceleration?.restore()
+        acceleration.restore()
     }
 
     private func startDeviceWatch() {
@@ -79,10 +79,10 @@ final class PointerFeature: Feature {
         refreshDevices()
     }
 
-    func refreshDevices() { devices = acceleration?.devices() ?? [] }
+    func refreshDevices() { devices = acceleration.devices() }
 
     private func reapplyAcceleration() {
-        guard isEnabled, let acceleration = acceleration else { return }
+        guard isEnabled, acceleration.isAvailable else { return }
         if flattenAcceleration {
             acceleration.apply(multiplier: accelerationMultiplier)
         } else {

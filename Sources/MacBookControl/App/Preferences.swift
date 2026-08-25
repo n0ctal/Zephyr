@@ -149,6 +149,28 @@ enum Preferences {
                                : d.set(newValue, forKey: "pointer.originals") }
     }
 
+    // MARK: Keyboard
+
+    static var keyMappings: [KeyRemapper.Mapping] {
+        get {
+            guard let data = d.data(forKey: "keyboard.mappings"),
+                  let decoded = try? JSONDecoder().decode([KeyRemapper.Mapping].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "keyboard.mappings")
+        }
+    }
+
+    /// Whether a mapping is currently written to the hardware. Survives the
+    /// process so a killed run can be cleaned up at the next launch.
+    static var keyboardMappingApplied: Bool {
+        get { d.bool(forKey: "keyboard.applied") }
+        set { d.set(newValue, forKey: "keyboard.applied") }
+    }
+
     // MARK: Awake
 
     /// Whether keeping the machine awake also keeps the screen lit. Off means

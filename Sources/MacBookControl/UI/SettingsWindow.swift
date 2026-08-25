@@ -57,7 +57,10 @@ struct SettingsRootView: View {
                 .tag("menubar")
         }
         .padding(12)
-        .frame(minWidth: 540, minHeight: 380, idealHeight: 480)
+        // Wide enough for ten tab labels without truncation. A macOS TabView
+        // clips its labels rather than scrolling them, and "Grap…" next to
+        // "Batt…" is worse than a window that takes more of the screen.
+        .frame(minWidth: 820, minHeight: 420, idealHeight: 520)
     }
 }
 

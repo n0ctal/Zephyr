@@ -31,6 +31,11 @@ if arguments.contains("--test-gpu") {
     exit(0)
 }
 
+if arguments.contains("--test-keyboard") {
+    runKeyboardTest(write: arguments.contains("--write"))
+    exit(0)
+}
+
 if arguments.contains("--test-pointer") {
     runPointerTest(write: arguments.contains("--write"))
     exit(0)
@@ -206,7 +211,8 @@ func runGPUTest() {
 // MARK: - Pointer diagnostics
 
 func runPointerTest(write: Bool) {
-    guard let acceleration = PointerAcceleration() else {
+    let acceleration = PointerAcceleration()
+    guard acceleration.isAvailable else {
         print("PointerAcceleration: could not resolve the IOKit symbols")
         return
     }
@@ -233,4 +239,35 @@ func runPointerTest(write: Bool) {
     for device in acceleration.devices() {
         print(String(format: "  back %@ = %d", device.key, device.value))
     }
+}
+
+
+// MARK: - Keyboard diagnostics
+
+func runKeyboardTest(write: Bool) {
+    let remapper = KeyRemapper()
+    guard remapper.isAvailable else {
+        print("KeyRemapper: could not resolve the HID interfaces")
+        return
+    }
+    print("keyboards: \(remapper.keyboards().joined(separator: ", "))")
+    func show(_ label: String) {
+        let live = remapper.liveMappings()
+        let text = live.isEmpty ? "none" : live.map {
+            "\(KeyRemapper.name(forUsage: $0.source)) -> \(KeyRemapper.name(forUsage: $0.destination))"
+        }.joined(separator: ", ")
+        print("  \(label): \(text)")
+    }
+    show("before")
+    guard write else { return }
+    remapper.apply([KeyRemapper.Mapping(source: 0x39, destination: 0x29)])
+    show("after applying Caps Lock -> Escape")
+    print("  applied flag: \(Preferences.keyboardMappingApplied)")
+    if CommandLine.arguments.contains("--leave") {
+        print("  leaving it applied, as asked")
+        return
+    }
+    remapper.clear()
+    show("after clearing")
+    print("  applied flag: \(Preferences.keyboardMappingApplied)")
 }
