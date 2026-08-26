@@ -43,6 +43,7 @@ final class SettingsWindowController {
         // Remembers whatever size it is dragged to, so a preference about the
         // window is stated once rather than every launch.
         window.setFrameAutosaveName("ZephyrSettings")
+        applyChrome(to: window)
         // Applied again here: setting it during launch can be overwritten
         // before the first window exists.
         AppearanceControl.apply()
@@ -60,6 +61,25 @@ final class SettingsWindowController {
 
     private func rebuild() {
         hosting?.rootView = makeRoot()
+        if let window = window { applyChrome(to: window) }
+    }
+
+    /// The title bar, or the absence of one.
+    ///
+    /// The sidebar layouts run the content to the top edge and put the name
+    /// beside the window buttons themselves — a separate grey strip above a
+    /// dark sidebar is a band of another application's colour across the top
+    /// of this one. The classic layout keeps its title bar, because the row of
+    /// tabs would otherwise start underneath those same buttons.
+    private func applyChrome(to window: NSWindow) {
+        let sidebar = Preferences.windowLayout.usesSidebar
+        window.titleVisibility = sidebar ? .hidden : .visible
+        window.titlebarAppearsTransparent = sidebar
+        if sidebar {
+            window.styleMask.insert(.fullSizeContentView)
+        } else {
+            window.styleMask.remove(.fullSizeContentView)
+        }
     }
 }
 
@@ -119,7 +139,12 @@ struct SettingsRootView: View {
                 }
             }
         }
-        .padding(10)
+        // The top inset is inside the banner rather than above it, so its
+        // colour still runs to the edge of the window: in the sidebar layouts
+        // there is no title bar, and the three window buttons sit on top of
+        // whatever is drawn up there.
+        .padding(EdgeInsets(top: Preferences.windowLayout.usesSidebar ? 34 : 10,
+                            leading: 10, bottom: 10, trailing: 10))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.12))
     }

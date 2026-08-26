@@ -174,17 +174,23 @@ struct SidebarSettingsView: View {
             content
         }
         .background(palette.ground)
+        .modifier(MonospacedThroughout(on: layout.monospaced))
     }
 
     // MARK: Sidebar
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 2) {
+            // Beside the close/minimise/zoom buttons rather than under them.
+            // The window's own title bar is gone in this layout, so the name
+            // has to be put back by hand — and the only place it can go is the
+            // strip those three buttons already occupy.
             Text("Zephyr")
-                .font(font(12))
+                .font(font(13, .medium))
                 .foregroundColor(palette.dim)
-                .padding(.leading, 20)
-                .padding(.bottom, 12)
+                .padding(.leading, Self.trafficLightWidth)
+                .padding(.top, 7)
+                .padding(.bottom, 18)
 
             ForEach(SettingsSection.allCases) { section in
                 row(section)
@@ -192,10 +198,17 @@ struct SidebarSettingsView: View {
             Spacer(minLength: 12)
             statusBlock
         }
-        .padding(.vertical, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 16)
         .frame(width: 228, alignment: .leading)
         .background(palette.panel)
     }
+
+    /// How far in the three window buttons reach. Measured rather than
+    /// guessed would be better, but they are drawn by the system into a
+    /// titlebar view that does not exist to ask while the content is being
+    /// laid out — and this number has not changed in a decade of macOS.
+    private static let trafficLightWidth: CGFloat = 78
 
     private func row(_ item: SettingsSection) -> some View {
         // No switch in the list. It duplicated the one at the top of the
@@ -262,8 +275,28 @@ struct SidebarSettingsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(24)
+            .padding(EdgeInsets(top: 34, leading: 24, bottom: 24, trailing: 24))
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// Sets every font in the hierarchy monospaced, including the ones the views
+/// underneath choose for themselves.
+///
+/// A plain `.font()` would not do: it is only a default, and every `.caption`
+/// and `.headline` already stated inside the feature views overrides it. This
+/// changes the design of whatever font each of them picked and leaves the size
+/// and weight alone, which is the only way to reach controls this file does
+/// not own.
+struct MonospacedThroughout: ViewModifier {
+    let on: Bool
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if on, #available(macOS 14.0, *) {
+            content.fontDesign(.monospaced)
+        } else {
+            content
         }
     }
 }
