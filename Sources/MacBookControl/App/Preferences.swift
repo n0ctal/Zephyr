@@ -175,6 +175,19 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "menubar.memoryStyle") }
     }
 
+    static var networkStyle: MenuBarComposer.NetworkStyle {
+        get { MenuBarComposer.NetworkStyle(rawValue: d.string(forKey: "menubar.networkStyle") ?? "") ?? .both }
+        set { d.set(newValue.rawValue, forKey: "menubar.networkStyle") }
+    }
+
+    /// How the settings window arranges itself. Kept apart from `appearance`:
+    /// one is light or dark, the other is where the sections live, and a
+    /// person who wants a sidebar in the dark is asking for both.
+    static var windowLayout: WindowLayout {
+        get { WindowLayout(rawValue: d.string(forKey: "window.layout") ?? "") ?? .classic }
+        set { d.set(newValue.rawValue, forKey: "window.layout") }
+    }
+
     /// Which appearance the window takes. "System" is the neutral option and
     /// the default: an app that ignores the system setting is the one that
     /// looks out of place.
@@ -184,6 +197,14 @@ enum Preferences {
     }
 
     // MARK: Cooling
+
+    /// Which sensor the fan curve follows. Empty means whatever looks like the
+    /// CPU, which is the right default on a machine whose sensor names nobody
+    /// has memorised.
+    static var curveSensorKey: String {
+        get { d.string(forKey: "cooling.curveSensor") ?? "" }
+        set { d.set(newValue, forKey: "cooling.curveSensor") }
+    }
 
     /// Manual RPM per fan index, or nil for the curve. Stored as a dictionary
     /// so a machine with a different fan count doesn't lose the other's value.

@@ -188,7 +188,7 @@ final class AppController: NSObject, NSMenuDelegate {
         // app. It needs no rendering anyway: "classic" is the window that is
         // already installed, and looking at it directly is more truthful than
         // any copy of it.
-        let sections: [PreviewSection] = [.thermals, .input, .settings]
+        let sections: [SettingsSection] = [.thermals, .input, .settings]
         let base = URL(fileURLWithPath: path).deletingPathExtension().path
         for style in PreviewStyle.all {
             let sheetWidth: CGFloat = 900
@@ -219,6 +219,68 @@ final class AppController: NSObject, NSMenuDelegate {
                 .replacingOccurrences(of: " ", with: "-")
                 .replacingOccurrences(of: "—", with: "")
             let file = "\(base)-\(slug).png"
+            try? png.write(to: URL(fileURLWithPath: file))
+            FileHandle.standardError.write(Data("wrote \(file)\n".utf8))
+        }
+    }
+
+    /// Renders the shipping window in each layout, offscreen.
+    ///
+    /// The alternative is opening it and taking a picture of the screen, which
+    /// means guessing where the window landed, cropping by hand, and catching
+    /// whatever else happened to be open. This involves nobody's desktop.
+    func dumpWindowLayouts(to path: String, dark: Bool) {
+        let deadline = Date().addingTimeInterval(8)
+        while telemetry.load == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        let base = URL(fileURLWithPath: path).deletingPathExtension().path
+        let remembered = Preferences.windowLayout
+        defer { Preferences.windowLayout = remembered }
+        // The whole application's appearance, not just the host view's. A
+        // TabView is an AppKit control underneath and resolves its colours
+        // against NSApp — setting it on the host alone left the classic sheet
+        // white on white while the two hand-coloured layouts came out fine.
+        let rememberedAppearance = NSApp.appearance
+        NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        defer { NSApp.appearance = rememberedAppearance }
+
+        for layout in WindowLayout.allCases {
+            Preferences.windowLayout = layout
+            // Two panes per layout: a section that is all hardware controls,
+            // and the one that is about the app. A frame that holds one and
+            // breaks the other is the usual way a layout goes wrong.
+            let panes: [String] = layout.usesSidebar
+                ? [SettingsSection.thermals.rawValue, SettingsSection.settings.rawValue]
+                : ["cooling", "appsettings"]
+            let width: CGFloat = 940
+            let paneHeight: CGFloat = 620
+            let sheet = NSImage(size: NSSize(width: width, height: paneHeight * CGFloat(panes.count)))
+            sheet.lockFocus()
+            for (index, pane) in panes.enumerated() {
+                SettingsWindowController.initialTab = pane
+                let view = SettingsRootView(registry: registry, telemetry: telemetry,
+                                            helperState: helperState)
+                let hosting = NSHostingView(rootView: view)
+                // An offscreen host carries no appearance of its own, and
+                // SwiftUI resolves every system colour against one — without
+                // this the whole sheet comes out white on white.
+                hosting.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                hosting.frame = NSRect(x: 0, y: 0, width: width, height: paneHeight)
+                hosting.layoutSubtreeIfNeeded()
+                if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                    hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                    rep.draw(in: NSRect(x: 0,
+                                        y: sheet.size.height - CGFloat(index + 1) * paneHeight,
+                                        width: width, height: paneHeight))
+                }
+            }
+            sheet.unlockFocus()
+            SettingsWindowController.initialTab = nil
+            guard let tiff = sheet.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { continue }
+            let file = "\(base)-\(layout.rawValue)-\(dark ? "dark" : "light").png"
             try? png.write(to: URL(fileURLWithPath: file))
             FileHandle.standardError.write(Data("wrote \(file)\n".utf8))
         }

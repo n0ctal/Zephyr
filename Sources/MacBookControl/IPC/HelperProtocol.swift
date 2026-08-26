@@ -23,8 +23,15 @@ protocol HelperProtocol {
     func setFanManual(fan: Int, rpm: Int, reply: @escaping (Bool) -> Void)
 
     /// Put a fan under a temperature curve (linear ramp from min RPM at
-    /// `minTemp` °C to max RPM at `maxTemp` °C, driven by CPU temperature).
-    func setFanCurve(fan: Int, minTemp: Int, maxTemp: Int, reply: @escaping (Bool) -> Void)
+    /// `minTemp` °C to max RPM at `maxTemp` °C).
+    ///
+    /// `sensor` is the SMC key the curve follows: empty means whatever looks
+    /// like the CPU, `FanCurve.hottestSensorKey` means the hottest sensor of
+    /// the moment. The daemon reads it itself rather than being fed a
+    /// temperature by the app — a control loop that stops when the app stops
+    /// answering is one that leaves the fans pinned.
+    func setFanCurve(fan: Int, minTemp: Int, maxTemp: Int, sensor: String,
+                     reply: @escaping (Bool) -> Void)
 
     /// Return a single fan to firmware (automatic) control.
     func setFanAuto(fan: Int, reply: @escaping (Bool) -> Void)

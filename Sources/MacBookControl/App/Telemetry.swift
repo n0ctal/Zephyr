@@ -19,6 +19,9 @@ final class Telemetry: ObservableObject {
     /// Nil until two samples exist: load is a rate, and the first reading has
     /// nothing to subtract from.
     @Published private(set) var load: SystemLoad.Snapshot?
+    /// Also nil until two samples exist, and for the same reason: a network
+    /// speed is a difference between two totals.
+    @Published private(set) var network: NetworkThroughput.Snapshot?
 
     /// Accumulated across the session, so "is it throttling" can be answered
     /// for the time nobody was looking.
@@ -29,6 +32,7 @@ final class Telemetry: ObservableObject {
     private let thermalMonitor = ThermalMonitor()
     private let batteryReader = BatteryReader()
     private let systemLoad = SystemLoad()
+    private let throughput = NetworkThroughput()
     private var timer: Timer?
 
     /// Reading happens here, never on the main thread. The SMC answers one key
@@ -82,6 +86,7 @@ final class Telemetry: ObservableObject {
         fans = fanController?.readFans() ?? []
         battery = batteryReader.read()
         load = systemLoad.read()
+        network = throughput.read()
         let status = thermalMonitor.read()
         thermal = status
         stats.record(status, interval: Int(Self.interval))
@@ -98,12 +103,17 @@ final class Telemetry: ObservableObject {
             let fans = self.fanController?.readFans() ?? []
             let battery = self.batteryReader.read()
             let load = self.systemLoad.read()
+            let network = self.throughput.read()
             let status = self.thermalMonitor.read()
             DispatchQueue.main.async {
                 self.temperatures = temperatures
                 self.fans = fans
                 self.battery = battery
                 self.load = load
+                // Only when there is one: the reader declines to answer across
+                // a sleep, and replacing a real speed with nothing there would
+                // blank the field for one tick every time the lid opens.
+                if let network = network { self.network = network }
                 self.thermal = status
                 self.stats.record(status, interval: Int(Self.interval))
                 self.isReading = false

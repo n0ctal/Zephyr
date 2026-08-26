@@ -114,50 +114,17 @@ enum TerminalPalette {
     static let rule = PreviewStyle.terminal.rule
 }
 
-/// The seven sections, after merging the ten tabs by meaning.
-enum PreviewSection: String, CaseIterable, Identifiable {
-    case thermals, graphics, batterySleep, display, input, profiles, menuBar, settings
-
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .thermals: return "Thermals"
-        case .graphics: return "Graphics"
-        case .batterySleep: return "Battery & Sleep"
-        case .display: return "Display"
-        case .input: return "Input"
-        case .profiles: return "Profiles"
-        case .menuBar: return "Menu Bar"
-        // Last, and about the app rather than the machine — which is why it
-        // sits apart from the seven that touch hardware.
-        case .settings: return "Settings"
-        }
-    }
-
-    /// Which of the shipping features this section governs. The merge is only
-    /// a matter of presentation — the features underneath keep their own
-    /// switches, which is why a merged section shows more than one.
-    var featureIDs: [String] {
-        switch self {
-        case .thermals: return ["cooling", "power"]
-        case .graphics: return ["graphics"]
-        case .batterySleep: return ["battery", "awake"]
-        case .display: return ["display"]
-        case .input: return ["keyboard", "pointer"]
-        case .profiles: return ["profiles"]
-        case .menuBar, .settings: return []
-        }
-    }
-}
+// The section list itself now ships: see WindowLayout.swift. It was defined
+// here first, when a sidebar was only a picture of one.
 
 struct TerminalDesignView: View {
     @ObservedObject var registry: FeatureRegistry
     @ObservedObject var telemetry: Telemetry
     var style: PreviewStyle = .terminal
-    var section: PreviewSection = .thermals
-    @State private var selectionOverride: PreviewSection?
+    var section: SettingsSection = .thermals
+    @State private var selectionOverride: SettingsSection?
 
-    private var selection: PreviewSection { selectionOverride ?? section }
+    private var selection: SettingsSection { selectionOverride ?? section }
     private var mono: Font { style.font(12) }
 
     var body: some View {
@@ -185,7 +152,7 @@ struct TerminalDesignView: View {
     /// is the argument the sidebar makes for itself.
     private var topTabRow: some View {
         HStack(spacing: 2) {
-            ForEach(PreviewSection.allCases) { section in
+            ForEach(SettingsSection.allCases) { section in
                 Text(section.title)
                     .font(style.font(12))
                     .foregroundColor(selection == section ? .white : style.text)
@@ -215,7 +182,7 @@ struct TerminalDesignView: View {
                 .padding(.leading, 22)
                 .padding(.bottom, 14)
 
-            ForEach(PreviewSection.allCases) { section in
+            ForEach(SettingsSection.allCases) { section in
                 sidebarRow(section)
             }
             Spacer()
@@ -226,7 +193,7 @@ struct TerminalDesignView: View {
         .background(style.panel)
     }
 
-    private func sidebarRow(_ section: PreviewSection) -> some View {
+    private func sidebarRow(_ section: SettingsSection) -> some View {
         // No switch here on purpose. It duplicated the one at the top of the
         // section, and two controls for one thing means guessing which is
         // authoritative when they ever disagree.
@@ -278,62 +245,9 @@ struct TerminalDesignView: View {
         .padding(.bottom, 4)
     }
 
-    /// Composed as whole strings so the columns line up by character count,
-    /// which is what a monospaced face is for. Laying them out as separate
-    /// views would need widths guessed per column and would drift the moment
-    /// a value gained a digit.
-    private var statusLines: [String] {
-        func pad(_ text: String, _ width: Int) -> String {
-            text.count >= width ? text : text + String(repeating: " ", count: width - text.count)
-        }
-        func right(_ text: String, _ width: Int) -> String {
-            text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
-        }
-        func gb(_ bytes: UInt64) -> String {
-            String(format: "%.0f", Double(bytes) / 1_073_741_824)
-        }
-
-        var lines: [String] = []
-
-        // CPU: temperature, load, and the frequency the firmware is allowing.
-        // Not the live clock — macOS on Intel does not publish one — so this
-        // is the ceiling, and it is labelled that way in the section itself.
-        let cpuTemp = telemetry.cpuTemperature.map { String(format: "%.0f°C", $0.celsius) } ?? "—"
-        let cpuLoad = telemetry.load.map { "\(Int(($0.total * 100).rounded()))%" } ?? "—"
-        var cpuGHz = "—"
-        if let limit = telemetry.thermal?.speedLimitPercent, SystemLoad.nominalHz > 0 {
-            cpuGHz = String(format: "%.1f GHz", Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100)
-        }
-        lines.append(pad("CPU", 5) + right(cpuTemp, 6) + right(cpuLoad, 6) + right(cpuGHz, 9))
-
-        // GPU: temperature and load. There is no frequency — the accelerator
-        // does not publish one on this hardware, and a dash is more honest
-        // than a number that came from somewhere else.
-        let gpuTemp = telemetry.temperatures.first { $0.key == "TG0P" }
-            .map { String(format: "%.0f°C", $0.celsius) } ?? "—"
-        let gpuLoad = telemetry.load?.gpuFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
-        lines.append(pad("GPU", 5) + right(gpuTemp, 6) + right(gpuLoad, 6) + right("—", 9))
-
-        if let load = telemetry.load, load.memoryTotal > 0 {
-            let ram = "\(gb(load.memoryUsed))/\(gb(load.memoryTotal)) GB"
-            lines.append(pad("RAM", 5) + right(ram, 12) + right("\(Int((load.memoryFraction * 100).rounded()))%", 9))
-        }
-        // Read directly rather than out of the load snapshot: disk usage is a
-        // single reading and has no business waiting for the second poll that
-        // a *rate* like CPU load needs.
-        if let disk = SystemLoad.diskUsage() {
-            let rom = "\(gb(disk.usedBytes))/\(gb(disk.totalBytes)) GB"
-            lines.append(pad("ROM", 5) + right(rom, 12) + right("\(Int((disk.fraction * 100).rounded()))%", 9))
-        }
-        if let battery = telemetry.battery {
-            // Time is only shown while the system is willing to estimate it —
-            // on the charger there is nothing to count down to.
-            let remaining = battery.minutesRemaining.map { "\($0 / 60)h \($0 % 60)m" }
-                ?? (battery.isCharging ? "charging" : "—")
-            lines.append(pad("BAT", 5) + right("\(battery.percent)%", 6) + right(remaining, 15))
-        }
-        return lines
-    }
+    /// The shipping readout, so the prototype and the window it is a
+    /// prototype of cannot drift apart.
+    private var statusLines: [String] { StatusReadout.lines(telemetry: telemetry) }
 
     // MARK: Content
 
@@ -415,7 +329,7 @@ struct TerminalDesignView: View {
         case pair(String, String)
     }
 
-    private func rows(for section: PreviewSection) -> [Row] {
+    private func rows(for section: SettingsSection) -> [Row] {
         switch section {
         case .thermals:
             return []   // drawn live, with working controls

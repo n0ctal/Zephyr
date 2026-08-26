@@ -28,6 +28,11 @@ if arguments.contains("--test-fans") {
     exit(0)
 }
 
+if arguments.contains("--test-network") {
+    runNetworkTest()
+    exit(0)
+}
+
 if arguments.contains("--test-gpu") {
     runGPUTest()
     exit(0)
@@ -94,6 +99,14 @@ if let index = arguments.firstIndex(of: "--dump-preview"), index + 1 < arguments
     let path = arguments[index + 1]
     DispatchQueue.main.async {
         controller.dumpDesignPreview(to: path)
+        exit(0)
+    }
+}
+
+if let index = arguments.firstIndex(of: "--dump-window"), index + 1 < arguments.count {
+    let path = arguments[index + 1]
+    DispatchQueue.main.async {
+        controller.dumpWindowLayouts(to: path, dark: arguments.contains("--dark"))
         exit(0)
     }
 }
@@ -249,6 +262,24 @@ func runHelperTest() {
 }
 
 // MARK: - GPU test
+
+/// Proves the throughput reader against the machine's real interfaces.
+///
+/// A rate cannot be checked by a unit test — the arithmetic can, and is, but
+/// whether the counters are the right ones and move at all is a question only
+/// the hardware answers.
+func runNetworkTest() {
+    let reader = NetworkThroughput()
+    print("first read (nothing to subtract from): \(reader.read() == nil ? "nil, as it should be" : "a number, which is wrong")")
+    for _ in 0..<4 {
+        Thread.sleep(forTimeInterval: 2)
+        guard let now = reader.read() else { print("  no reading"); continue }
+        print(String(format: "  ↓ %-10s ↑ %-10s  (%.0f / %.0f bytes per second)",
+                     (NetworkThroughput.format(now.downloadBytes) as NSString).utf8String!,
+                     (NetworkThroughput.format(now.uploadBytes) as NSString).utf8String!,
+                     now.downloadBytes, now.uploadBytes))
+    }
+}
 
 func runGPUTest() {
     let gpu = GPUController()

@@ -12,6 +12,14 @@ final class DisplayFeature: Feature {
     /// SwiftUI Picker asks its data source on every render, so computing it in
     /// the body made simply opening the tab expensive.
     @Published private(set) var modeCache: [CGDirectDisplayID: [DisplayControl.Mode]] = [:]
+    /// Which display the controls below are about. Nil means the first one,
+    /// which is the built-in panel on every Mac that has one.
+    ///
+    /// Unlike the keyboard and the pointer there is no "all of them" here, and
+    /// that is not an omission: brightness and resolution are facts about one
+    /// piece of glass. A single slider driving every panel would be a control
+    /// that means something different on each screen it reaches.
+    @Published var scope: CGDirectDisplayID?
 
     private var refreshTimer: Timer?
 
@@ -54,9 +62,19 @@ final class DisplayFeature: Feature {
         dimming.removeAll()
     }
 
+    /// The display the tab is currently about.
+    var scopedScreen: DisplayControl.Screen? {
+        screens.first { $0.id == scope } ?? screens.first
+    }
+
     func refresh() {
         let screens = control.screens()
         self.screens = screens
+        // A display that was unplugged cannot stay selected, or the tab shows
+        // controls for a screen that is no longer in the room.
+        if let scope = scope, !screens.contains(where: { $0.id == scope }) {
+            self.scope = nil
+        }
         for screen in screens where modeCache[screen.id] == nil {
             modeCache[screen.id] = control.modes(for: screen.id)
         }
@@ -112,10 +130,27 @@ private struct DisplayView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ForEach(feature.screens) { screen in
-                ScreenControls(feature: feature, screen: screen)
-                Divider()
+            // One display at a time, chosen here — the same shape as Keyboard
+            // and Pointer. Stacking every screen's controls down the tab made
+            // it read as though the sliders applied to all of them.
+            Picker("These apply to", selection: Binding(
+                get: { feature.scopedScreen?.id ?? 0 },
+                set: { feature.scope = $0 }
+            )) {
+                ForEach(feature.screens) { screen in
+                    Text(screen.name + (screen.isBuiltIn ? " · built in" : "")).tag(screen.id)
+                }
             }
+            .disabled(feature.screens.count < 2)
+
+            Divider()
+            if let screen = feature.scopedScreen {
+                ScreenControls(feature: feature, screen: screen)
+            } else {
+                Text("No displays are answering.")
+                    .font(.subheadline).foregroundColor(.secondary)
+            }
+            Divider()
             Text("External monitors that ignore this control need DDC/CI over the video cable — a separate path, and one that cannot be written honestly without a monitor to test it against.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

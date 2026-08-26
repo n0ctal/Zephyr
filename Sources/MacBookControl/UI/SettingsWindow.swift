@@ -7,6 +7,13 @@ import SwiftUI
 /// four items, so anything that needs a control needs a tab here.
 final class SettingsWindowController {
     private var window: NSWindow?
+    private var hosting: NSHostingController<AnyView>?
+    private var context: (registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState)?
+
+    /// Called by the layout picker, which sits inside the window it is about
+    /// to replace. A rebuild rather than a state change because the two
+    /// layouts are different view hierarchies, not two states of one.
+    static var layoutDidChange: () -> Void = {}
 
     /// Which tab to open on. Only set by the `--open-settings=<id>` dev flag;
     /// normal launches open on whatever the window remembers.
@@ -18,15 +25,20 @@ final class SettingsWindowController {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let root = SettingsRootView(registry: registry, telemetry: telemetry, helperState: helperState)
-        let hosting = NSHostingController(rootView: root)
+        context = (registry, telemetry, helperState)
+        let hosting = NSHostingController(rootView: makeRoot())
+        self.hosting = hosting
+        SettingsWindowController.layoutDidChange = { [weak self] in self?.rebuild() }
         let window = NSWindow(contentViewController: hosting)
         window.title = "Zephyr"
         // Resizable because the tabs differ a lot in height: pinning one size
         // either crops the tall ones or leaves the short ones half empty.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 840, height: 700))
+        // Wide enough for the eleven tab labels the classic layout carries.
+        // Below this the strip truncates them, and "Grap…" beside "Batt…" is
+        // worse than a window that takes more of the screen.
+        window.setContentSize(NSSize(width: 900, height: 700))
         window.center()
         // Remembers whatever size it is dragged to, so a preference about the
         // window is stated once rather than every launch.
@@ -37,6 +49,17 @@ final class SettingsWindowController {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+    }
+
+    private func makeRoot() -> AnyView {
+        guard let context = context else { return AnyView(EmptyView()) }
+        return AnyView(SettingsRootView(registry: context.registry,
+                                        telemetry: context.telemetry,
+                                        helperState: context.helperState))
+    }
+
+    private func rebuild() {
+        hosting?.rootView = makeRoot()
     }
 }
 
@@ -50,14 +73,27 @@ struct SettingsRootView: View {
         self.registry = registry
         self.telemetry = telemetry
         self.helperState = helperState
-        _selection = State(initialValue: SettingsWindowController.initialTab
-                           ?? registry.features.first?.id ?? "menubar")
+        // The two layouts name their destinations differently — one per
+        // feature, one per merged section — so a remembered tab from the other
+        // one is not a valid answer here.
+        let fallback = Preferences.windowLayout.usesSidebar
+            ? SettingsSection.thermals.rawValue
+            : (registry.features.first?.id ?? "menubar")
+        _selection = State(initialValue: SettingsWindowController.initialTab ?? fallback)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             if !helperState.isWorking { helperBanner }
-            tabs
+            if Preferences.windowLayout.usesSidebar {
+                SidebarSettingsView(registry: registry, telemetry: telemetry,
+                                    helperState: helperState,
+                                    layout: Preferences.windowLayout,
+                                    selection: $selection)
+                    .frame(minWidth: 860, minHeight: 460, idealHeight: 560)
+            } else {
+                tabs
+            }
         }
     }
 
@@ -102,12 +138,21 @@ struct SettingsRootView: View {
             ScrollView { MenuBarTab(telemetry: telemetry) }
                 .tabItem { Text("Menu Bar") }
                 .tag("menubar")
+            // After Menu Bar, and last: it is the only tab that is about the
+            // app rather than about the machine.
+            ScrollView {
+                AppSettingsSection(helperState: helperState)
+                    .padding(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+                .tabItem { Text("Settings") }
+                .tag("appsettings")
         }
         .padding(12)
-        // Wide enough for ten tab labels without truncation. A macOS TabView
+        // Wide enough for eleven tab labels without truncation. A macOS TabView
         // clips its labels rather than scrolling them, and "Grap…" next to
         // "Batt…" is worse than a window that takes more of the screen.
-        .frame(minWidth: 820, minHeight: 420, idealHeight: 520)
+        .frame(minWidth: 880, minHeight: 420, idealHeight: 520)
     }
 }
 
@@ -154,7 +199,7 @@ private struct FeatureTab: View {
 
 /// What the status item spells out. Not a feature: it changes nothing about
 /// the machine, only what you can see without opening anything.
-private struct MenuBarTab: View {
+struct MenuBarTab: View {
     @ObservedObject var telemetry: Telemetry
     /// Bumped on every edit so the preview re-reads the preferences, which are
     /// plain statics rather than published state.
@@ -171,24 +216,13 @@ private struct MenuBarTab: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider()
-            Text("Window appearance").font(.headline)
-            Picker("", selection: Binding(
-                get: { Preferences.appearance },
-                set: { Preferences.appearance = $0; AppearanceControl.apply(); revision += 1 }
-            )) {
-                Text("Light").tag("light")
-                Text("System").tag("system")
-                Text("Dark").tag("dark")
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .labelsHidden()
-            Text("System follows whatever the Mac is set to. The menu-bar readout is not affected: it always follows the menu bar's own appearance, which is not always the window's.")
-                .font(.caption).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Divider()
             Text("Shown, in this order").font(.headline)
-            ForEach(Array(MenuBarComposer.Item.allCases.enumerated()), id: \.element.rawValue) { _, item in
+            // Listed in the order they appear in the menu bar, with whatever
+            // is switched off underneath. The list used to be in a fixed enum
+            // order, so moving a field to the end left its row sitting where
+            // it had always been — the number changed and nothing else did,
+            // which reads as the arrows not working.
+            ForEach(MenuBarComposer.Item.listOrder(shown: items), id: \.rawValue) { item in
                 itemRow(item)
             }
             Spacer(minLength: 8)
@@ -293,6 +327,14 @@ private struct MenuBarTab: View {
                 ForEach(MenuBarComposer.PowerStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
             }
             Text("Battery flow is signed: plus while it fills, minus while it carries the machine — and 0.0 W for a full battery on a charger, which is the true answer rather than nothing at all.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .network:
+            Picker("Shown as", selection: bind({ Preferences.networkStyle.rawValue },
+                                               { Preferences.networkStyle = .init(rawValue: $0) ?? .both })) {
+                ForEach(MenuBarComposer.NetworkStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+            }
+            Text("Everything that is up, added together, minus loopback and VPN tunnels — a tunnel carries the same bytes as the Wi-Fi underneath it, and counting both would double the reading the moment a VPN connects.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         case .throttle:

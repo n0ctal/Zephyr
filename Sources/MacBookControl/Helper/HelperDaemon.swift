@@ -27,6 +27,15 @@ final class HelperService: NSObject, HelperProtocol {
     private var forcedTargets: [Int: Int] = [:]
     /// Fans following a temperature curve; each tick recomputes their target.
     private var curveFans: [Int: FanCurve] = [:]
+    /// Which sensor the curves follow. One setting rather than one per fan:
+    /// two fans in the same machine cooling to two different opinions of "how
+    /// hot is it" is not a configuration anybody wants to reason about.
+    private var curveSensor = ""
+    /// The hottest-sensor reading, and when it was taken. Finding the hottest
+    /// means reading every key, which is a few dozen SMC round trips — worth
+    /// doing twice a second for a menu bar, not four times a second inside a
+    /// control loop that only needs to know roughly how hot the machine is.
+    private var cachedHottest: (celsius: Double, at: Date)?
     private var controlTimer: DispatchSourceTimer?
 
     override init() {
@@ -74,13 +83,18 @@ final class HelperService: NSObject, HelperProtocol {
         }
     }
 
-    func setFanCurve(fan: Int, minTemp: Int, maxTemp: Int, reply: @escaping (Bool) -> Void) {
+    func setFanCurve(fan: Int, minTemp: Int, maxTemp: Int, sensor: String,
+                     reply: @escaping (Bool) -> Void) {
         queue.async {
             self.forcedTargets.removeValue(forKey: fan)
             guard self.fans != nil else { reply(false); return }
             self.curveFans[fan] = FanCurve(minTemp: Double(minTemp), maxTemp: Double(maxTemp))
+            if sensor != self.curveSensor {
+                self.curveSensor = sensor
+                self.cachedHottest = nil   // the old cache is about another question
+            }
             self.startControlLoopIfNeeded()
-            self.applyCurve(fan: fan)   // apply immediately
+            self.applyCurve(fan: fan, celsius: self.curveTemperature())   // apply immediately
             reply(true)
         }
     }
@@ -198,25 +212,44 @@ final class HelperService: NSObject, HelperProtocol {
                 }
                 try? self.fans?.setManual(fan: fan, rpm: rpm)
             }
-            // Recompute and apply curve-driven targets.
-            for fan in self.curveFans.keys {
-                self.applyCurve(fan: fan)
+            // Recompute and apply curve-driven targets. The temperature is
+            // read once for all of them: it is one number about one machine,
+            // and reading it per fan doubled the SMC traffic to no end.
+            if !self.curveFans.isEmpty {
+                let celsius = self.curveTemperature()
+                for fan in self.curveFans.keys {
+                    self.applyCurve(fan: fan, celsius: celsius)
+                }
             }
         }
         timer.resume()
         controlTimer = timer
     }
 
-    /// Reads the CPU temperature and drives a curve fan to its computed target.
-    private func applyCurve(fan: Int) {
+    /// Whatever the curve has been told to follow.
+    private func curveTemperature() -> Double? {
+        guard let sensors = sensors else { return nil }
+        guard curveSensor == FanCurve.hottestSensorKey else {
+            return sensors.temperature(forKey: curveSensor)?.celsius
+        }
+        if let cached = cachedHottest, Date().timeIntervalSince(cached.at) < 2 {
+            return cached.celsius
+        }
+        guard let hottest = sensors.hottest() else { return nil }
+        cachedHottest = (hottest.celsius, Date())
+        return hottest.celsius
+    }
+
+    /// Drives one curve fan to the target that temperature calls for.
+    private func applyCurve(fan: Int, celsius: Double?) {
         guard let curve = curveFans[fan] else { return }
         // Losing the sensor used to latch the fan at its last target; hand it
         // back instead, since the firmware still knows the real temperature.
-        guard let cpu = sensors?.cpuTemperature(), let reading = fans?.readFan(fan) else {
+        guard let celsius = celsius, let reading = fans?.readFan(fan) else {
             try? fans?.setAuto(fan: fan)
             return
         }
-        let target = curve.targetRPM(cpuTemp: cpu.celsius,
+        let target = curve.targetRPM(cpuTemp: celsius,
                                      fanMin: reading.minRPM,
                                      fanMax: reading.maxRPM)
         try? fans?.setManual(fan: fan, rpm: target)

@@ -41,6 +41,11 @@ struct FanCurve: Equatable {
 
     static let `default` = FanCurve(minTemp: 55, maxTemp: 85)
 
+    /// Not an SMC key: the instruction "whichever sensor is hottest right
+    /// now". Marked with a character no real key contains so it cannot
+    /// collide with one.
+    static let hottestSensorKey = "*hottest"
+
     /// Target RPM for a given CPU temperature, scaled into the fan's own range.
     func targetRPM(cpuTemp: Double, fanMin: Int, fanMax: Int) -> Int {
         guard maxTemp > minTemp else { return fanMax }

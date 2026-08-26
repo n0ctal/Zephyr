@@ -44,6 +44,10 @@ enum SelfTest {
         helperStates()
         displaySafety()
         menuBarCaptions()
+        menuBarOrdering()
+        networkFormatting()
+        sectionCoverage()
+        statusAlignment()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -497,6 +501,75 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: Menu-bar ordering
+
+    private static func menuBarOrdering() {
+        let shown: [MenuBarComposer.Item] = [.memory, .temperature, .battery]
+        let listed = MenuBarComposer.Item.listOrder(shown: shown)
+        expectEqual(Array(listed.prefix(3)), shown,
+                    "the list leads with what is shown, in the order it is shown")
+        expectEqual(Set(listed).count, MenuBarComposer.Item.allCases.count,
+                    "and still lists every field exactly once")
+        expectEqual(listed.count, MenuBarComposer.Item.allCases.count,
+                    "with nothing repeated")
+        expect(!listed.dropFirst(3).contains(.battery),
+               "a field that was moved to the front is not also left behind")
+        expectEqual(MenuBarComposer.Item.listOrder(shown: []),
+                    MenuBarComposer.Item.allCases,
+                    "with nothing shown the list is the plain order")
+    }
+
+    // MARK: Network speed
+
+    private static func networkFormatting() {
+        expectEqual(NetworkThroughput.format(0), "0 KB/s", "silence reads as zero, not as nothing")
+        expectEqual(NetworkThroughput.format(200), "0 KB/s", "a trickle rounds to zero rather than to 0.2")
+        expectEqual(NetworkThroughput.format(64 * 1024), "64 KB/s", "kilobytes while it is kilobytes")
+        expectEqual(NetworkThroughput.format(5 * 1024 * 1024), "5.0 MB/s", "megabytes past a thousand kilobytes")
+        expectEqual(NetworkThroughput.format(2.5 * 1024 * 1024 * 1024), "2.5 GB/s", "and gigabytes past a thousand of those")
+        expect(NetworkThroughput.isPlausible(125 * 1024 * 1024), "a gigabit link is a real speed")
+        expect(!NetworkThroughput.isPlausible(4 * 1024 * 1024 * 1024),
+               "four gigabytes a second is an interface that went away, not traffic")
+        expect(NetworkThroughput.isTunnel("utun3"), "a VPN interface is a tunnel")
+        expect(NetworkThroughput.isTunnel("ipsec0"), "so is an IPsec one")
+        expect(!NetworkThroughput.isTunnel("en0"), "Wi-Fi is not")
+        // The bytes a tunnel carries also leave over the interface underneath
+        // it. Counting both doubles the reading the moment a VPN connects.
+        expect(!NetworkThroughput.isTunnel("utility"),
+               "and the check is a prefix on the interface name, not a substring anywhere")
+    }
+
+    // MARK: Sections
+
+    private static func sectionCoverage() {
+        let ids = SettingsSection.allCases.flatMap(\.featureIDs)
+        expectEqual(Set(ids).count, ids.count,
+                    "no feature is listed under two sections")
+        // Must match the registry in AppController.swift. A feature missing
+        // from here is unreachable in the sidebar layouts — the tab list is
+        // built from the registry, the sidebar from this.
+        expectEqual(Set(ids), ["cooling", "power", "graphics", "battery", "awake",
+                               "display", "keyboard", "pointer", "profiles"],
+                    "every feature the app builds has a section to live in")
+        expect(SettingsSection.allCases.last == .settings,
+               "Settings comes last, after Menu Bar")
+        expect(!WindowLayout.classic.usesSidebar, "the classic layout keeps its tabs")
+        expect(WindowLayout.quiet.usesSidebar && WindowLayout.terminal.usesSidebar,
+               "the other two are sidebars")
+    }
+
+    private static func statusAlignment() {
+        // The corner readout is composed as padded strings so its columns line
+        // up by character count. With nothing read yet every field is a dash,
+        // which is the case where a width mistake is easiest to miss.
+        let lines = StatusReadout.lines(telemetry: Telemetry())
+        expect(lines.count >= 2, "the readout always has a CPU and a GPU line")
+        if lines.count >= 2 {
+            expectEqual(lines[0].count, lines[1].count,
+                        "and they are the same width, or the columns do not line up")
+        }
     }
 
     // MARK: Fan curve

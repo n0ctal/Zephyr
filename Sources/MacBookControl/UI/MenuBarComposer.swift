@@ -90,10 +90,25 @@ enum MenuBarComposer {
         }
     }
 
+    /// Down, up, or both. Both is what a network field is usually for —
+    /// asking whether the upload finished is the other half of asking whether
+    /// the download did — but it costs twice the width.
+    enum NetworkStyle: String, CaseIterable {
+        case off, both, download, upload
+        var label: String {
+            switch self {
+            case .off: return "Off"
+            case .both: return "Down and up"
+            case .download: return "Download only"
+            case .upload: return "Upload only"
+            }
+        }
+    }
+
     /// One thing the status item can show. The order is the user's, so this is
     /// a list rather than a set of switches.
     enum Item: String, CaseIterable, Codable {
-        case temperature, fan, battery, power, cpuSpeed, cpuLoad, memory, throttle
+        case temperature, fan, battery, power, cpuSpeed, cpuLoad, memory, network, throttle
 
         var title: String {
             switch self {
@@ -104,6 +119,7 @@ enum MenuBarComposer {
             case .cpuSpeed: return "CPU speed"
             case .cpuLoad: return "CPU load"
             case .memory: return "Memory"
+            case .network: return "Network speed"
             case .throttle: return "Throttle mark"
             }
         }
@@ -125,8 +141,22 @@ enum MenuBarComposer {
             case .cpuSpeed: return "CPU"
             case .cpuLoad: return "LOAD"
             case .memory: return "RAM"
+            // No caption: the arrows already say which direction is which,
+            // and they say it in less width than the word would.
+            case .network: return ""
             case .throttle: return ""
             }
+        }
+
+        /// The settings list in menu-bar order: what is shown, in the order it
+        /// is shown, then everything that is not.
+        ///
+        /// Pure and separate so it can be checked. A list that disagrees with
+        /// the menu bar is not a crash — it is a row that quietly stays put
+        /// while its number changes, which nothing but a test or an eye
+        /// will catch.
+        static func listOrder(shown: [Item]) -> [Item] {
+            shown + allCases.filter { !shown.contains($0) }
         }
     }
 
@@ -254,6 +284,19 @@ enum MenuBarComposer {
             case .off: return []
             case .percent: return text("\(Int((load.memoryFraction * 100).rounded()))%")
             case .used: return text(String(format: "%.1f GB", Double(load.memoryUsed) / 1_073_741_824))
+            }
+
+        case .network:
+            guard let network = telemetry.network else { return [] }
+            switch Preferences.networkStyle {
+            case .off: return []
+            case .both:
+                return text("↓" + NetworkThroughput.format(network.downloadBytes)
+                            + " ↑" + NetworkThroughput.format(network.uploadBytes))
+            case .download:
+                return text("↓" + NetworkThroughput.format(network.downloadBytes))
+            case .upload:
+                return text("↑" + NetworkThroughput.format(network.uploadBytes))
             }
 
         case .throttle:

@@ -52,6 +52,23 @@ final class SensorReader {
         readTemperatures().max { $0.celsius < $1.celsius }
     }
 
+    /// One named sensor, for the fan curve to follow.
+    ///
+    /// Falls back rather than fails. A sensor can stop answering — they come
+    /// and go with what the machine has powered up — and the fans going back
+    /// to the firmware because a chosen key vanished would be a cooling policy
+    /// silently switching itself off.
+    func temperature(forKey key: String) -> TemperatureReading? {
+        if key == FanCurve.hottestSensorKey { return hottest() }
+        guard !key.isEmpty else { return cpuTemperature() }
+        if let value = try? smc.read(key),
+           let celsius = value.double,
+           plausibleRange.contains(celsius) {
+            return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
+        }
+        return cpuTemperature()
+    }
+
     /// The CPU temperature (reads just the one cached CPU key — cheap, for the
     /// menu-bar title). Falls back to the hottest sensor if no CPU key exists.
     func cpuTemperature() -> TemperatureReading? {

@@ -72,10 +72,11 @@ final class HelperClient {
         proxy { _ in }?.setFanManual(fan: fan, rpm: rpm) { _ in }
     }
 
-    func setFanCurve(fan: Int, curve: FanCurve = .default) {
+    func setFanCurve(fan: Int, curve: FanCurve = .default, sensor: String = "") {
         proxy { _ in }?.setFanCurve(fan: fan,
                                     minTemp: Int(curve.minTemp),
-                                    maxTemp: Int(curve.maxTemp)) { _ in }
+                                    maxTemp: Int(curve.maxTemp),
+                                    sensor: sensor) { _ in }
     }
 
     func setFanAuto(fan: Int) {
