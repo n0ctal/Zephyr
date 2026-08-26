@@ -168,6 +168,22 @@ private struct MenuBarTab: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider()
+            Text("Window appearance").font(.headline)
+            Picker("", selection: Binding(
+                get: { Preferences.appearance },
+                set: { Preferences.appearance = $0; AppearanceControl.apply(); revision += 1 }
+            )) {
+                Text("Light").tag("light")
+                Text("System").tag("system")
+                Text("Dark").tag("dark")
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .labelsHidden()
+            Text("System follows whatever the Mac is set to. The menu-bar readout is not affected: it always follows the menu bar's own appearance, which is not always the window's.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
             Text("Shown, in this order").font(.headline)
             ForEach(Array(MenuBarComposer.Item.allCases.enumerated()), id: \.element.rawValue) { _, item in
                 itemRow(item)
