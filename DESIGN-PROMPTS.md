@@ -342,3 +342,133 @@ leaves nothing to say "look here" with.
 Десять вкладок в верхнем ряду физически тесны — в самом узком варианте подписи
 уже нечитаемы. Это не придирка к отрисовке, а та же причина, по которой живое
 окно пришлось расширить до 820 точек. Ещё один довод за боковой список.
+
+---
+
+# Второй заход: только 間, тёмное стекло и терминал — и с боковым списком
+
+Первые два подхода боковой список проигнорировали: промт описывал вкладки как
+данность и лишь просил их убрать. Ниже раскладка задаётся первой же фразой и
+физически, а верхний ряд запрещён отдельной строкой. Содержимое настоящее.
+
+Общая часть для всех трёх — вставлять целиком:
+
+```
+LAYOUT — this is the most important instruction and overrides any default:
+There is NO row of tabs across the top of the window. None. The window is split
+vertically into two columns. The left column is a 240px sidebar listing seven
+sections, one under another, as a vertical list. The right column is the content
+of whichever section is selected. If you are about to draw horizontal tabs under
+the title bar, you have misread this.
+
+Sidebar sections, in this order: Thermals, Graphics, Battery & Sleep, Display,
+Input, Profiles, Menu Bar. "Thermals" is selected.
+
+CONTENT — the Thermals section, and these are its real controls. Use these exact
+words; do not invent plausible alternatives:
+
+  A switch row: "Enable Thermals"
+  Grey line beneath it: "Drive the fans yourself instead of leaving them to the
+  firmware, and cap how hard the CPU is allowed to push."
+
+  Heading "Fans", then:
+    Segmented control "Fans follow": Firmware / Temperature curve / Fixed speed
+    "Start lifting the fans at"   55 °C
+    "Reach full speed at"         85 °C
+
+  Heading "Power", then:
+    A switch row: "Disable Turbo Boost"
+    "Sustained limit"   60 W
+    "Burst limit"       75 W
+
+  Heading "Throttling", then two lines of plain text:
+    "The CPU is running at full speed."
+    "Nothing has been capped since Zephyr started."
+
+Each value row: label on the left; on the right a slider, then an editable
+numeric field, then a grey unit. The field is editable because a slider cannot
+be aimed at 60.
+
+Sliders have NO tick marks and NO dashed or dotted tracks. A plain thin track.
+Ticks are unreadable past a few dozen steps and the fan range has thousands.
+
+Window 900×640, macOS traffic lights top left, standard title bar.
+```
+
+## 1-b. 間 — пустота как материал, с боковым списком
+
+```
+<общая часть выше>
+
+STYLE: Japanese graphic minimalism — Kenya Hara, MUJI, "ma" as material.
+
+Ground warm off-white (#FAF9F6) throughout. The sidebar has no fill and no
+separator line of its own; it is set apart by space alone. Sidebar rows are
+labels only — no icons, no switches — and the selected one is marked by a single
+small indigo dot to the left of its text.
+
+The content column has no cards, no group boxes, no borders. Headings ("Fans",
+"Power", "Throttling") are body size but heavier, separated from what came
+before by space rather than by a rule. Rows are separated by space alone.
+
+One sans-serif family, two weights. Numbers monospaced. Near-black text, one
+grey for secondary text, one muted indigo accent used only for the selected dot
+and for active controls. Nothing else carries colour. At least a third of the
+window is empty.
+
+Do NOT include: top tabs, cards, dividers, icons, shadows, gradients, a second
+accent colour, or any decorative element whatsoever.
+```
+
+## 4-b. Тёмное стекло, с боковым списком
+
+```
+<общая часть выше>
+
+STYLE: native macOS dark mode, content first.
+
+Ground near-black (#1C1C1E); the sidebar very slightly darker, separated by a
+hairline at 8% white. Sidebar rows carry a small monochrome glyph and a label;
+the selected row has the standard blue rounded selection fill.
+
+In the content column, settings are grouped in the macOS rounded-group style —
+a slightly lighter fill, rows inside separated by hairlines, groups separated by
+space. Headings sit above their group in small grey type.
+
+White text at three opacities: 100% for values, 70% for labels, 45% for
+explanations. System blue only for selection and active controls. No other
+colour anywhere.
+
+Do NOT include: top tabs, glassmorphism blur, glows, gradients, coloured icons,
+graphs, or badges.
+```
+
+## 5-b. Терминальная панель, с боковым списком — доведённая
+
+```
+<общая часть выше>
+
+STYLE: the restraint of a well-set terminal, not a costume of one.
+
+Everything is monospaced — labels, values, headings, sidebar. Ground is true
+black (#0B0B0B). Text is a soft off-white; the accent is a muted green (#7DD48F,
+not a bright phosphor green) used only for the selected sidebar row, for active
+controls, and for a value that is currently in force.
+
+The sidebar is a plain vertical list of monospaced labels. The selected row is
+marked by a green "›" to its left — no fill, no rounded highlight.
+
+Headings are set in the same monospaced face, in the accent colour, in capitals
+with wide letter spacing: FANS, POWER, THROTTLING. They are separated from the
+content above by a single hairline rule at 15% white, edge to edge.
+
+Values align on a common right edge, as a table would. Units in grey after the
+number.
+
+The terminal quality must come from the typography and the alignment alone.
+
+Do NOT include: top tabs, dashed or dotted slider tracks, ASCII art, box-drawing
+characters, a blinking cursor, scanlines, CRT curvature, a prompt symbol like $
+or >, glow or bloom on the text, or bright phosphor green. Any of these turn a
+restrained panel into a costume.
+```
