@@ -213,6 +213,7 @@ struct SidebarSettingsView: View {
         // Read by every control underneath, including the ones inside the
         // feature views this file knows nothing about.
         .environment(\.terminalStyling, layout.monospaced)
+        .environment(\.readoutInSidebar, true)
         .environment(\.terminalPalette, palette)
         .modifier(TerminalControlStyles(on: layout.monospaced, palette: palette))
         // Without this the window's safe area keeps the whole hierarchy below
@@ -235,9 +236,11 @@ struct SidebarSettingsView: View {
                 .padding(.leading, Self.trafficLightWidth)
                 // Centred on the window buttons, which the system centres in
                 // the titlebar — and the titlebar is this tall because of the
-                // unified toolbar the window carries.
+                // unified toolbar the window carries. No padding under it:
+                // the titlebar already leaves as much room below the buttons
+                // as it does above them, and adding more made the gap beneath
+                // them visibly larger than the one over them.
                 .frame(height: Self.titlebarHeight)
-                .padding(.bottom, 14)
 
             ForEach(SettingsSection.allCases) { section in
                 row(section)
@@ -253,7 +256,11 @@ struct SidebarSettingsView: View {
     /// guessed would be better, but they are drawn by the system into a
     /// titlebar view that does not exist to ask while the content is being
     /// laid out — and this number has not changed in a decade of macOS.
-    private static let trafficLightWidth: CGFloat = 78
+    ///
+    /// The three buttons start 20 points in and end 72 points in; the name
+    /// begins one full margin after that, so the space to their right matches
+    /// the space to their left.
+    private static let trafficLightWidth: CGFloat = 92
 
     /// The height of a unified titlebar. Not a guess about a drawing: it is
     /// the size AppKit gives that style, and the buttons are centred in it.
@@ -302,9 +309,16 @@ struct SidebarSettingsView: View {
                     Text(line)
                         .font(.system(size: 11, weight: .regular, design: .monospaced))
                         .foregroundColor(palette.text)
+                        // One line each, always. Twenty-nine characters at
+                        // this size is within a hair of the sidebar's width,
+                        // and a hair was enough to fold every other row onto
+                        // two lines.
+                        .lineLimit(1)
                 }
             }
-            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
         }
     }
 
@@ -325,7 +339,8 @@ struct SidebarSettingsView: View {
                 default:
                     ForEach(section.featureIDs, id: \.self) { id in
                         if let feature = registry.feature(id: id) {
-                            FeatureBlock(feature: feature, showsTitle: section.featureIDs.count > 1)
+                            FeatureBlock(feature: feature,
+                                         showsTitle: section.featureIDs.count > 1)
                         }
                     }
                 }
@@ -390,18 +405,30 @@ struct FeatureBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if feature.isSupported {
-                if showsTitle {
-                    Text(feature.title.uppercased())
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(terminal ? 2.2 : 1.4)
-                        .foregroundColor(terminal ? palette.accent : .secondary)
-                    if terminal {
-                        Rectangle().fill(palette.rule).frame(height: 1)
+                if terminal {
+                    // The block's name is the switch. Two rows saying the same
+                    // thing — a heading, then "Enable <that heading>" directly
+                    // under it — is one row too many when the heading is right
+                    // there to be switched.
+                    Toggle(isOn: Binding(get: { feature.isEnabled },
+                                         set: { feature.setEnabled($0) })) {
+                        Text(feature.title.uppercased())
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(2.2)
+                            .foregroundColor(palette.accent)
                     }
-                }
-                Toggle(isOn: Binding(get: { feature.isEnabled },
-                                     set: { feature.setEnabled($0) })) {
-                    Text("Enable \(feature.title)").font(.headline)
+                    Rectangle().fill(palette.rule).frame(height: 1)
+                } else {
+                    if showsTitle {
+                        Text(feature.title.uppercased())
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(1.4)
+                            .foregroundColor(.secondary)
+                    }
+                    Toggle(isOn: Binding(get: { feature.isEnabled },
+                                         set: { feature.setEnabled($0) })) {
+                        Text("Enable \(feature.title)").font(.headline)
+                    }
                 }
                 Text(feature.summary)
                     .font(.caption).foregroundColor(.secondary)
@@ -510,37 +537,63 @@ enum StatusReadout {
         if let limit = telemetry.thermal?.speedLimitPercent, SystemLoad.nominalHz > 0 {
             cpuGHz = String(format: "%.1f GHz", Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100)
         }
-        lines.append(pad("CPU", 5) + right(cpuTemp, 6) + right(cpuLoad, 6) + right(cpuGHz, 9))
+        // Every line is exactly `width` characters, so the block has the same
+        // margin on the right as on the left. Left to their natural lengths
+        // they stopped short of the edge by a different amount each.
+        lines.append(pad("CPU", 5) + right(cpuTemp, 7) + right(cpuLoad, 7) + right(cpuGHz, 10))
+        // Whether the firmware is holding the CPU back, as a line rather than
+        // a paragraph of its own. It belongs with the readings for the same
+        // reason they do: it is something the machine is doing, not something
+        // to set, and it is worth seeing from whichever section is open.
+        if let thermal = telemetry.thermal, let limit = thermal.speedLimitPercent {
+            let held = thermal.isThrottling
+            let detail = held ? "at \(limit) % now"
+                : (telemetry.stats.everThrottled
+                   ? "low \(telemetry.stats.lowestSpeedLimit) %" : "—")
+            lines.append(pad("THR", 5) + right(held ? "Yes" : "No", 7) + right(detail, 17))
+        } else {
+            lines.append(pad("THR", 5) + right("—", 7) + right("—", 17))
+        }
+
 
         // GPU has no frequency here: the accelerator does not publish one on
         // this hardware, and a dash is more honest than a number from elsewhere.
         let gpuTemp = telemetry.temperatures.first { $0.key == "TG0P" }
             .map { String(format: "%.0f°C", $0.celsius) } ?? "—"
         let gpuLoad = telemetry.load?.gpuFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
-        lines.append(pad("GPU", 5) + right(gpuTemp, 6) + right(gpuLoad, 6) + right("—", 9))
+        lines.append(pad("GPU", 5) + right(gpuTemp, 7) + right(gpuLoad, 7) + right("—", 10))
 
         if let load = telemetry.load, load.memoryTotal > 0 {
             let ram = "\(gb(load.memoryUsed))/\(gb(load.memoryTotal)) GB"
-            lines.append(pad("RAM", 5) + right(ram, 12) + right("\(Int((load.memoryFraction * 100).rounded()))%", 9))
+            lines.append(pad("RAM", 5) + right(ram, 13) + right("\(Int((load.memoryFraction * 100).rounded()))%", 11))
         }
         // Read directly rather than out of the load snapshot: disk usage is a
         // single reading and has no business waiting for the second poll that a
         // rate like CPU load needs.
         if let disk = SystemLoad.diskUsage() {
             let rom = "\(gb(disk.usedBytes))/\(gb(disk.totalBytes)) GB"
-            lines.append(pad("ROM", 5) + right(rom, 12) + right("\(Int((disk.fraction * 100).rounded()))%", 9))
+            lines.append(pad("ROM", 5) + right(rom, 13) + right("\(Int((disk.fraction * 100).rounded()))%", 11))
         }
         if let network = telemetry.network {
             lines.append(pad("NET", 5)
-                         + right("↓" + NetworkThroughput.format(network.downloadBytes), 11)
-                         + right("↑" + NetworkThroughput.format(network.uploadBytes), 11))
+                         + right("↓" + NetworkThroughput.format(network.downloadBytes), 12)
+                         + right("↑" + NetworkThroughput.format(network.uploadBytes), 12))
         }
+        // What the machine is drawing and what the charger is supplying, one
+        // line split down the middle. Two figures that only mean something
+        // next to each other: the difference between them is the battery.
+        if let draw = telemetry.battery?.power {
+            let system = draw.systemWatts.map { String(format: "%.1f W", $0) } ?? "—"
+            let adapter = draw.adapterWatts.map { String(format: "%.1f W", $0) } ?? "—"
+            lines.append(pad("PWR", 5) + right(system, 9) + pad("  ADP", 6) + right(adapter, 9))
+        }
+
         if let battery = telemetry.battery {
             // Time only while the system is willing to estimate it — on the
             // charger there is nothing to count down to.
             let remaining = battery.minutesRemaining.map { "\($0 / 60)h \($0 % 60)m" }
                 ?? (battery.isCharging ? "charging" : "—")
-            lines.append(pad("BAT", 5) + right("\(battery.percent)%", 6) + right(remaining, 15))
+            lines.append(pad("BAT", 5) + right("\(battery.percent)%", 7) + right(remaining, 17))
         }
         return lines
     }

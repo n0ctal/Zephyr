@@ -168,19 +168,15 @@ private struct KeyboardView: View {
     }
 
     private func keyPicker(index: Int, isSource: Bool) -> some View {
-        Picker("", selection: Binding(
-            get: { isSource ? feature.mappings[index].source : feature.mappings[index].destination },
-            set: { usage in
-                var mapping = feature.mappings[index]
-                if isSource { mapping.source = usage } else { mapping.destination = usage }
-                feature.mappings[index] = mapping
-            }
-        )) {
-            ForEach(KeyRemapper.catalogue) { key in
-                Text(key.name).tag(key.usage)
-            }
-        }
-        .labelsHidden()
-        .frame(width: 150)
+        MenuChoice(label: nil,
+                   selection: Binding(
+                       get: { isSource ? feature.mappings[index].source
+                                       : feature.mappings[index].destination },
+                       set: { usage in
+                           var mapping = feature.mappings[index]
+                           if isSource { mapping.source = usage } else { mapping.destination = usage }
+                           feature.mappings[index] = mapping
+                       }),
+                   options: KeyRemapper.catalogue.map { ($0.name, $0.usage) })
     }
 }

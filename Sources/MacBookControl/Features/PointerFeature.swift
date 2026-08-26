@@ -252,18 +252,19 @@ private struct PointerView: View {
                 HStack {
                     Text(PointerProfile.buttonName(button))
                         .font(.subheadline).frame(width: 130, alignment: .leading)
-                    Picker("", selection: Binding(
-                        get: { feature.profile.buttons[button] ?? .passThrough },
-                        set: { action in
-                            var profile = feature.profile
-                            if action == .passThrough { profile.buttons.removeValue(forKey: button) }
-                            else { profile.buttons[button] = action }
-                            feature.profile = profile
-                        }
-                    )) {
-                        ForEach(ButtonAction.selectable, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
+                    MenuChoice(label: nil,
+                               selection: Binding(
+                                   get: { feature.profile.buttons[button] ?? .passThrough },
+                                   set: { action in
+                                       var profile = feature.profile
+                                       if action == .passThrough {
+                                           profile.buttons.removeValue(forKey: button)
+                                       } else {
+                                           profile.buttons[button] = action
+                                       }
+                                       feature.profile = profile
+                                   }),
+                               options: ButtonAction.selectable.map { ($0.label, $0) })
                 }
             }
             Text("The primary and secondary click are deliberately not listed: rebinding those is how a mouse becomes unusable. A bound button is swallowed and its keystroke posted instead.")

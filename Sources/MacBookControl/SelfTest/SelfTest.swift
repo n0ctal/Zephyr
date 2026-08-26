@@ -568,10 +568,10 @@ enum SelfTest {
         // which is the case where a width mistake is easiest to miss.
         let lines = StatusReadout.lines(telemetry: Telemetry())
         expect(lines.count >= 2, "the readout always has a CPU and a GPU line")
-        if lines.count >= 2 {
-            expectEqual(lines[0].count, lines[1].count,
-                        "and they are the same width, or the columns do not line up")
-        }
+        // Every line the same width, not merely the same as its neighbour:
+        // that is what gives the block an equal margin on both sides.
+        expect(lines.allSatisfy { $0.count == 29 },
+               "every readout line is exactly 29 characters")
     }
 
     // MARK: Terminal slider

@@ -131,6 +131,7 @@ final class PowerFeature: Feature {
 }
 
 private struct PowerView: View {
+    @Environment(\.readoutInSidebar) private var readoutInSidebar
     @ObservedObject var feature: PowerFeature
     @ObservedObject var telemetry: Telemetry
 
@@ -146,6 +147,11 @@ private struct PowerView: View {
             Divider()
             PowerLimitControls(feature: feature)
 
+            // The two draws move to the readings beside the sections when
+            // there is a sidebar to put them in: they are numbers the machine
+            // reports, not settings, and they are worth seeing from any
+            // section rather than only from this one.
+            if !readoutInSidebar {
             Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Draw").font(.headline)
@@ -159,6 +165,7 @@ private struct PowerView: View {
                 } else {
                     Text("No power sensors answered.").font(.subheadline).foregroundColor(.secondary)
                 }
+            }
             }
         }
     }

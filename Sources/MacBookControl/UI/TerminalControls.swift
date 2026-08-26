@@ -27,14 +27,14 @@ enum TerminalMetrics {
     /// field instead of stranded a long way to the left of it. That is what a
     /// settings form has always done and it is the only arrangement where both
     /// the labels and the fields have an edge in common.
-    static let labelColumn: CGFloat = 200
-
-    /// The width every field is at least. Fields wider than this are lists
-    /// with something long in them, and those grow rather than truncate.
-    static let fieldWidth: CGFloat = 260
+    static let labelColumn: CGFloat = 215
 }
 
 private struct TerminalStylingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct ReadoutInSidebarKey: EnvironmentKey {
     static let defaultValue = false
 }
 
@@ -49,6 +49,12 @@ extension EnvironmentValues {
     var terminalStyling: Bool {
         get { self[TerminalStylingKey.self] }
         set { self[TerminalStylingKey.self] = newValue }
+    }
+    /// True when the window has a sidebar carrying the readings, so a section
+    /// need not repeat them.
+    var readoutInSidebar: Bool {
+        get { self[ReadoutInSidebarKey.self] }
+        set { self[ReadoutInSidebarKey.self] = newValue }
     }
     var terminalPalette: LayoutPalette {
         get { self[TerminalPaletteKey.self] }
@@ -274,30 +280,14 @@ struct MenuChoice<Value: Hashable>: View {
         options.first { $0.1 == selection }?.0 ?? ""
     }
 
-    /// Wide enough for this list's longest entry and no wider.
-    ///
-    /// A fixed width left half of every field empty and made a column of them
-    /// look ragged for no reason — the box has to fit the longest thing it can
-    /// ever hold, which is a measurement, not a guess.
-    private var boxWidth: CGFloat {
-        let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        let widest = options
-            .map { ($0.0 as NSString).size(withAttributes: [.font: font]).width }
-            .max() ?? 120
-        // The padding either side, plus the room the system's own menu
-        // indicator takes at the right — and never narrower than the common
-        // width, so a column of fields with one short list in it does not come
-        // out looking like a mistake.
-        return max(ceil(widest) + 16 + 26, TerminalMetrics.fieldWidth)
-    }
-
-
-
     var body: some View {
         if terminal {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 if let label = label, !label.isEmpty {
-                    Text(label)
+                    // The colon is what a written-out setting looks like:
+                    // "Follow: the hottest sensor". With no box around the
+                    // value there is nothing else joining the two.
+                    Text(label + ":")
                         .foregroundColor(palette.text)
                         .frame(width: TerminalMetrics.labelColumn, alignment: .trailing)
                 }
@@ -315,10 +305,10 @@ struct MenuChoice<Value: Hashable>: View {
     }
 
     private var menu: some View {
-        // The frame and the rule are outside the menu, not inside its label.
-        // Inside, both were dropped: a borderless menu button lays its label
-        // out itself and keeps only the text, so the box never appeared and
-        // the field looked like a caption someone had forgotten to style.
+        // No box. A ruled rectangle around every value was one frame too many
+        // in a window whose switches and choices are already written in
+        // brackets — the value reads as a value because of the colon in front
+        // of it and the marker after it.
         Menu {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 Button(option.0) { selection = option.1 }
@@ -326,14 +316,11 @@ struct MenuChoice<Value: Hashable>: View {
         } label: {
             Text(currentLabel)
                 .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(palette.text)
+                .foregroundColor(palette.accent)
                 .lineLimit(1)
         }
         .menuStyle(BorderlessButtonMenuStyle())
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .frame(width: boxWidth, alignment: .leading)
-        .overlay(Rectangle().stroke(palette.rule, lineWidth: 1))
+        .fixedSize()
     }
 }
 

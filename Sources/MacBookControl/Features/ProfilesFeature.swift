@@ -270,13 +270,10 @@ private struct ConditionRow: View {
         switch condition {
         case .onExternalPower(let on):
             Text("Power is").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { on }, set: { condition = .onExternalPower($0) }
-            )) {
-                Text("mains").tag(true)
-                Text("battery").tag(false)
-            }
-            .labelsHidden().frame(width: 110)
+            MenuChoice(label: nil,
+                       selection: Binding(get: { on },
+                                          set: { condition = .onExternalPower($0) }),
+                       options: [("mains", true), ("battery", false)])
 
         case .batteryBelow(let percent):
             Text("Battery below").font(.subheadline)
@@ -286,13 +283,10 @@ private struct ConditionRow: View {
 
         case .externalDisplayAttached(let attached):
             Text("External display").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { attached }, set: { condition = .externalDisplayAttached($0) }
-            )) {
-                Text("attached").tag(true)
-                Text("absent").tag(false)
-            }
-            .labelsHidden().frame(width: 110)
+            MenuChoice(label: nil,
+                       selection: Binding(get: { attached },
+                                          set: { condition = .externalDisplayAttached($0) }),
+                       options: [("attached", true), ("absent", false)])
 
         case .appRunning(let name):
             Text("App running").font(.subheadline)
@@ -342,14 +336,9 @@ private struct ActionRow: View {
         switch action {
         case .coolingMode(let mode):
             Text("Fans follow").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { mode }, set: { action = .coolingMode($0) }
-            )) {
-                Text("firmware").tag("auto")
-                Text("curve").tag("curve")
-                Text("fixed").tag("manual")
-            }
-            .labelsHidden().frame(width: 120)
+            MenuChoice(label: nil,
+                       selection: Binding(get: { mode }, set: { action = .coolingMode($0) }),
+                       options: [("firmware", "auto"), ("curve", "curve"), ("fixed", "manual")])
 
         case .fanCurve(let low, let high):
             Text("Curve").font(.subheadline)
@@ -363,24 +352,15 @@ private struct ActionRow: View {
 
         case .turboDisabled(let off):
             Text("Turbo Boost").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { off }, set: { action = .turboDisabled($0) }
-            )) {
-                Text("off").tag(true)
-                Text("on").tag(false)
-            }
-            .labelsHidden().frame(width: 90)
+            MenuChoice(label: nil,
+                       selection: Binding(get: { off }, set: { action = .turboDisabled($0) }),
+                       options: [("off", true), ("on", false)])
 
         case .gpuMode(let raw):
             Text("Graphics").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { raw }, set: { action = .gpuMode($0) }
-            )) {
-                ForEach(GPUMode.allCases, id: \.rawValue) { mode in
-                    Text(mode.label).tag(mode.rawValue)
-                }
-            }
-            .labelsHidden().frame(width: 150)
+            MenuChoice(label: nil,
+                       selection: Binding(get: { raw }, set: { action = .gpuMode($0) }),
+                       options: GPUMode.allCases.map { ($0.label, $0.rawValue) })
 
         case .chargeLimit(let percent):
             Text("Stop charging at").font(.subheadline)
@@ -390,13 +370,9 @@ private struct ActionRow: View {
 
         case .keepAwake(let on):
             Text("Sleep").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { on }, set: { action = .keepAwake($0) }
-            )) {
-                Text("prevented").tag(true)
-                Text("allowed").tag(false)
-            }
-            .labelsHidden().frame(width: 110)
+            MenuChoice(label: nil,
+                       selection: Binding(get: { on }, set: { action = .keepAwake($0) }),
+                       options: [("prevented", true), ("allowed", false)])
 
         case .pointerAcceleration(let value):
             Text("Pointer acceleration").font(.subheadline)

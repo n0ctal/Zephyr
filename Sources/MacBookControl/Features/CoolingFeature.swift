@@ -133,6 +133,7 @@ final class CoolingFeature: Feature {
 private struct CoolingView: View {
     @ObservedObject var feature: CoolingFeature
     @ObservedObject var telemetry: Telemetry
+    @Environment(\.readoutInSidebar) private var readoutInSidebar
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -166,20 +167,15 @@ private struct CoolingView: View {
 
             if feature.mode == "manual" {
                 allFans
-                Divider()
-                ForEach(telemetry.fans, id: \.index) { fan in
-                    IntField(title: "Fan \(fan.index + 1) — \(fan.actualRPM) rpm now",
-                             range: fan.minRPM...fan.maxRPM,
-                             suffix: "rpm",
-                             value: Binding(
-                                get: { feature.manualRPM[fan.index] ?? fan.actualRPM },
-                                set: { feature.setManual(fan: fan.index, rpm: $0) }
-                             ))
-                }
             }
 
-            Divider()
-            ThrottleReadout(telemetry: telemetry)
+            // Only where there is no sidebar to carry it. In the sidebar
+            // layouts the readings carry a THR line instead, which is where
+            // anything the machine is *doing* rather than being told belongs.
+            if !readoutInSidebar {
+                Divider()
+                ThrottleReadout(telemetry: telemetry)
+            }
         }
     }
 
