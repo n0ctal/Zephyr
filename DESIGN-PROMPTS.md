@@ -531,3 +531,115 @@ Do NOT draw: the whole window again, a light version, top tabs, icons, coloured
 status pills, ASCII art, box-drawing borders, a blinking cursor, or bright
 phosphor green.
 ```
+
+---
+
+# Четвёртый заход: всё приложение целиком, шесть языков
+
+Одна картинка — один язык дизайна, но все семь разделов сразу. Так видно то,
+чего не покажет один экран: держится ли ритм, когда содержимое разное.
+
+```
+Draw a design sheet for a macOS utility called Zephyr: ONE image showing the
+whole application in a single consistent visual language — the window repeated
+seven times, once per section, arranged in a grid (four across, three down, the
+last cell empty). Each repetition shows the same sidebar with a different
+section selected.
+
+Do this SIX times, as six separate sheets. Five of them are restrained,
+minimalist directions of your choosing — the reference point is the economy of
+means in small Mac utilities like AlDente: a light touch, few borders, nothing
+decorative. Take the restraint, not the branding: no copied logos, colours or
+wordmarks from any existing product. The sixth sheet is the terminal version
+described at the end.
+
+THE WINDOW. 900×640, a 236px sidebar on the left listing seven sections, each
+with a switch at its right edge except Menu Bar which has none. Sections in this
+order: Thermals, Graphics, Battery & Sleep, Display, Input, Profiles, Menu Bar.
+
+THE CONTENT of each section — use these exact words, do not invent
+plausible-sounding alternatives:
+
+  THERMALS
+    [x] Enable Cooling
+    Fans follow:  Firmware | Temperature curve | Fixed speed
+    Start lifting the fans at      55 °C
+    Reach full speed at            85 °C
+    [x] Disable Turbo Boost
+    Sustained limit                60 W
+    Burst limit                    75 W
+    Throttling — "The CPU is running at full speed."
+                 "Nothing has been capped since Zephyr started."
+
+  GRAPHICS
+    Use:  Integrated only | Discrete only | Automatic
+    Integrated: Intel UHD Graphics 630
+    Discrete: AMD Radeon Pro 5500M
+    Rendering now: Intel UHD Graphics 630
+    "Put back 2 times this session — something keeps asking for the other GPU."
+
+  BATTERY & SLEEP
+    Stop charging at               80 %
+    98 % · on charger
+    Health 82 % of design capacity, 393 cycles
+    Hold awake:  Until I turn it off
+    [x] Keep the display on too
+    [ ] Stay awake with the lid closed
+
+  DISPLAY
+    Built-in display — 1792 × 1120 on 3584 pixels across
+    Brightness                     75 %
+    No extra dimming
+    Resolution:  1792 × 1120 HiDPI · 59 Hz
+
+  INPUT
+    These apply to:  Every keyboard
+    Caps Lock  →  Escape
+    [x] Reverse scrolling on a mouse
+    [ ] Fixed distance per wheel notch
+    [x] Take the acceleration out of the pointer
+    Side button 1:  Previous desktop
+    Side button 2:  Next desktop
+
+  PROFILES
+    In force now: On battery
+    Profiles: On battery, Docked
+    Fires when all of these hold — Power is battery
+    Then set — Turbo Boost off; Graphics Integrated only; Stop charging at 80 %
+
+  MENU BAR
+    Now showing:  [battery pill] 50°  1834 rpm  2.3 GHz  57 %
+    [x] Label each number
+    Shown, in this order: Temperature, Fan speed, Battery, Power, CPU speed,
+    CPU load, Memory — each with up and down arrows
+
+RULES FOR ALL SIX SHEETS
+  - Values sit on the right edge of their row and align across rows.
+  - Numbers monospaced, so a changing value does not shift its neighbours.
+  - Sliders have no tick marks and no dashed tracks.
+  - One accent colour per sheet, and it is never red — red must stay free to
+    mean "this is wrong".
+  - Explanatory text is grey and one line, never a paragraph.
+  - Label the sheet with the name of its direction in a corner.
+
+THE SIXTH SHEET — terminal
+  True black (#0B0B0B), everything monospaced, one muted green (#7DD48F, not a
+  bright phosphor green). Sidebar switches written [x] and [ ]. The selected
+  section marked by a green "›" with no fill. Headings in green capitals with
+  wide letter spacing under a hairline rule: FANS, POWER, THROTTLING. Selection
+  in a segmented choice written with brackets: [ Temperature curve ]. Sliders a
+  thin rule with a small square handle. At the foot of the sidebar, a status
+  block of aligned columns:
+      CPU   52°C   14%   2.3 GHz
+      GPU   44°C    7%        —
+      RAM   9/16 GB       57%
+      ROM   184/372 GB    49%
+      BAT   99%           4h 20m
+
+  No ASCII art, no box-drawing borders, no blinking cursor, no glow, no
+  scanlines. The terminal quality comes from the typography and the alignment.
+
+DO NOT DRAW anywhere: top tab rows, coloured app icons, gauges, charts with
+axes, gradients behind content, drop shadows inside the pane, or invented
+labels.
+```
