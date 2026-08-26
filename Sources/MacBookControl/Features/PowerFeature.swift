@@ -152,9 +152,10 @@ private struct PowerLimitControls: View {
             Text("Power limit").font(.headline)
             if let reading = feature.limits {
                 if let tdp = reading.tdpWatts {
-                    Text(String(format: "Rated for %.0f W, hardware accepts %.0f–%.0f W",
-                                tdp, reading.minWatts ?? 0, reading.maxWatts ?? tdp))
+                    Text(String(format: "Rated for %.0f W. Currently allowed %.0f W sustained and %.0f W in bursts.",
+                                tdp, reading.pl1Watts, reading.pl2Watts))
                         .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if reading.isLocked {
                     Text("The firmware has locked this register — writes are ignored by the hardware until the next power cycle. Nothing in software can change that.")
@@ -163,11 +164,13 @@ private struct PowerLimitControls: View {
                     Text(String(format: "Currently PL1 %.0f W, PL2 %.0f W", reading.pl1Watts, reading.pl2Watts))
                         .font(.subheadline)
                 } else {
-                    ValueField(title: "Sustained (PL1)", range: 10...(reading.maxWatts ?? 90),
+                    ValueField(title: "Sustained (PL1)",
+                               range: reading.lowerBound...reading.upperBound,
                                step: 1, suffix: "W",
                                value: Binding(get: { feature.pl1 },
                                               set: { feature.pl1 = $0; feature.applyLimits() }))
-                    ValueField(title: "Burst (PL2)", range: 10...(reading.maxWatts ?? 120),
+                    ValueField(title: "Burst (PL2)",
+                               range: reading.lowerBound...reading.upperBound,
                                step: 1, suffix: "W",
                                value: Binding(get: { feature.pl2 },
                                               set: { feature.pl2 = $0; feature.applyLimits() }))

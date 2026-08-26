@@ -9,10 +9,24 @@ import SwiftUI
 /// focus, and the slider writes back into the field.
 struct ValueField: View {
     let title: String
-    let range: ClosedRange<Double>
     let step: Double
     let suffix: String
     @Binding var value: Double
+
+    /// Sanitised on the way in. An inverted range is a programming mistake,
+    /// but Swift turns it into a fatal error at the moment of construction —
+    /// so a bad bound anywhere kills the whole app rather than drawing one
+    /// slider wrongly. That trade is never worth it in a settings window.
+    let range: ClosedRange<Double>
+
+    init(title: String, range: ClosedRange<Double>, step: Double,
+         suffix: String, value: Binding<Double>) {
+        self.title = title
+        self.step = step
+        self.suffix = suffix
+        self._value = value
+        self.range = range
+    }
 
     @State private var text: String = ""
 

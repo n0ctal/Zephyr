@@ -31,6 +31,24 @@ enum PowerLimits {
         let minWatts: Double?
         let maxWatts: Double?
         let raw: UInt64
+
+        /// What a slider may offer.
+        ///
+        /// `MSR_PKG_POWER_INFO` reports the minimum and maximum as zero on
+        /// this i9 — the fields are optional and plenty of mobile parts leave
+        /// them empty. Trusting them produced the range 10...0, which is not a
+        /// range at all and killed the tab outright. The bounds are therefore
+        /// derived from what the hardware is actually doing.
+        var lowerBound: Double {
+            let reported = minWatts ?? 0
+            return reported > 0 ? reported : 5
+        }
+        var upperBound: Double {
+            let candidates: [Double] = [maxWatts ?? 0, pl2Watts, (tdpWatts ?? 0) * 2, 60]
+            // Never below the value already set, or the slider could not show
+            // where the machine is right now.
+            return max(candidates.max() ?? 60, lowerBound + 5)
+        }
     }
 
     /// Whether the kext that publishes these is loaded.

@@ -40,6 +40,7 @@ enum SelfTest {
         scrollRewriting()
         menuBarDrawing()
         batteryColours()
+        powerLimitBounds()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -353,6 +354,35 @@ enum SelfTest {
         expectEqual(role(80), .neutral, "an ordinary level takes the system colour")
         expect(Role.neutral.colour == nil, "the neutral role stays a template image")
         expect(Role.charging.colour != nil, "a coloured role carries its own paint")
+    }
+
+    // MARK: Slider bounds for the power limit
+
+    private static func powerLimitBounds() {
+        // The real register on this machine: PL1 100 W, PL2 125 W, TDP 45 W,
+        // and MSR_PKG_POWER_INFO reporting minimum and maximum as ZERO. Those
+        // fields are optional and this i9 leaves them empty; trusting them
+        // produced the range 10...0, which is not a range and killed the tab.
+        let reading = PowerLimits.Reading(
+            pl1Watts: 100, pl2Watts: 125, pl1Enabled: true, pl2Enabled: true,
+            isLocked: false, tdpWatts: 45, minWatts: 0, maxWatts: 0, raw: 0)
+        expect(reading.lowerBound < reading.upperBound, "the bounds make a usable range")
+        expect(reading.upperBound >= reading.pl2Watts,
+               "the slider can reach the value already set")
+        expect(reading.lowerBound > 0, "the lower bound is not zero watts")
+
+        // A part that does report its limits should be believed.
+        let reported = PowerLimits.Reading(
+            pl1Watts: 15, pl2Watts: 25, pl1Enabled: true, pl2Enabled: true,
+            isLocked: false, tdpWatts: 15, minWatts: 8, maxWatts: 44, raw: 0)
+        expectEqual(reported.lowerBound, 8, "a reported minimum is used")
+        expect(reported.upperBound >= 44, "a reported maximum is respected")
+
+        // Nothing reported at all still has to produce something usable.
+        let blank = PowerLimits.Reading(
+            pl1Watts: 0, pl2Watts: 0, pl1Enabled: false, pl2Enabled: false,
+            isLocked: false, tdpWatts: nil, minWatts: nil, maxWatts: nil, raw: 0)
+        expect(blank.lowerBound < blank.upperBound, "an empty reading still makes a range")
     }
 
     // MARK: Fan curve
