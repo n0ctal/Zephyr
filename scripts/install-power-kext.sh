@@ -44,19 +44,10 @@ rm -rf "${DST_DIR:?}/$NAME.kext"
 cp -R "$SRC" "$DST_DIR/$NAME.kext"
 chown -R root:wheel "$DST_DIR/$NAME.kext"
 
-echo "Loading ..."
-# Leave nothing behind if the load is refused: a bundle sitting in place that
-# never loads is the kind of half-installed state that makes the next failure
-# harder to diagnose.
-if ! kmutil load -p "$DST_DIR/$NAME.kext"; then
-    echo >&2
-    echo "The kernel refused it. Removing the copy so nothing is left half-installed." >&2
-    rm -rf "${DST_DIR:?}/$NAME.kext"
-    exit 1
-fi
-
-# Without this the sysctls disappear at the next reboot and the Power tab
-# quietly goes back to "not available" with no explanation.
+# The boot-time loader goes in BEFORE the first load attempt. macOS stages a
+# third-party extension and asks for a restart before it will run it, and after
+# that restart something has to load it — if this were installed only on a
+# successful load it would never be installed at all.
 echo "Installing the boot-time loader ..."
 cat > "$DAEMON" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -79,24 +70,52 @@ PLIST
 chown root:wheel "$DAEMON"
 chmod 644 "$DAEMON"
 
+echo "Loading ..."
+# Nothing is removed on failure. An earlier version deleted the copy whenever
+# kmutil returned non-zero, which included the perfectly normal "staged, needs
+# a restart" answer — so the restart it asked for had nothing left to load.
+LOAD_OUTPUT="$(kmutil load -p "$DST_DIR/$NAME.kext" 2>&1)" && LOAD_RC=0 || LOAD_RC=$?
+[ -n "$LOAD_OUTPUT" ] && echo "$LOAD_OUTPUT"
+
 echo
-echo "Checking the registers are readable ..."
 if sysctl -n kern.zephyr_power_limit >/dev/null 2>&1; then
     LIMIT=$(sysctl -n kern.zephyr_power_limit)
     LOCKED=$(( (LIMIT >> 63) & 1 ))
-    echo "  MSR 0x610 = $LIMIT"
+    echo "Loaded. MSR 0x610 = $LIMIT"
     if [ "$LOCKED" -eq 1 ]; then
-        echo "  The firmware has LOCKED this register. Zephyr can read the limits but"
-        echo "  not change them, and no software can — that is a hardware decision."
+        echo "  The firmware has LOCKED this register. Zephyr can read the limits"
+        echo "  but not change them, and no software can — that is a hardware"
+        echo "  decision, not a limitation of this app."
     else
         echo "  Not locked. The Power tab can set the limits."
     fi
     echo
     echo "The power limit is written by the privileged helper, which this release"
     echo "also updates. If the menu still shows an older helper, run:"
-    echo "  sudo \"$SCRIPT_DIR/install-helper.sh\"" 
-else
-    echo "  The sysctls did not appear. The kext may have been refused; check:" >&2
-    echo "    log show --last 2m --predicate 'sender == \"kernel\"' | grep -i zephyr" >&2
-    exit 1
+    echo "  sudo \"$SCRIPT_DIR/install-helper.sh\""
+    exit 0
 fi
+
+# Not loaded yet. Staging is the normal path for a third-party extension, and
+# it is not a failure — the difference matters, because one needs a restart and
+# the other needs a fix.
+if printf '%s' "$LOAD_OUTPUT" | grep -qi "restart\|staged\|reboot"; then
+    echo "Staged. macOS will not run a new system extension until the machine"
+    echo "restarts, which is what System Settings is asking for."
+    echo
+    echo "Everything is in place and will stay there: the extension is at"
+    echo "  $DST_DIR/$NAME.kext"
+    echo "and the boot-time loader at"
+    echo "  $DAEMON"
+    echo
+    echo "Restart, then open Zephyr — the Power tab will show the limits, or say"
+    echo "the firmware has locked the register. To check from Terminal instead:"
+    echo "  sysctl kern.zephyr_power_limit"
+    exit 0
+fi
+
+echo "The extension did not load and did not ask for a restart (kmutil exit $LOAD_RC)." >&2
+echo "Nothing has been removed, so this can be retried after fixing the cause." >&2
+echo "Look at what the kernel said with:" >&2
+echo "  log show --last 5m --predicate 'sender == \"kernel\"' | grep -i zephyr" >&2
+exit 1

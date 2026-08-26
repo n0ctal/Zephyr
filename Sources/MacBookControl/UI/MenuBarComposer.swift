@@ -35,6 +35,14 @@ enum MenuBarComposer {
         }
     }
 
+    /// Fans in revolutions or as a share of their own range. A percentage
+    /// means something without knowing that this machine idles at 1800 and
+    /// tops out at 5600, which almost nobody does.
+    enum FanStyle: String, CaseIterable {
+        case rpm, percent
+        var label: String { self == .rpm ? "Revolutions" : "Percentage" }
+    }
+
     enum SpeedStyle: String, CaseIterable {
         case off, percent, frequency
         var label: String {
@@ -68,98 +76,207 @@ enum MenuBarComposer {
         }
     }
 
+    /// One thing the status item can show. The order is the user's, so this is
+    /// a list rather than a set of switches.
+    enum Item: String, CaseIterable, Codable {
+        case temperature, fan, battery, power, cpuSpeed, cpuLoad, memory, throttle
+
+        var title: String {
+            switch self {
+            case .temperature: return "Temperature"
+            case .fan: return "Fan speed"
+            case .battery: return "Battery"
+            case .power: return "Power in watts"
+            case .cpuSpeed: return "CPU speed"
+            case .cpuLoad: return "CPU load"
+            case .memory: return "Memory"
+            case .throttle: return "Throttle mark"
+            }
+        }
+
+        /// Shown when captions are on. Short because the menu bar is not a
+        /// place for sentences — but "4 %" beside "57 %" is unreadable without
+        /// them, which is the whole reason they exist.
+        var caption: String {
+            switch self {
+            case .temperature: return "T"
+            case .fan: return "FAN"
+            case .battery: return "BAT"
+            case .power: return "W"
+            case .cpuSpeed: return "CPU"
+            case .cpuLoad: return "LOAD"
+            case .memory: return "RAM"
+            case .throttle: return ""
+            }
+        }
+    }
+
     struct Content {
         var image: NSImage?
         var title: String
     }
 
-    static func compose(telemetry: Telemetry) -> Content {
-        var parts: [String] = []
-        var image: NSImage?
-
-        if Preferences.showTemperatureInMenuBar, let reading = chosenSensor(telemetry) {
-            parts.append(String(format: "%.0f°", reading.celsius))
-        }
-
-        if Preferences.showFanInMenuBar, let fastest = telemetry.fans.map(\.actualRPM).max() {
-            parts.append("\(fastest) rpm")
-        }
-
-        let battery = telemetry.battery
-        switch Preferences.batteryStyle {
-        case .off: break
-        case .percent:
-            if let battery = battery { parts.append("\(battery.percent) %") }
-        case .icon:
-            image = batteryImage(battery)
-        case .iconAndPercent:
-            // The iPhone puts the number inside the battery; every other icon
-            // here needs it written beside. Printing it twice would be the
-            // obvious bug.
-            let inside = Preferences.batteryIcon == .iOS
-            image = batteryImage(battery, showingPercentage: inside)
-            if !inside, let battery = battery { parts.append("\(battery.percent) %") }
-        }
-
-        // Signed on purpose: the sign is the whole message. A plus means the
-        // battery is filling, a minus means it is carrying the machine, and
-        // the number alone cannot say which.
-        if Preferences.showPowerInMenuBar, let watts = battery?.power?.batteryWatts, abs(watts) >= 0.1 {
-            parts.append(String(format: "%+.1f W", watts))
-        }
-
-        switch Preferences.cpuSpeedStyle {
-        case .off: break
-        case .percent:
-            if let limit = telemetry.thermal?.speedLimitPercent { parts.append("\(limit) %") }
-        case .frequency:
-            if let limit = telemetry.thermal?.speedLimitPercent, SystemLoad.nominalHz > 0 {
-                let ghz = Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100
-                parts.append(String(format: "%.1f GHz", ghz))
-            }
-        }
-
-        switch Preferences.cpuLoadStyle {
-        case .off: break
-        case .total:
-            if let load = telemetry.load { parts.append("\(Int((load.total * 100).rounded())) %") }
-        case .perThread:
-            if let load = telemetry.load, let bars = threadBars(load.perCore) {
-                // A status item carries one image, so both drawings are joined
-                // into it. Dropping one because the other was there made a
-                // deliberate choice silently do nothing.
-                image = join(image, bars)
-            }
-        }
-
-        switch Preferences.memoryStyle {
-        case .off: break
-        case .percent:
-            if let load = telemetry.load {
-                parts.append("\(Int((load.memoryFraction * 100).rounded())) %")
-            }
-        case .used:
-            if let load = telemetry.load {
-                parts.append(String(format: "%.1f GB", Double(load.memoryUsed) / 1_073_741_824))
-            }
-        }
-
-        if Preferences.showThrottleInMenuBar,
-           let thermal = telemetry.thermal, thermal.isThrottling,
-           let limit = thermal.speedLimitPercent,
-           Preferences.cpuSpeedStyle == .off {
-            // Suppressed when the speed is already displayed: the same number
-            // twice reads as a bug.
-            parts.append("↓\(limit) %")
-        }
-
-        let title = parts.joined(separator: "  ")
-        return Content(image: image,
-                       title: title.isEmpty && image == nil ? "Zephyr" : title)
+    /// A piece of the line: either text or a drawing.
+    private enum Segment {
+        case text(String)
+        case drawing(NSImage)
     }
 
-    /// The sensor the user picked, falling back to whatever is hottest so the
-    /// display never silently empties when a chosen key disappears.
+    /// The whole status item is drawn as one image.
+    ///
+    /// The obvious way — a system image plus a title — cannot work here: the
+    /// image is always leftmost whatever order the fields are in, so the
+    /// battery icon jumped to the front while the battery percentage stayed
+    /// where it was put. Drawing everything means the order, the spacing and
+    /// the captions are all ours.
+    ///
+    /// The cost is that the image cannot be a template one, because a template
+    /// is repainted as a flat mask and the coloured battery would lose its
+    /// colour. So the text colour is chosen from the menu bar's own appearance
+    /// instead, passed in by the caller.
+    static func compose(telemetry: Telemetry, darkMenuBar: Bool) -> Content {
+        var segments: [Segment] = []
+        for item in Preferences.menuBarItems {
+            segments.append(contentsOf: render(item, telemetry: telemetry, darkMenuBar: darkMenuBar))
+        }
+        guard !segments.isEmpty else { return Content(image: nil, title: "Zephyr") }
+        return Content(image: layout(segments, darkMenuBar: darkMenuBar), title: "")
+    }
+
+    private static func render(_ item: Item, telemetry: Telemetry, darkMenuBar: Bool) -> [Segment] {
+        let caption = Preferences.showMenuBarCaptions && !item.caption.isEmpty
+            ? item.caption + " " : ""
+        func text(_ value: String) -> [Segment] { [.text(caption + value)] }
+
+        switch item {
+        case .temperature:
+            guard let reading = chosenSensor(telemetry) else { return [] }
+            return text(String(format: "%.0f°", reading.celsius))
+
+        case .fan:
+            guard let fan = telemetry.fans.max(by: { $0.actualRPM < $1.actualRPM }) else { return [] }
+            switch Preferences.fanStyle {
+            case .rpm:
+                return text("\(fan.actualRPM) rpm")
+            case .percent:
+                return text("\(Int((fan.loadFraction * 100).rounded())) %")
+            }
+
+        case .battery:
+            guard let battery = telemetry.battery else { return [] }
+            switch Preferences.batteryStyle {
+            case .off:
+                return []
+            case .percent:
+                return text("\(battery.percent) %")
+            case .icon:
+                guard let icon = batteryImage(battery, darkMenuBar: darkMenuBar) else { return [] }
+                return caption.isEmpty ? [.drawing(icon)] : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(icon)]
+            case .iconAndPercent:
+                // The iPhone puts the number inside the battery; every other
+                // icon needs it written beside. Printing both would be the
+                // obvious bug.
+                let inside = Preferences.batteryIcon == .iOS
+                guard let icon = batteryImage(battery, showingPercentage: inside,
+                                              darkMenuBar: darkMenuBar) else { return [] }
+                var pieces: [Segment] = []
+                if !caption.isEmpty { pieces.append(.text(caption.trimmingCharacters(in: .whitespaces))) }
+                pieces.append(.drawing(icon))
+                if !inside { pieces.append(.text("\(battery.percent) %")) }
+                return pieces
+            }
+
+        case .power:
+            // Signed on purpose: the sign is the whole message. A plus means
+            // the battery is filling, a minus means it is carrying the
+            // machine, and the number alone cannot say which.
+            guard let watts = telemetry.battery?.power?.batteryWatts, abs(watts) >= 0.1 else { return [] }
+            return text(String(format: "%+.1f W", watts))
+
+        case .cpuSpeed:
+            guard let limit = telemetry.thermal?.speedLimitPercent else { return [] }
+            switch Preferences.cpuSpeedStyle {
+            case .off: return []
+            case .percent: return text("\(limit) %")
+            case .frequency:
+                guard SystemLoad.nominalHz > 0 else { return [] }
+                let ghz = Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100
+                return text(String(format: "%.1f GHz", ghz))
+            }
+
+        case .cpuLoad:
+            guard let load = telemetry.load else { return [] }
+            switch Preferences.cpuLoadStyle {
+            case .off: return []
+            case .total: return text("\(Int((load.total * 100).rounded())) %")
+            case .perThread:
+                guard let bars = threadBars(load.perCore, darkMenuBar: darkMenuBar) else { return [] }
+                return caption.isEmpty ? [.drawing(bars)]
+                    : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(bars)]
+            }
+
+        case .memory:
+            guard let load = telemetry.load else { return [] }
+            switch Preferences.memoryStyle {
+            case .off: return []
+            case .percent: return text("\(Int((load.memoryFraction * 100).rounded())) %")
+            case .used: return text(String(format: "%.1f GB", Double(load.memoryUsed) / 1_073_741_824))
+            }
+
+        case .throttle:
+            guard let thermal = telemetry.thermal, thermal.isThrottling,
+                  let limit = thermal.speedLimitPercent else { return [] }
+            return [.text("↓\(limit) %")]
+        }
+    }
+
+    /// Lays the pieces out with one gap between them and no other spacing, so
+    /// the fields are evenly separated however many there are.
+    private static func layout(_ segments: [Segment], darkMenuBar: Bool) -> NSImage {
+        let height: CGFloat = 18
+        let gap: CGFloat = 7
+        // Monospaced digits so a changing number does not shove everything
+        // beside it left and right twice a second.
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        let colour: NSColor = darkMenuBar ? .white : .black
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colour]
+
+        var widths: [CGFloat] = []
+        for segment in segments {
+            switch segment {
+            case .text(let value):
+                widths.append((value as NSString).size(withAttributes: attributes).width)
+            case .drawing(let image):
+                widths.append(image.size.width)
+            }
+        }
+        let total = widths.reduce(0, +) + gap * CGFloat(max(0, segments.count - 1))
+
+        let canvas = NSImage(size: NSSize(width: max(1, total), height: height))
+        canvas.lockFocus()
+        var x: CGFloat = 0
+        for (index, segment) in segments.enumerated() {
+            switch segment {
+            case .text(let value):
+                let size = (value as NSString).size(withAttributes: attributes)
+                (value as NSString).draw(at: NSPoint(x: x, y: (height - size.height) / 2),
+                                         withAttributes: attributes)
+            case .drawing(let image):
+                image.draw(in: NSRect(x: x, y: (height - image.size.height) / 2,
+                                      width: image.size.width, height: image.size.height),
+                           from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            x += widths[index] + gap
+        }
+        canvas.unlockFocus()
+        // Never a template: a template is flattened to a mask and the coloured
+        // battery would come out the same shade as the text.
+        canvas.isTemplate = false
+        return canvas
+    }
+
+    /// The sensor the user picked, falling back to whatever looks like the CPU
+    /// so the display never silently empties when a chosen key disappears.
     static func chosenSensor(_ telemetry: Telemetry) -> TemperatureReading? {
         let key = Preferences.temperatureSensorKey
         if !key.isEmpty, let match = telemetry.temperatures.first(where: { $0.key == key }) {
@@ -170,10 +287,11 @@ enum MenuBarComposer {
 
     // MARK: Drawing
 
-    static func batteryImage(_ battery: BatteryStatus?, showingPercentage: Bool = false) -> NSImage? {
+    static func batteryImage(_ battery: BatteryStatus?, showingPercentage: Bool = false,
+                             darkMenuBar: Bool = true) -> NSImage? {
         guard let battery = battery else { return nil }
         switch Preferences.batteryIcon {
-        case .iOS: return iOSBattery(battery, showingPercentage: showingPercentage)
+        case .iOS: return iOSBattery(battery, showingPercentage: showingPercentage, darkMenuBar: darkMenuBar)
         case .system: return systemBatteryGlyph(battery)
         case .bar: return drawnBattery(battery, rounded: false)
         case .ring: return drawnRing(battery)
@@ -251,10 +369,13 @@ enum MenuBarComposer {
     /// can still be drawn and compared against a reference.
     static var forcedFillRole: FillRole?
 
-    private static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool) -> NSImage {
+    private static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool,
+                                   darkMenuBar: Bool) -> NSImage {
         let height: CGFloat = 13
-        // Wider when it has to hold a number, as on the phone.
-        let bodyWidth: CGFloat = showingPercentage ? 30 : 22
+        // The same width either way. The phone widens the pill for the number,
+        // but in a menu bar that makes the battery tower over everything
+        // beside it; the digits are shrunk to fit instead.
+        let bodyWidth: CGFloat = 22
         let capWidth: CGFloat = 2
         let capGap: CGFloat = 1.2
         let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
@@ -263,11 +384,11 @@ enum MenuBarComposer {
         let fill = (Self.forcedFillRole
             ?? fillRole(percent: battery.percent, isCharging: battery.isCharging,
                         isPluggedIn: battery.isPluggedIn, lowPower: isLowPowerMode)).colour
-        let paint = fill ?? NSColor.black
-        // The empty part. On a template image this has to be an alpha level
-        // rather than a grey, because the system repaints every opaque pixel.
-        let empty = fill == nil ? NSColor.black.withAlphaComponent(0.35)
-                                : NSColor.systemGray.withAlphaComponent(0.55)
+        // The neutral colour follows the menu bar, since this is no longer a
+        // template image that the system would repaint for us.
+        let neutral: NSColor = darkMenuBar ? .white : .black
+        let paint = fill ?? neutral
+        let empty = neutral.withAlphaComponent(0.35)
 
         let image = NSImage(size: size)
         image.lockFocus()
@@ -301,7 +422,7 @@ enum MenuBarComposer {
             // against both the filled part and the grey remainder, and against
             // a light or dark menu bar, without picking a colour for each case.
             let text = "\(battery.percent)" as NSString
-            let font = NSFont.systemFont(ofSize: 9, weight: .bold)
+            let font = NSFont.systemFont(ofSize: battery.percent >= 100 ? 7.5 : 9, weight: .bold)
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
             let measured = text.size(withAttributes: attributes)
             let origin = NSPoint(x: (bodyWidth - measured.width) / 2,
@@ -312,7 +433,6 @@ enum MenuBarComposer {
         }
 
         image.unlockFocus()
-        image.isTemplate = (fill == nil)
         return image
     }
 
@@ -415,7 +535,7 @@ enum MenuBarComposer {
     /// read as dirt on the screen rather than as a graph; hanging down, the
     /// row lines up with the text beside it and an idle machine is a thin even
     /// line instead of scattered dots.
-    static func threadBars(_ load: [Double]) -> NSImage? {
+    static func threadBars(_ load: [Double], darkMenuBar: Bool = true) -> NSImage? {
         guard !load.isEmpty else { return nil }
         let barWidth: CGFloat = 2
         let gap: CGFloat = 1
@@ -423,7 +543,9 @@ enum MenuBarComposer {
         let width = CGFloat(load.count) * (barWidth + gap)
         let image = NSImage(size: NSSize(width: width, height: height))
         image.lockFocus()
-        NSColor.black.setFill()
+        // Painted rather than left as a mask: the line is drawn into a
+        // non-template image now, so it has to carry its own colour.
+        (darkMenuBar ? NSColor.white : NSColor.black).setFill()
         for (index, value) in load.enumerated() {
             let clamped = max(0.06, min(1, value))   // a visible mark at idle
             let x = CGFloat(index) * (barWidth + gap)
@@ -431,8 +553,6 @@ enum MenuBarComposer {
             NSRect(x: x, y: height - barHeight, width: barWidth, height: barHeight).fill()
         }
         image.unlockFocus()
-        // Template so macOS inverts it for light and dark menu bars.
-        image.isTemplate = true
         return image
     }
 }

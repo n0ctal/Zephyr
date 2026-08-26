@@ -97,9 +97,14 @@ final class AppController: NSObject, NSMenuDelegate {
     // MARK: Status title
 
     private func updateStatusTitle() {
-        let content = MenuBarComposer.compose(telemetry: telemetry)
+        // The menu bar has its own appearance, which is not always the app's —
+        // and the whole line is drawn by us now, so its colour has to be
+        // chosen rather than left to the system.
+        let dark = statusItem.button.map {
+            $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        } ?? true
+        let content = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: dark)
         statusItem.button?.image = content.image
-        // An icon alone needs no gap; an icon with text does.
         statusItem.button?.imagePosition = content.image == nil ? .noImage
             : (content.title.isEmpty ? .imageOnly : .imageLeading)
         statusItem.button?.title = content.title

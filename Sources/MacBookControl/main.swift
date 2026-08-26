@@ -436,7 +436,8 @@ func runIconDump() {
         let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
                                    healthPercent: 82, cycleCount: 393, power: nil)
         for withNumber in [false, true] {
-            guard let image = MenuBarComposer.batteryImage(status, showingPercentage: withNumber),
+            guard let image = MenuBarComposer.batteryImage(status, showingPercentage: withNumber,
+                                                          darkMenuBar: false),
                   let tiff = image.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff),
                   let png = rep.representation(using: .png, properties: [:]) else { continue }
@@ -448,7 +449,7 @@ func runIconDump() {
     // visible at all: on their own they are an alpha mask and read as blank.
     let scale: CGFloat = 4
     let rowHeight: CGFloat = 26
-    let sheetSize = NSSize(width: 420, height: rowHeight * CGFloat(cases.count + 4) + 24)
+    let sheetSize = NSSize(width: 620, height: rowHeight * CGFloat(cases.count + 6) + 40)
     let sheet = NSImage(size: sheetSize)
     sheet.lockFocus()
     NSColor(calibratedWhite: 0.93, alpha: 1).setFill()
@@ -466,7 +467,8 @@ func runIconDump() {
         ])
         var x: CGFloat = 110
         for withNumber in [false, true] {
-            guard let icon = MenuBarComposer.batteryImage(status, showingPercentage: withNumber) else { continue }
+            guard let icon = MenuBarComposer.batteryImage(status, showingPercentage: withNumber,
+                                                          darkMenuBar: false) else { continue }
             // Template images are masks; paint them white as the menu bar would.
             // Drawn as-is. A template image renders as its black mask, which
             // is visible on a light ground — trying to repaint it here was
@@ -493,12 +495,49 @@ func runIconDump() {
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: NSColor.black,
         ])
-        if let bars = MenuBarComposer.threadBars(values) {
+        if let bars = MenuBarComposer.threadBars(values, darkMenuBar: false) {
             bars.draw(in: NSRect(x: 110, y: barY + 3,
                                  width: bars.size.width * 1.6, height: bars.size.height * 1.6),
                       from: .zero, operation: .sourceOver, fraction: 1)
         }
     }
+    // The whole composed line, drawn against a dark ground like the real menu
+    // bar, so spacing and order can be judged without photographing a screen.
+    let telemetry = Telemetry()
+    telemetry.start()
+    RunLoop.current.run(until: Date().addingTimeInterval(2.5))
+    let saved = Preferences.menuBarItems
+    let savedCaptions = Preferences.showMenuBarCaptions
+    let savedBattery = Preferences.batteryStyle
+    let savedSpeed = Preferences.cpuSpeedStyle
+    let savedLoad = Preferences.cpuLoadStyle
+    let savedMemory = Preferences.memoryStyle
+    Preferences.menuBarItems = [.battery, .temperature, .fan, .cpuSpeed, .cpuLoad, .memory]
+    Preferences.batteryStyle = .iconAndPercent
+    Preferences.cpuSpeedStyle = .frequency
+    Preferences.cpuLoadStyle = .perThread
+    Preferences.memoryStyle = .percent
+    for captions in [false, true] {
+        Preferences.showMenuBarCaptions = captions
+        let line = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: true)
+        barY -= rowHeight + 4
+        ((captions ? "with labels" : "plain") as NSString).draw(
+            at: NSPoint(x: 8, y: barY + 6),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.black])
+        if let image = line.image {
+            let target = NSRect(x: 110, y: barY, width: image.size.width, height: image.size.height)
+            NSColor.black.setFill()
+            target.insetBy(dx: -4, dy: 0).fill()
+            image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1)
+        }
+    }
+    Preferences.menuBarItems = saved
+    Preferences.showMenuBarCaptions = savedCaptions
+    Preferences.batteryStyle = savedBattery
+    Preferences.cpuSpeedStyle = savedSpeed
+    Preferences.cpuLoadStyle = savedLoad
+    Preferences.memoryStyle = savedMemory
+
     sheet.unlockFocus()
     if let tiff = sheet.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
        let png = rep.representation(using: .png, properties: [:]) {

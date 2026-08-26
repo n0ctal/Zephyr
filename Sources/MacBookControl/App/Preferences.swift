@@ -89,6 +89,45 @@ enum Preferences {
         get { MenuBarComposer.BatteryStyle(rawValue: d.string(forKey: "menubar.batteryStyle") ?? "") ?? .off }
         set { d.set(newValue.rawValue, forKey: "menubar.batteryStyle") }
     }
+    /// Which fields the status item shows, in the order they appear. A list
+    /// rather than a set of switches, because the order is the user's.
+    static var menuBarItems: [MenuBarComposer.Item] {
+        get {
+            if let data = d.data(forKey: "menubar.items"),
+               let decoded = try? JSONDecoder().decode([MenuBarComposer.Item].self, from: data) {
+                return decoded
+            }
+            // Carried forward from the era of individual switches, so an
+            // upgrade shows the same things in a sensible order.
+            var items: [MenuBarComposer.Item] = []
+            if d.object(forKey: "menubar.temperature") as? Bool ?? true { items.append(.temperature) }
+            if d.bool(forKey: "menubar.fan") { items.append(.fan) }
+            if (d.string(forKey: "menubar.batteryStyle") ?? "off") != "off" { items.append(.battery) }
+            if d.bool(forKey: "menubar.power") { items.append(.power) }
+            if (d.string(forKey: "menubar.speedStyle") ?? "off") != "off" { items.append(.cpuSpeed) }
+            if (d.string(forKey: "menubar.loadStyle") ?? "off") != "off" { items.append(.cpuLoad) }
+            if (d.string(forKey: "menubar.memoryStyle") ?? "off") != "off" { items.append(.memory) }
+            if d.object(forKey: "menubar.throttle") as? Bool ?? true { items.append(.throttle) }
+            return items.isEmpty ? [.temperature] : items
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "menubar.items")
+        }
+    }
+
+    /// Short captions before each number. Off by default — but four
+    /// percentages in a row are unreadable without them.
+    static var showMenuBarCaptions: Bool {
+        get { d.bool(forKey: "menubar.captions") }
+        set { d.set(newValue, forKey: "menubar.captions") }
+    }
+
+    static var fanStyle: MenuBarComposer.FanStyle {
+        get { MenuBarComposer.FanStyle(rawValue: d.string(forKey: "menubar.fanStyle") ?? "") ?? .rpm }
+        set { d.set(newValue.rawValue, forKey: "menubar.fanStyle") }
+    }
+
     static var batteryIcon: MenuBarComposer.BatteryIcon {
         get { MenuBarComposer.BatteryIcon(rawValue: d.string(forKey: "menubar.batteryIcon") ?? "") ?? .iOS }
         set { d.set(newValue.rawValue, forKey: "menubar.batteryIcon") }
