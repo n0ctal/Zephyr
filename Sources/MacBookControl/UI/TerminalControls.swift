@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Controls drawn the way a terminal draws them.
@@ -15,6 +16,24 @@ import SwiftUI
 /// works, because they are built from real controls where one exists — the
 /// number field is a real `TextField` with its own frame drawn around it.
 
+/// Sizes shared by the terminal controls, so a column in one view lines up
+/// with the same column in another.
+enum TerminalMetrics {
+    /// One column for every label — the drop-downs and the value rows both —
+    /// so everything in a section starts at the same place. Wide enough for
+    /// "Start lifting the fans at", which is the longest label in the app.
+    ///
+    /// Labels are set against its right edge, so a short one sits beside its
+    /// field instead of stranded a long way to the left of it. That is what a
+    /// settings form has always done and it is the only arrangement where both
+    /// the labels and the fields have an edge in common.
+    static let labelColumn: CGFloat = 240
+
+    /// The width every field is at least. Fields wider than this are lists
+    /// with something long in them, and those grow rather than truncate.
+    static let fieldWidth: CGFloat = 260
+}
+
 private struct TerminalStylingKey: EnvironmentKey {
     static let defaultValue = false
 }
@@ -22,6 +41,8 @@ private struct TerminalStylingKey: EnvironmentKey {
 private struct TerminalPaletteKey: EnvironmentKey {
     static let defaultValue = LayoutPalette.of(.terminal, dark: true)
 }
+
+
 
 extension EnvironmentValues {
     /// Set once, at the top of the window, and read by every control below it.
@@ -41,7 +62,11 @@ struct BracketToggleStyle: ToggleStyle {
     let palette: LayoutPalette
 
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 8) {
+        // On the label's baseline, not centred against its box. The labels
+        // here are not all the same size — "Enable Cooling" is a headline, the
+        // rows in the menu-bar list are body text — and centring put the
+        // bracket at a different height in each one.
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(configuration.isOn ? "[x]" : "[ ]")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundColor(configuration.isOn ? palette.accent : palette.dim)
@@ -87,29 +112,23 @@ struct SegmentedChoice<Value: Hashable>: View {
     }
 
     private var cells: some View {
-        HStack(spacing: 0) {
+        // No boxes. The brackets and the colour already say which one is
+        // chosen, and a frame around each choice on top of that is a third
+        // way of saying the same thing — which is what made the row look like
+        // a control borrowed from somewhere else.
+        HStack(spacing: 18) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 let active = option.1 == selection
-                Text(active ? "[ \(option.0) ]" : option.0)
+                Text(active ? "[ \(option.0) ]" : "  \(option.0)  ")
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundColor(active ? palette.accent : palette.text)
-                    // One line, always. Equal-width cells plus a long label
-                    // wrapped "Temperature curve" onto two lines and made one
-                    // cell taller than its neighbours.
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity)
-                    .overlay(Rectangle().stroke(active ? palette.accent : palette.rule,
-                                                lineWidth: 1))
                     .contentShape(Rectangle())
                     .onTapGesture { selection = option.1 }
-                    .zIndex(active ? 1 : 0)   // so its frame is not overdrawn
                     .id(index)
             }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: 620, alignment: .leading)
     }
 }
 
@@ -220,7 +239,6 @@ struct MenuChoice<Value: Hashable>: View {
     let label: String?
     @Binding var selection: Value
     let options: [(String, Value)]
-    var width: CGFloat = 420
     @Environment(\.terminalStyling) private var terminal
     @Environment(\.terminalPalette) private var palette
 
@@ -228,13 +246,35 @@ struct MenuChoice<Value: Hashable>: View {
         options.first { $0.1 == selection }?.0 ?? ""
     }
 
+    /// Wide enough for this list's longest entry and no wider.
+    ///
+    /// A fixed width left half of every field empty and made a column of them
+    /// look ragged for no reason — the box has to fit the longest thing it can
+    /// ever hold, which is a measurement, not a guess.
+    private var boxWidth: CGFloat {
+        let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let widest = options
+            .map { ($0.0 as NSString).size(withAttributes: [.font: font]).width }
+            .max() ?? 120
+        // The padding either side, plus the room the system's own menu
+        // indicator takes at the right — and never narrower than the common
+        // width, so a column of fields with one short list in it does not come
+        // out looking like a mistake.
+        return max(ceil(widest) + 16 + 26, TerminalMetrics.fieldWidth)
+    }
+
+
+
     var body: some View {
         if terminal {
             HStack(spacing: 10) {
                 if let label = label, !label.isEmpty {
-                    Text(label).foregroundColor(palette.text)
+                    Text(label)
+                        .foregroundColor(palette.text)
+                        .frame(width: TerminalMetrics.labelColumn, alignment: .trailing)
                 }
                 menu
+                Spacer(minLength: 0)
             }
         } else {
             Picker(label ?? "", selection: $selection) {
@@ -264,7 +304,7 @@ struct MenuChoice<Value: Hashable>: View {
         .menuStyle(BorderlessButtonMenuStyle())
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
-        .frame(width: width, alignment: .leading)
+        .frame(width: boxWidth, alignment: .leading)
         .overlay(Rectangle().stroke(palette.rule, lineWidth: 1))
     }
 }

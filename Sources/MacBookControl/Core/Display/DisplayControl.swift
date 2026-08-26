@@ -267,7 +267,33 @@ final class DisplayControl {
         if let pending = awaitingConfirmation, !activeDisplayIDs().contains(pending) {
             revert(pending)
         }
+        rescueIfHeadless()
         onConfigurationChange?()
+    }
+
+    /// Puts a screen back when the machine has none left.
+    ///
+    /// This is the failure people report of other display utilities: the
+    /// built-in panel is switched off while an external one is attached, the
+    /// external is then unplugged, and there is now nowhere to draw the window
+    /// that would switch the built-in back on. The usual way out is a restart.
+    ///
+    /// `CGRestorePermanentDisplayConfiguration` asks the window server for the
+    /// arrangement the system considers permanent, which on a laptop always
+    /// includes the built-in panel. It is a public call and does nothing at
+    /// all while any display is active, so the cost of being wrong here is
+    /// zero — which matters, because this cannot be proven without a second
+    /// monitor to unplug and there is none to test against.
+    ///
+    /// The delay is not politeness. Switching a mode passes through a moment
+    /// with no active display, and restoring in the middle of that would fight
+    /// the change that is already happening.
+    private func rescueIfHeadless() {
+        guard activeDisplayIDs().isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self = self, self.activeDisplayIDs().isEmpty else { return }
+            CGRestorePermanentDisplayConfiguration()
+        }
     }
 
     private func activeDisplayIDs() -> [CGDirectDisplayID] {

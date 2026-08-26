@@ -54,7 +54,12 @@ struct LayoutPalette {
     let accent: Color
     let rule: Color
 
-    static func of(_ layout: WindowLayout, dark: Bool) -> LayoutPalette {
+    /// `pitch` is the Darkness setting: the same dark palette taken all the
+    /// way to black. Kept as a flag on top of `dark` rather than a third
+    /// appearance, because to the system it *is* dark — only these colours
+    /// change.
+    static func of(_ layout: WindowLayout, dark: Bool, pitch: Bool = false) -> LayoutPalette {
+        if pitch, dark || layout == .terminal { return blackened(layout) }
         switch (layout, dark) {
         case (.classic, _):
             // Nothing of its own: the classic window is the system's, and
@@ -96,6 +101,24 @@ struct LayoutPalette {
                                  accent: Color(red: 0.49, green: 0.83, blue: 0.56),
                                  rule: Color(white: 1).opacity(0.12))
         }
+    }
+}
+
+extension LayoutPalette {
+    /// Black, with the panel lifted by the smallest amount that still reads as
+    /// a separate surface. Flat black on flat black would lose the sidebar
+    /// entirely, so the rule does the separating instead of the fill.
+    static func blackened(_ layout: WindowLayout) -> LayoutPalette {
+        let accent: Color = layout == .terminal
+            ? Color(red: 0.49, green: 0.83, blue: 0.56)
+            : (layout == .quiet ? Color(red: 0.65, green: 0.68, blue: 0.90)
+                                : Color(NSColor.controlAccentColor))
+        return LayoutPalette(ground: .black,
+                             panel: Color(white: 0.027),
+                             text: Color(white: 0.92),
+                             dim: Color(white: 0.52),
+                             accent: accent,
+                             rule: Color(white: 1).opacity(0.16))
     }
 }
 
@@ -156,7 +179,14 @@ struct SidebarSettingsView: View {
     @Binding var selection: String
     @Environment(\.colorScheme) private var scheme
 
-    private var palette: LayoutPalette { .of(layout, dark: scheme == .dark) }
+    private var palette: LayoutPalette {
+        // `scheme` is observed but not consulted: it is what makes SwiftUI
+        // redraw this view when the Mac flips between light and dark, while
+        // the answer itself comes from the setting.
+        _ = scheme
+        return .of(layout, dark: AppearanceControl.isDark,
+                   pitch: AppearanceControl.isPitchBlack)
+    }
     private var section: SettingsSection {
         SettingsSection(rawValue: selection) ?? .thermals
     }
@@ -173,6 +203,11 @@ struct SidebarSettingsView: View {
             Rectangle().fill(palette.rule).frame(width: 1)
             content
         }
+        // Told to fill the window. Without this the row is only as wide as
+        // what is in it and SwiftUI centres the remainder — so the sidebar
+        // slid sideways whenever a section's content happened to be narrower,
+        // and again whenever a reading in the corner gained a digit.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(palette.ground)
         .modifier(MonospacedThroughout(on: layout.monospaced))
         // Read by every control underneath, including the ones inside the
@@ -198,8 +233,10 @@ struct SidebarSettingsView: View {
                 .font(font(13, .medium))
                 .foregroundColor(palette.dim)
                 .padding(.leading, Self.trafficLightWidth)
-                .padding(.top, 7)
-                .padding(.bottom, 18)
+                // Centred on the window buttons, which sit in the middle of a
+                // titlebar 28 points tall whether or not one is drawn.
+                .frame(height: 28)
+                .padding(.bottom, 10)
 
             ForEach(SettingsSection.allCases) { section in
                 row(section)
@@ -207,8 +244,6 @@ struct SidebarSettingsView: View {
             Spacer(minLength: 12)
             statusBlock
         }
-        .padding(.top, 6)
-        .padding(.bottom, 16)
         .frame(width: 228, alignment: .leading)
         .background(palette.panel)
     }
@@ -250,15 +285,22 @@ struct SidebarSettingsView: View {
     /// while this is everything the machine is reporting. A summary and its
     /// detail are supposed to agree.
     private var statusBlock: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Rectangle().fill(palette.rule).frame(height: 1).padding(.bottom, 6)
-            ForEach(StatusReadout.lines(telemetry: telemetry), id: \.self) { line in
-                Text(line)
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundColor(palette.text)
+        // The rule runs the full width of the sidebar and the readings are
+        // inset by the same amount on all four sides. Before, the rule was
+        // inset with the text and the gap below the last line was whatever the
+        // sidebar's own padding happened to be, which is why the block looked
+        // hung rather than placed.
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(palette.rule).frame(height: 1)
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(StatusReadout.lines(telemetry: telemetry), id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundColor(palette.text)
+                }
             }
+            .padding(16)
         }
-        .padding(.horizontal, 16)
     }
 
     // MARK: Content
@@ -287,6 +329,7 @@ struct SidebarSettingsView: View {
             .padding(EdgeInsets(top: 34, leading: 24, bottom: 24, trailing: 24))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -398,9 +441,15 @@ struct AppSettingsSection: View {
                             selection: Binding(
                                 get: { Preferences.appearance },
                                 set: { Preferences.appearance = $0
-                                       AppearanceControl.apply(); revision += 1 }),
-                            options: [("Light", "light"), ("System", "system"), ("Dark", "dark")])
-            Text("System follows whatever the Mac is set to. The menu-bar readout is not affected: it always follows the menu bar's own appearance, which is not always the window's.")
+                                       AppearanceControl.apply()
+                                       // A rebuild, not a redraw: the palettes
+                                       // and the window's own fill are both
+                                       // read once, when the window is built.
+                                       SettingsWindowController.layoutDidChange()
+                                       revision += 1 }),
+                            options: [("Light", "light"), ("System", "system"),
+                                      ("Dark", "dark"), ("Darkness", "darkness")])
+            Text("System follows whatever the Mac is set to. Darkness is Dark taken to actual black, which on this panel is a pixel that is off rather than a dark grey one. The menu-bar readout is not affected by any of them: it always follows the menu bar's own appearance, which is not always the window's.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

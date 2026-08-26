@@ -229,7 +229,7 @@ final class AppController: NSObject, NSMenuDelegate {
     /// The alternative is opening it and taking a picture of the screen, which
     /// means guessing where the window landed, cropping by hand, and catching
     /// whatever else happened to be open. This involves nobody's desktop.
-    func dumpWindowLayouts(to path: String, dark: Bool) {
+    func dumpWindowLayouts(to path: String, dark: Bool, pitch: Bool = false) {
         let deadline = Date().addingTimeInterval(8)
         while telemetry.load == nil && Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
@@ -244,6 +244,9 @@ final class AppController: NSObject, NSMenuDelegate {
         let rememberedAppearance = NSApp.appearance
         NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         defer { NSApp.appearance = rememberedAppearance }
+        let rememberedSetting = Preferences.appearance
+        Preferences.appearance = pitch ? "darkness" : (dark ? "dark" : "light")
+        defer { Preferences.appearance = rememberedSetting }
 
         for layout in WindowLayout.allCases {
             Preferences.windowLayout = layout
@@ -282,7 +285,8 @@ final class AppController: NSObject, NSMenuDelegate {
             guard let tiff = sheet.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff),
                   let png = rep.representation(using: .png, properties: [:]) else { continue }
-            let file = "\(base)-\(layout.rawValue)-\(dark ? "dark" : "light").png"
+            let shade = pitch ? "darkness" : (dark ? "dark" : "light")
+            let file = "\(base)-\(layout.rawValue)-\(shade).png"
             try? png.write(to: URL(fileURLWithPath: file))
             FileHandle.standardError.write(Data("wrote \(file)\n".utf8))
         }

@@ -149,6 +149,9 @@ private struct DisplayView: View {
                     .font(.subheadline).foregroundColor(.secondary)
             }
             Divider()
+            Text("While this tab is on, Zephyr also watches for the machine ending up with no active display at all — the state other display utilities leave behind when the built-in panel is switched off and the external one is then unplugged — and asks the system for its permanent arrangement back rather than leaving a restart as the only way out.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Text("External monitors that ignore this control need DDC/CI over the video cable — a separate path, and one that cannot be written honestly without a monitor to test it against.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

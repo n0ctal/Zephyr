@@ -106,7 +106,10 @@ if let index = arguments.firstIndex(of: "--dump-preview"), index + 1 < arguments
 if let index = arguments.firstIndex(of: "--dump-window"), index + 1 < arguments.count {
     let path = arguments[index + 1]
     DispatchQueue.main.async {
-        controller.dumpWindowLayouts(to: path, dark: arguments.contains("--dark"))
+        controller.dumpWindowLayouts(to: path,
+                                     dark: arguments.contains("--dark")
+                                         || arguments.contains("--darkness"),
+                                     pitch: arguments.contains("--darkness"))
         exit(0)
     }
 }

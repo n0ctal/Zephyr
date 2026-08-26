@@ -72,6 +72,12 @@ final class SettingsWindowController {
     /// of this one. The classic layout keeps its title bar, because the row of
     /// tabs would otherwise start underneath those same buttons.
     private func applyChrome(to window: NSWindow) {
+        // The window's own fill shows through wherever the content does not
+        // reach — around the tab strip in the classic layout, and behind the
+        // title bar in the others. Left as the system's grey it would frame a
+        // black window in dark grey.
+        window.backgroundColor = AppearanceControl.isPitchBlack
+            ? .black : .windowBackgroundColor
         let sidebar = Preferences.windowLayout.usesSidebar
         window.titleVisibility = sidebar ? .hidden : .visible
         window.titlebarAppearsTransparent = sidebar
@@ -174,6 +180,10 @@ struct SettingsRootView: View {
                 .tag("appsettings")
         }
         .padding(12)
+        // Only reaches the margin around the tabs: the tab view paints its own
+        // pane, and there is no way to tell it not to. Darkness is a sidebar
+        // layout's setting first and a classic one's second.
+        .background(AppearanceControl.isPitchBlack ? Color.black : Color.clear)
         // Wide enough for eleven tab labels without truncation. A macOS TabView
         // clips its labels rather than scrolling them, and "Grap…" next to
         // "Batt…" is worse than a window that takes more of the screen.

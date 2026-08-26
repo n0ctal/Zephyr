@@ -43,7 +43,7 @@ struct ValueField: View {
         HStack(spacing: 14) {
             Text(title)
                 .foregroundColor(palette.text)
-                .frame(width: 240, alignment: .leading)
+                .frame(width: TerminalMetrics.labelColumn, alignment: .trailing)
             TerminalSlider(value: $value, range: range, step: step, palette: palette)
                 .frame(width: 240, height: 18)
             TerminalNumberBox(text: $text, commit: commit, palette: palette)
