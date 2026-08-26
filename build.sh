@@ -10,7 +10,7 @@ set -euo pipefail
 CONFIG="${1:-release}"
 APP_NAME="Zephyr"
 BUNDLE_ID="com.n0ctal.macbookcontrol"   # legacy id kept so the installed helper/agent keep working
-VERSION="1.9.18"
+VERSION="1.9.19"
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/.build/$CONFIG"
