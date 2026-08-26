@@ -86,5 +86,10 @@ codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || \
     codesign --force --sign - "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 echo "==> Done: $APP_DIR"
+echo
+echo "    Reminder: the app is ad-hoc signed, so this build has a different code"
+echo "    signature from the last one. The privileged helper only accepts the copy"
+echo "    it was installed against, so after replacing /Applications/Zephyr.app run:"
+echo "      sudo \"/Applications/Zephyr.app/Contents/Resources/scripts/install-helper.sh\""
 echo "    Launch:  open \"$APP_DIR\""
 echo "    Helper:  sudo \"$PROJECT_DIR/scripts/install-helper.sh\""

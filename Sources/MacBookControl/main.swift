@@ -33,6 +33,11 @@ if arguments.contains("--test-gpu") {
     exit(0)
 }
 
+if arguments.contains("--test-power-limit") {
+    runPowerLimitTest(write: arguments.contains("--write"))
+    exit(0)
+}
+
 if arguments.contains("--dump-icons") {
     runIconDump()
     exit(0)
@@ -545,4 +550,47 @@ func runIconDump() {
     }
     _ = scale
     print(directory.path)
+}
+
+
+// MARK: - Power limit diagnostics
+
+func runPowerLimitTest(write: Bool) {
+    guard let before = PowerLimits.current() else {
+        print("sysctls absent — the kext is not loaded")
+        return
+    }
+    func show(_ label: String, _ r: PowerLimits.Reading) {
+        print(String(format: "  %@: PL1 %.1f W (on %@), PL2 %.1f W (on %@), locked %@, raw 0x%016llX",
+                     label, r.pl1Watts, r.pl1Enabled ? "yes" : "no",
+                     r.pl2Watts, r.pl2Enabled ? "yes" : "no",
+                     r.isLocked ? "YES" : "no", r.raw))
+    }
+    show("before", before)
+    guard write else { return }
+
+    let targetPL1 = 60.0, targetPL2 = 75.0
+    guard let composed = PowerLimits.composed(pl1Watts: targetPL1, pl2Watts: targetPL2) else {
+        print("  compose refused — the register reads as locked")
+        return
+    }
+    print(String(format: "  composed 0x%016llX for PL1 %.0f / PL2 %.0f", composed, targetPL1, targetPL2))
+
+    let helper = HelperClient()
+    print("  helper version: \(helper.version() ?? "unreachable")")
+    helper.setPowerLimit(composed)
+    _ = helper.version()   // flushes the asynchronous write
+
+    Thread.sleep(forTimeInterval: 0.5)
+    if let after = PowerLimits.current() { show("after", after) }
+    Thread.sleep(forTimeInterval: 3)
+    if let settled = PowerLimits.current() { show("3 s later", settled) }
+
+    // Put it back however it went.
+    if let restore = PowerLimits.composed(pl1Watts: before.pl1Watts, pl2Watts: before.pl2Watts) {
+        helper.setPowerLimit(restore)
+        _ = helper.version()
+        Thread.sleep(forTimeInterval: 0.5)
+        if let back = PowerLimits.current() { show("restored", back) }
+    }
 }

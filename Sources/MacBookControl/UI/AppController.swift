@@ -18,7 +18,7 @@ final class AppController: NSObject, NSMenuDelegate {
     private let registry: FeatureRegistry
 
     private var refreshTimer: Timer?
-    private var helperVersion: String?
+    private var helperState: HelperState = .notInstalled
 
     override init() {
         let telemetry = self.telemetry
@@ -67,7 +67,7 @@ final class AppController: NSObject, NSMenuDelegate {
         t = phase("status item + menu", t)
         telemetry.start()
         t = phase("telemetry.start", t)
-        helperVersion = helper.version()
+        helperState = HelperState.current(helper)
         t = phase("helper.version", t)
         // Features come up only after telemetry has read once: `isSupported`
         // asks the hardware, and a feature that checks before the first poll
@@ -113,7 +113,7 @@ final class AppController: NSObject, NSMenuDelegate {
     // MARK: Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        helperVersion = helper.version()
+        helperState = HelperState.current(helper)
         rebuildMenu()
     }
 
@@ -133,12 +133,19 @@ final class AppController: NSObject, NSMenuDelegate {
     /// Reports the helper, and offers to install it when it is missing. The
     /// row is the same row either way so its position never moves.
     private func helperItem() -> NSMenuItem {
-        guard let version = helperVersion else {
+        switch helperState {
+        case .working:
+            let row = NSMenuItem(title: helperState.summary, action: nil, keyEquivalent: "")
+            row.isEnabled = false
+            return row
+        case .notAuthorized:
+            // Named differently from "install" on purpose: the fix is the same
+            // command, but "install" reads as "you have not done this yet" to
+            // somebody who did it yesterday.
+            return item("Re-authorise helper…", #selector(showInstallInstructions))
+        case .notInstalled:
             return item("Install helper…", #selector(showInstallInstructions))
         }
-        let row = NSMenuItem(title: "Helper \(version) running", action: nil, keyEquivalent: "")
-        row.isEnabled = false
-        return row
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -153,7 +160,8 @@ final class AppController: NSObject, NSMenuDelegate {
     func openSettingsForTesting() { openSettings() }
 
     @objc private func openSettings() {
-        settingsWindow.show(registry: registry, telemetry: telemetry)
+        helperState = HelperState.current(helper)
+        settingsWindow.show(registry: registry, telemetry: telemetry, helperState: helperState)
     }
 
     @objc private func toggleLaunchAtLogin() {
@@ -162,19 +170,18 @@ final class AppController: NSObject, NSMenuDelegate {
 
     @objc private func showInstallInstructions() {
         let alert = NSAlert()
-        alert.messageText = "Zephyr needs its helper"
+        alert.messageText = helperState.summary
         alert.informativeText = """
-        Fans, GPU switching, Turbo Boost and the charge ceiling all write to \
-        hardware, which needs root. Run this once in Terminal, then reopen the menu:
+        \(helperState.explanation ?? "")
 
-        sudo \(installScriptPath())
+        \(HelperState.installCommand)
         """
         alert.addButton(withTitle: "Copy command")
         alert.addButton(withTitle: "Close")
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString("sudo \(installScriptPath())", forType: .string)
+            NSPasteboard.general.setString(HelperState.installCommand, forType: .string)
         }
     }
 

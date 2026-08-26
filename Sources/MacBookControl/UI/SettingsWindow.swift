@@ -12,13 +12,13 @@ final class SettingsWindowController {
     /// normal launches open on whatever the window remembers.
     static var initialTab: String?
 
-    func show(registry: FeatureRegistry, telemetry: Telemetry) {
+    func show(registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState) {
         if let window = window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let root = SettingsRootView(registry: registry, telemetry: telemetry)
+        let root = SettingsRootView(registry: registry, telemetry: telemetry, helperState: helperState)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Zephyr"
@@ -40,16 +40,52 @@ final class SettingsWindowController {
 struct SettingsRootView: View {
     @ObservedObject var registry: FeatureRegistry
     @ObservedObject var telemetry: Telemetry
+    let helperState: HelperState
     @State private var selection: String
 
-    init(registry: FeatureRegistry, telemetry: Telemetry) {
+    init(registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState) {
         self.registry = registry
         self.telemetry = telemetry
+        self.helperState = helperState
         _selection = State(initialValue: SettingsWindowController.initialTab
                            ?? registry.features.first?.id ?? "menubar")
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            if !helperState.isWorking { helperBanner }
+            tabs
+        }
+    }
+
+    /// Above every tab, not inside one. When the helper is not answering,
+    /// nothing that touches hardware works — and finding that out one greyed
+    /// switch at a time is the worst way to learn it.
+    private var helperBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(helperState.summary).font(.headline).foregroundColor(.orange)
+            if let explanation = helperState.explanation {
+                Text(explanation)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Text(HelperState.installCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(4)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.15)))
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(HelperState.installCommand, forType: .string)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
+    }
+
+    private var tabs: some View {
         TabView(selection: $selection) {
             ForEach(registry.features, id: \.id) { feature in
                 FeatureTab(feature: feature)

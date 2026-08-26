@@ -41,6 +41,7 @@ enum SelfTest {
         menuBarDrawing()
         batteryColours()
         powerLimitBounds()
+        helperStates()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -383,6 +384,32 @@ enum SelfTest {
             pl1Watts: 0, pl2Watts: 0, pl1Enabled: false, pl2Enabled: false,
             isLocked: false, tdpWatts: nil, minWatts: nil, maxWatts: nil, raw: 0)
         expect(blank.lowerBound < blank.upperBound, "an empty reading still makes a range")
+    }
+
+    // MARK: Helper states
+
+    private static func helperStates() {
+        // Two failures that look identical from the app — no answer — and need
+        // opposite advice. Lumping them into "install the helper" told someone
+        // who installed it yesterday to install it again, while everything
+        // that touches hardware sat silently broken.
+        expectEqual(HelperState.from(version: "5", daemonInstalled: true),
+                    .working(version: "5"), "an answer means it works")
+        expectEqual(HelperState.from(version: "5", daemonInstalled: false),
+                    .working(version: "5"), "an answer settles it regardless of the plist")
+        expectEqual(HelperState.from(version: nil, daemonInstalled: true),
+                    .notAuthorized, "installed but silent means the app was rebuilt")
+        expectEqual(HelperState.from(version: nil, daemonInstalled: false),
+                    .notInstalled, "no plist and no answer means it was never installed")
+
+        expect(HelperState.working(version: "5").isWorking, "working reads as working")
+        expect(!HelperState.notAuthorized.isWorking, "unauthorised does not read as working")
+        expect(HelperState.working(version: "5").explanation == nil,
+               "a working helper needs no explanation")
+        expect(HelperState.notAuthorized.explanation?.isEmpty == false,
+               "an unauthorised one does")
+        expect(HelperState.notAuthorized.summary != HelperState.notInstalled.summary,
+               "the two failures do not read the same")
     }
 
     // MARK: Fan curve
