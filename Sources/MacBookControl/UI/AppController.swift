@@ -181,6 +181,13 @@ final class AppController: NSObject, NSMenuDelegate {
         // One file per style, each showing three sections whose content differs
         // as much as the app allows — a language that holds on Thermals may
         // fall apart on Profiles, and that is exactly what needs seeing.
+        // The shipping window is deliberately not rendered here. SwiftUI
+        // resolves its colours against the running application's appearance,
+        // and an offscreen host does not carry one — the result comes out
+        // white on white however the appearance is set, on the view or on the
+        // app. It needs no rendering anyway: "classic" is the window that is
+        // already installed, and looking at it directly is more truthful than
+        // any copy of it.
         let sections: [PreviewSection] = [.thermals, .input, .settings]
         let base = URL(fileURLWithPath: path).deletingPathExtension().path
         for style in PreviewStyle.all {
@@ -193,6 +200,8 @@ final class AppController: NSObject, NSMenuDelegate {
                 let view = TerminalDesignView(registry: registry, telemetry: telemetry,
                                               style: style, section: section)
                 let hosting = NSHostingView(rootView: view)
+                hosting.appearance = NSAppearance(named: style.monospaced || style.name == "Dark glass"
+                                                  ? .darkAqua : .aqua)
                 hosting.frame = NSRect(x: 0, y: 0, width: sheetWidth, height: paneHeight)
                 hosting.layoutSubtreeIfNeeded()
                 if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {

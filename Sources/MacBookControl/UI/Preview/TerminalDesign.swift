@@ -99,7 +99,10 @@ struct PreviewStyle {
         monospaced: false, bracketSelection: false, filledSelection: true,
         topTabs: true)
 
-    static let all: [PreviewStyle] = [ma, terminal, classic]
+    /// Only the two invented directions. "Classic" is not here because it is
+    /// not a direction to imagine — it is the window that already ships, and
+    /// it is rendered from the real view instead.
+    static let all: [PreviewStyle] = [ma, terminal]
 }
 
 enum TerminalPalette {
