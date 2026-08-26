@@ -118,7 +118,10 @@ enum MenuBarComposer {
             case .temperature: return ""
             case .fan: return "FAN"
             case .battery: return "BAT"
-            case .power: return "W"
+            // No caption, for the same reason temperature has none: the unit
+            // is already written after the number, and "W 23.5 W" is what a
+            // label on top of a unit actually looks like.
+            case .power: return ""
             case .cpuSpeed: return "CPU"
             case .cpuLoad: return "LOAD"
             case .memory: return "RAM"
@@ -416,7 +419,7 @@ enum MenuBarComposer {
         // on the phone it very nearly fills the shape, and that is most of why
         // it reads at a glance.
         let text = "\(battery.percent)" as NSString
-        let font = NSFont.systemFont(ofSize: height * 0.72, weight: .bold)
+        let font = NSFont.systemFont(ofSize: height * 0.80, weight: .bold)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
         let measured = showingPercentage ? text.size(withAttributes: attributes) : .zero
         // Sized for the widest number it will ever hold, not for the one it is
@@ -424,7 +427,7 @@ enum MenuBarComposer {
         // whole menu bar shift sideways every time the battery ticks over,
         // which is the sort of movement the eye cannot help following.
         let widest = ("100" as NSString).size(withAttributes: attributes).width
-        let bodyWidth: CGFloat = showingPercentage ? widest + 8 : 23
+        let bodyWidth: CGFloat = showingPercentage ? widest + 4 : 23
 
         let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
 
@@ -466,8 +469,15 @@ enum MenuBarComposer {
             // Punched through rather than painted on: the digits then read
             // against the filled part, against the grey remainder, and against
             // a light or dark menu bar without choosing a colour for each case.
+            // Centred on the cap height, not on the line height. A line box
+            // carries room for descenders that digits never use, so centring
+            // on it pushes the number visibly high and makes it look smaller
+            // than the space it occupies.
+            let capHeight = font.capHeight
+            // `descender` is negative, so it is added: subtracting it pushes
+            // the digits up out of the pill, which is what happened first.
             let origin = NSPoint(x: (bodyWidth - measured.width) / 2,
-                                 y: (height - measured.height) / 2)
+                                 y: (height - capHeight) / 2 + font.descender)
             NSGraphicsContext.current?.compositingOperation = .destinationOut
             text.draw(at: origin, withAttributes: attributes)
             NSGraphicsContext.current?.compositingOperation = .sourceOver
