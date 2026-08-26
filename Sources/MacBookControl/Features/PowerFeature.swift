@@ -50,6 +50,26 @@ final class PowerFeature: Feature {
             guard let self = self, self.isEnabled else { return }
             self.helper.setTurboBoostEnabled(!self.turboDisabled)
         }
+        reapplyStoredLimits()
+    }
+
+    /// Puts the chosen power limit back.
+    ///
+    /// Called at launch and after every wake. The firmware restores the Turbo
+    /// Boost register across sleep while the app still believes it is set —
+    /// that lesson is in the code next door — and MSR_PKG_POWER_LIMIT is in the
+    /// same class of register. Whether it actually lapses has not been seen
+    /// happen; re-applying costs one sysctl write and removes the question.
+    func reapplyStoredLimits() {
+        guard isEnabled,
+              Preferences.desiredPL1 > 0, Preferences.desiredPL2 > 0,
+              let raw = PowerLimits.composed(pl1Watts: Preferences.desiredPL1,
+                                             pl2Watts: Preferences.desiredPL2)
+        else { return }
+        helper.setPowerLimit(raw)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.refreshLimits()
+        }
     }
 
     /// Reads the live state off the main thread and publishes it back.
@@ -81,6 +101,8 @@ final class PowerFeature: Feature {
 
     func applyLimits() {
         guard isEnabled, let raw = PowerLimits.composed(pl1Watts: pl1, pl2Watts: pl2) else { return }
+        Preferences.desiredPL1 = pl1
+        Preferences.desiredPL2 = pl2
         helper.setPowerLimit(raw)
         // The helper writes asynchronously, so read the register back a moment
         // later rather than displaying what we hoped for.

@@ -90,7 +90,9 @@ final class AppController: NSObject, NSMenuDelegate {
             self?.helper.reapplyChargeLimitAfterWake()
             // The cached kext state can only be stale after a wake, so this is
             // the one place it is worth re-reading.
-            (self?.registry.feature(id: "power") as? PowerFeature)?.refreshTurboState()
+            let power = self?.registry.feature(id: "power") as? PowerFeature
+            power?.refreshTurboState()
+            power?.reapplyStoredLimits()
         }
     }
 

@@ -198,6 +198,17 @@ enum Preferences {
         set { d.set(newValue, forKey: "battery.showFlow") }
     }
 
+    /// The power limit the user chose, so it can be put back after a sleep and
+    /// at the next launch. Zero means "never set one".
+    static var desiredPL1: Double {
+        get { d.double(forKey: "power.pl1") }
+        set { d.set(newValue, forKey: "power.pl1") }
+    }
+    static var desiredPL2: Double {
+        get { d.double(forKey: "power.pl2") }
+        set { d.set(newValue, forKey: "power.pl2") }
+    }
+
     // MARK: Graphics
 
     static var gpuMode: Int {
