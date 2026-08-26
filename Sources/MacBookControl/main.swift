@@ -90,6 +90,21 @@ _ = controller
 // Dev affordance: the Settings window is only reachable by clicking the status
 // item, which nothing automated can do — so a broken tab would only ever be
 // found by hand. This opens it at launch so the build can prove it constructs.
+if let index = arguments.firstIndex(of: "--dump-preview"), index + 1 < arguments.count {
+    let path = arguments[index + 1]
+    DispatchQueue.main.async {
+        controller.dumpDesignPreview(to: path)
+        exit(0)
+    }
+}
+
+if arguments.contains("--preview-design") {
+    DispatchQueue.main.async {
+        controller.openDesignPreview()
+        FileHandle.standardError.write(Data("design preview open\n".utf8))
+    }
+}
+
 if let flag = arguments.first(where: { $0.hasPrefix("--open-settings") }) {
     let parts = flag.split(separator: "=", maxSplits: 1)
     SettingsWindowController.initialTab = parts.count == 2 ? String(parts[1]) : nil

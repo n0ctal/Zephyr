@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 /// The menu-bar presence: a title that reports, and a menu that does not.
 ///
@@ -18,6 +19,7 @@ final class AppController: NSObject, NSMenuDelegate {
     private let registry: FeatureRegistry
 
     private var refreshTimer: Timer?
+    private var previewWindow: NSWindow?
     private var helperState: HelperState = .notInstalled
 
     override init() {
@@ -160,6 +162,41 @@ final class AppController: NSObject, NSMenuDelegate {
 
     /// See the `--open-settings` flag in main.swift.
     func openSettingsForTesting() { openSettings() }
+
+    /// Renders the prototype straight to a PNG.
+    ///
+    /// Screenshotting it meant guessing where the window landed and cropping
+    /// by hand, which kept catching whatever else was on the screen. An
+    /// offscreen render is exact and involves nobody's desktop.
+    func dumpDesignPreview(to path: String) {
+        let view = TerminalDesignView(registry: registry, telemetry: telemetry)
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 900, height: 640)
+        hosting.layoutSubtreeIfNeeded()
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        FileHandle.standardError.write(Data("wrote \(path)\n".utf8))
+    }
+
+    /// The 2.0 prototype, behind `--preview-design`. Deliberately unreachable
+    /// from the menu: it is something to look at, not something shipped.
+    func openDesignPreview() {
+        let hosting = NSHostingController(
+            rootView: TerminalDesignView(registry: registry, telemetry: telemetry))
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Zephyr — design preview"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 900, height: 640))
+        // A known origin, so a screenshot of it can be cropped reliably
+        // instead of guessing where the window landed.
+        window.setFrameOrigin(NSPoint(x: 60, y: 120))
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        previewWindow = window
+    }
 
     @objc private func openSettings() {
         helperState = HelperState.current(helper)
