@@ -186,3 +186,111 @@ Do NOT include: fans, propellers, laptops, gauges, thermometers, lightning
 bolts, letters, wordmarks, clouds with faces, or wind drawn as swirls with
 particles.
 ```
+
+---
+
+# Боковой список вместо верхних вкладок
+
+Десять пунктов в боковом списке — много, поэтому сначала объединение по смыслу.
+Предлагаемая семёрка, и почему именно так:
+
+| Раздел | Что вобрал | Почему вместе |
+|---|---|---|
+| **Thermals** | Cooling + Power | Вентиляторы, турбо, лимит мощности и троттлинг — четыре ответа на один вопрос: насколько горячо и насколько сильно |
+| **Graphics** | — | Какая видеокарта рисует. Отдельная тема, ни к чему не примыкает |
+| **Battery & Sleep** | Battery + Awake | Оба про то, что происходит со временем: не перезаряжать и не засыпать |
+| **Display** | — | Яркость и разрешения |
+| **Input** | Keyboard + Pointer | Обе про то, чем человек управляет машиной |
+| **Profiles** | — | Движок правил, связывающий остальные |
+| **Menu Bar** | — | Не трогает железо вовсе, только вид |
+
+**Развилка, которую и надо увидеть глазами.** Тумблер прямо в строке бокового
+списка — приём не родной для macOS: у Apple в боковом списке только имя и
+значок. Он экономит клик, но легко превращает спокойный список в пёстрый, а у
+объединённых разделов появляется два уровня переключателей (общий в списке и
+частные внутри). Поэтому ниже два промта — с тумблерами в списке и без.
+Просить оба и сравнить.
+
+## 6. Боковой список, тумблер в строке
+
+```
+A macOS settings window for a laptop-control utility called Zephyr, laid out
+like macOS System Settings: a sidebar on the left, a content pane on the right.
+
+Window: 900×640, dark (#1C1C1E), standard macOS traffic lights, translucent
+title bar.
+
+Sidebar (240px wide, slightly darker than the pane): seven rows, each with a
+small monochrome glyph, a label, and — this is the unusual part — a small
+switch at the right edge of the row. Rows: Thermals, Graphics, Battery & Sleep,
+Display, Input, Profiles, Menu Bar. The switches are on for Thermals and
+Battery & Sleep, off for the rest. The selected row (Thermals) has the standard
+blue selection fill.
+
+Content pane: the Thermals section. A large title "Thermals" with one grey line
+under it. Then two grouped blocks in the macOS rounded-group style: the first
+headed "Fans" with a three-way segmented control and two labelled value rows;
+the second headed "Power" with a switch row "Disable Turbo Boost" and two value
+rows for sustained and burst watts. Below, a plain two-line status block about
+throttling.
+
+Every value sits on the right edge of its row, in monospaced digits with a grey
+unit. Rows inside a group are separated by hairlines; groups by space.
+
+Palette: dark ground, white text at three opacities, system blue only for
+selection and active switches. No other colour.
+
+Do NOT include: coloured app-style icons in the sidebar (monochrome glyphs
+only), a search field, a back/forward arrow pair, gradients, shadows inside the
+pane, graphs, or more than seven sidebar rows.
+```
+
+## 7. Боковой список, тумблер внутри раздела
+
+```
+The same window as above — macOS System Settings layout, dark, 900×640, a 240px
+sidebar of seven rows: Thermals, Graphics, Battery & Sleep, Display, Input,
+Profiles, Menu Bar, each with a small monochrome glyph and a label only.
+
+The difference: there are no switches in the sidebar. Instead, the very first
+thing in the content pane is a single full-width switch row reading "Enable
+Thermals", followed by one grey line explaining what turning it on will do.
+Everything below that row is visibly dimmed to about 40% opacity, because the
+section is off — so the state of the section is stated once, in words, in the
+place where its settings are.
+
+Content below the switch: a "Fans" group with a three-way segmented control and
+two labelled value rows; a "Power" group with a Turbo Boost switch and two watt
+rows; a plain throttling status block.
+
+Palette and rules as before: dark ground, white at three opacities, system blue
+only for selection and active controls, hairlines inside groups, space between
+them.
+
+Do NOT include: switches in the sidebar, coloured icons, a search field,
+navigation arrows, gradients, graphs, or badges.
+```
+
+## 8. То же, но светлое и разрежённое
+
+```
+The macOS System Settings sidebar layout again — 900×640, sidebar of seven rows
+(Thermals, Graphics, Battery & Sleep, Display, Input, Profiles, Menu Bar) —
+but light, and stripped further.
+
+Ground is warm off-white (#FAF9F6). The sidebar has no fill of its own and no
+separator line; it is set apart by space alone. Sidebar rows have no glyphs at
+all, only labels, and the selected one is marked by a single accent-coloured
+dot to the left of its text rather than by a filled bar.
+
+The content pane has no grouped boxes. Each setting is one row on a plain
+ground: label on the left, control or value on the right, rows separated by
+generous space and nothing else. Section headings ("Fans", "Power") are set in
+the body size but heavier, with space above them instead of a rule.
+
+One accent colour, used only for the selected sidebar dot and for active
+controls. At least a third of the window is empty.
+
+Do NOT include: rounded group containers, hairline dividers, icons, a sidebar
+background fill, shadows, or colour beyond the single accent.
+```
