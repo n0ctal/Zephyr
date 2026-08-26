@@ -62,6 +62,7 @@ final class AppController: NSObject, NSMenuDelegate {
     private func configure() {
         var t = Date()
         Preferences.migrateLegacyKeys()
+        AppearanceControl.apply()
         statusItem.button?.title = "…"
         menu.delegate = self
         statusItem.menu = menu
@@ -177,15 +178,41 @@ final class AppController: NSObject, NSMenuDelegate {
         while telemetry.load == nil && Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
-        let view = TerminalDesignView(registry: registry, telemetry: telemetry)
-        let hosting = NSHostingView(rootView: view)
-        hosting.frame = NSRect(x: 0, y: 0, width: 900, height: 640)
-        hosting.layoutSubtreeIfNeeded()
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return }
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        guard let png = rep.representation(using: .png, properties: [:]) else { return }
-        try? png.write(to: URL(fileURLWithPath: path))
-        FileHandle.standardError.write(Data("wrote \(path)\n".utf8))
+        // One file per style, each showing three sections whose content differs
+        // as much as the app allows — a language that holds on Thermals may
+        // fall apart on Profiles, and that is exactly what needs seeing.
+        let sections: [PreviewSection] = [.thermals, .input, .profiles]
+        let base = URL(fileURLWithPath: path).deletingPathExtension().path
+        for style in PreviewStyle.all {
+            let sheetWidth: CGFloat = 900
+            let paneHeight: CGFloat = 640
+            let sheet = NSImage(size: NSSize(width: sheetWidth,
+                                             height: paneHeight * CGFloat(sections.count)))
+            sheet.lockFocus()
+            for (index, section) in sections.enumerated() {
+                let view = TerminalDesignView(registry: registry, telemetry: telemetry,
+                                              style: style, section: section)
+                let hosting = NSHostingView(rootView: view)
+                hosting.frame = NSRect(x: 0, y: 0, width: sheetWidth, height: paneHeight)
+                hosting.layoutSubtreeIfNeeded()
+                if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+                    hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                    rep.draw(in: NSRect(x: 0,
+                                        y: sheet.size.height - CGFloat(index + 1) * paneHeight,
+                                        width: sheetWidth, height: paneHeight))
+                }
+            }
+            sheet.unlockFocus()
+            guard let tiff = sheet.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { continue }
+            let slug = style.name.lowercased()
+                .replacingOccurrences(of: " ", with: "-")
+                .replacingOccurrences(of: "—", with: "")
+            let file = "\(base)-\(slug).png"
+            try? png.write(to: URL(fileURLWithPath: file))
+            FileHandle.standardError.write(Data("wrote \(file)\n".utf8))
+        }
     }
 
     /// The 2.0 prototype, behind `--preview-design`. Deliberately unreachable

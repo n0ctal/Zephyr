@@ -214,10 +214,15 @@ enum SelfTest {
         // rpm range is nearly four thousand of them, and macOS spent seventeen
         // seconds drawing that. Wide ranges must fall back to continuous.
         let ticks = ValueField.tickStep
-        expect(ticks(1836...5616, 1) == nil, "a fan's rpm range gets a continuous slider")
-        expect(ticks(20...100, 5) != nil, "a charge ceiling keeps its ticks")
-        expect(ticks(0...2, 0.05) != nil, "acceleration keeps its ticks")
-        expect(ticks(10...90, 1) == nil, "an 80-step watt range goes continuous")
+        // The rule: at most sixteen marks. Past that they stop being readable
+        // long before they stop being drawable, and the number beside the
+        // slider is what anyone uses to hit an exact value.
+        expect(ticks(0...16, 1) != nil, "sixteen steps still get their marks")
+        expect(ticks(0...17, 1) == nil, "seventeen do not")
+        expect(ticks(20...100, 5) != nil, "a charge ceiling, sixteen steps, keeps its marks")
+        expect(ticks(0...2, 0.05) == nil, "forty steps of acceleration go continuous")
+        expect(ticks(1836...5616, 1) == nil, "a fan's rpm range is nowhere near")
+        expect(ticks(10...90, 1) == nil, "an eighty-step watt range goes continuous")
     }
 
     // MARK: Scroll rewriting

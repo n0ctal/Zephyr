@@ -10,15 +10,93 @@ import SwiftUI
 ///
 /// The shipping settings window is untouched. Nothing here is reachable from
 /// the menu.
+/// One visual language. The structure and the words are identical in all of
+/// them — only colour, face and how selection is marked differ, which is the
+/// only honest way to compare directions.
+struct PreviewStyle {
+    let name: String
+    let ground: Color
+    let panel: Color
+    let text: Color
+    let dim: Color
+    let accent: Color
+    let rule: Color
+    /// Monospaced throughout, or a sans face with monospaced digits.
+    let monospaced: Bool
+    /// Selection written with brackets rather than a filled shape.
+    let bracketSelection: Bool
+    /// A fill behind the selected sidebar row.
+    let filledSelection: Bool
+
+    func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        monospaced
+            ? .system(size: size, weight: weight, design: .monospaced)
+            : .system(size: size, weight: weight)
+    }
+
+    /// Numbers are always monospaced, whatever the body face: a value that
+    /// changes width shoves everything beside it twice a second.
+    func numberFont(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .regular, design: .monospaced)
+    }
+
+    static let terminal = PreviewStyle(
+        name: "Terminal",
+        ground: Color(red: 0.043, green: 0.043, blue: 0.043),
+        panel: Color(red: 0.07, green: 0.07, blue: 0.07),
+        text: Color(white: 0.92), dim: Color(white: 0.55),
+        // Muted rather than phosphor: a bright green over a whole window stops
+        // meaning "this is on" and starts meaning "this is a costume".
+        accent: Color(red: 0.49, green: 0.83, blue: 0.56),
+        rule: Color(white: 1).opacity(0.12),
+        monospaced: true, bracketSelection: true, filledSelection: false)
+
+    static let ma = PreviewStyle(
+        name: "Ma — emptiness as material",
+        ground: Color(red: 0.980, green: 0.976, blue: 0.965),
+        panel: Color(red: 0.980, green: 0.976, blue: 0.965),
+        text: Color(white: 0.10), dim: Color(white: 0.45),
+        accent: Color(red: 0.30, green: 0.33, blue: 0.55),
+        rule: Color(white: 0).opacity(0.10),
+        monospaced: false, bracketSelection: false, filledSelection: false)
+
+    static let instrument = PreviewStyle(
+        name: "Instrument",
+        ground: Color(red: 0.949, green: 0.949, blue: 0.937),
+        panel: Color(red: 0.921, green: 0.921, blue: 0.909),
+        text: Color(white: 0.08), dim: Color(white: 0.42),
+        accent: Color(red: 0.72, green: 0.47, blue: 0.10),
+        rule: Color(white: 0).opacity(0.14),
+        monospaced: false, bracketSelection: false, filledSelection: true)
+
+    static let ink = PreviewStyle(
+        name: "Ink on paper",
+        ground: Color(red: 0.984, green: 0.972, blue: 0.945),
+        panel: Color(red: 0.965, green: 0.949, blue: 0.914),
+        text: Color(white: 0.09), dim: Color(white: 0.44),
+        accent: Color(red: 0.42, green: 0.36, blue: 0.28),
+        rule: Color(white: 0).opacity(0.12),
+        monospaced: false, bracketSelection: false, filledSelection: false)
+
+    static let darkGlass = PreviewStyle(
+        name: "Dark glass",
+        ground: Color(red: 0.110, green: 0.110, blue: 0.118),
+        panel: Color(red: 0.086, green: 0.086, blue: 0.094),
+        text: Color(white: 0.95), dim: Color(white: 0.55),
+        accent: Color(red: 0.20, green: 0.52, blue: 0.96),
+        rule: Color(white: 1).opacity(0.09),
+        monospaced: false, bracketSelection: false, filledSelection: true)
+
+    static let all: [PreviewStyle] = [ma, instrument, ink, darkGlass, terminal]
+}
+
 enum TerminalPalette {
-    static let ground = Color(red: 0.043, green: 0.043, blue: 0.043)
-    static let panel = Color(red: 0.07, green: 0.07, blue: 0.07)
-    static let text = Color(white: 0.92)
-    static let dim = Color(white: 0.55)
-    /// Muted rather than phosphor: a bright green over a whole window stops
-    /// meaning "this is on" and starts meaning "this is a terminal costume".
-    static let accent = Color(red: 0.49, green: 0.83, blue: 0.56)
-    static let rule = Color(white: 1).opacity(0.12)
+    static let ground = PreviewStyle.terminal.ground
+    static let panel = PreviewStyle.terminal.panel
+    static let text = PreviewStyle.terminal.text
+    static let dim = PreviewStyle.terminal.dim
+    static let accent = PreviewStyle.terminal.accent
+    static let rule = PreviewStyle.terminal.rule
 }
 
 /// The seven sections, after merging the ten tabs by meaning.
@@ -57,17 +135,20 @@ enum PreviewSection: String, CaseIterable, Identifiable {
 struct TerminalDesignView: View {
     @ObservedObject var registry: FeatureRegistry
     @ObservedObject var telemetry: Telemetry
-    @State private var selection: PreviewSection = .thermals
+    var style: PreviewStyle = .terminal
+    var section: PreviewSection = .thermals
+    @State private var selectionOverride: PreviewSection?
 
-    private let mono = Font.system(size: 12, design: .monospaced)
+    private var selection: PreviewSection { selectionOverride ?? section }
+    private var mono: Font { style.font(12) }
 
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-            Rectangle().fill(TerminalPalette.rule).frame(width: 1)
+            Rectangle().fill(style.rule).frame(width: 1)
             content
         }
-        .background(TerminalPalette.ground)
+        .background(style.ground)
         .frame(minWidth: 880, minHeight: 620)
     }
 
@@ -76,8 +157,8 @@ struct TerminalDesignView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Zephyr")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(TerminalPalette.dim)
+                .font(style.font(12))
+                .foregroundColor(style.dim)
                 .padding(.leading, 22)
                 .padding(.bottom, 14)
 
@@ -89,32 +170,34 @@ struct TerminalDesignView: View {
         }
         .padding(.vertical, 18)
         .frame(width: 236, alignment: .leading)
-        .background(TerminalPalette.panel)
+        .background(style.panel)
     }
 
     private func sidebarRow(_ section: PreviewSection) -> some View {
         let isSelected = selection == section
         let on = section.featureIDs.contains { registry.feature(id: $0)?.isEnabled == true }
         return HStack(spacing: 6) {
-            // The marker is a character, not a filled bar: in a monospaced
-            // list a glyph keeps the left edge of every label aligned.
-            Text(isSelected ? "›" : " ")
-                .font(mono)
-                .foregroundColor(TerminalPalette.accent)
+            // In a monospaced list the marker is a character, so every label
+            // keeps the same left edge. Elsewhere a fill reads faster.
+            if style.bracketSelection {
+                Text(isSelected ? "›" : " ").font(mono).foregroundColor(style.accent)
+            }
             Text(section.title)
                 .font(mono)
-                .foregroundColor(isSelected ? TerminalPalette.accent : TerminalPalette.text)
+                .foregroundColor(isSelected && !style.filledSelection ? style.accent : style.text)
             Spacer()
             if !section.featureIDs.isEmpty {
-                Text(on ? "[x]" : "[ ]")
-                    .font(mono)
-                    .foregroundColor(on ? TerminalPalette.accent : TerminalPalette.dim)
+                switchGlyph(on)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
+        .background(
+            style.filledSelection && isSelected
+                ? style.accent.opacity(0.22) : Color.clear
+        )
         .contentShape(Rectangle())
-        .onTapGesture { selection = section }
+        .onTapGesture { selectionOverride = section }
     }
 
     /// The full reading, at the foot of the sidebar.
@@ -131,12 +214,12 @@ struct TerminalDesignView: View {
     /// elsewhere is harder to read than one that repeats a number.
     private var statusBlock: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Rectangle().fill(TerminalPalette.rule).frame(height: 1)
+            Rectangle().fill(style.rule).frame(height: 1)
                 .padding(.bottom, 6)
             ForEach(statusLines, id: \.self) { line in
                 Text(line)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(TerminalPalette.text)
+                    .font(style.numberFont(11))
+                    .foregroundColor(style.text)
             }
         }
         .padding(.horizontal, 18)
@@ -206,13 +289,10 @@ struct TerminalDesignView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text(selection.title)
-                    .font(.system(size: 19, weight: .medium, design: .monospaced))
-                    .foregroundColor(TerminalPalette.text)
+                    .font(style.font(19, weight: .medium))
+                    .foregroundColor(style.text)
 
-                switch selection {
-                case .thermals: thermals
-                default: placeholder
-                }
+                if selection == .thermals { thermals } else { render(rows(for: selection)) }
                 Spacer(minLength: 0)
             }
             .padding(26)
@@ -270,10 +350,132 @@ struct TerminalDesignView: View {
         }
     }
 
+    /// Every section as data, so one renderer draws them all in whatever
+    /// language is selected. Bespoke views per section would drift apart the
+    /// moment a style changed, which is the opposite of what a comparison
+    /// needs.
+    private enum Row {
+        case heading(String)
+        case toggle(String, Bool)
+        case segmented([String], String)
+        case value(String, Double, String, ClosedRange<Double>)
+        case statement(String)
+        case pair(String, String)
+    }
+
+    private func rows(for section: PreviewSection) -> [Row] {
+        switch section {
+        case .thermals:
+            return []   // drawn live, with working controls
+        case .graphics:
+            return [
+                .heading("GRAPHICS"),
+                .toggle("Enable Graphics", registry.feature(id: "graphics")?.isEnabled == true),
+                .segmented(["Integrated only", "Discrete only", "Automatic"], "Automatic"),
+                .pair("Integrated", "Intel UHD Graphics 630"),
+                .pair("Discrete", "AMD Radeon Pro 5500M"),
+                .pair("Rendering now", "Intel UHD Graphics 630"),
+                .statement("Zephyr re-asserts this every few seconds, because macOS hands the discrete GPU to whatever asks."),
+            ]
+        case .batterySleep:
+            let battery = telemetry.battery
+            return [
+                .heading("BATTERY"),
+                .toggle("Enable Battery", registry.feature(id: "battery")?.isEnabled == true),
+                .value("Stop charging at", Double(Preferences.chargeLimitPercent), "%", 20...100),
+                .pair("Now", battery.map { "\($0.percent) % · \($0.stateLabel)" } ?? "—"),
+                .pair("Health", battery.flatMap { b in b.healthPercent.map { "\($0) % of design capacity, \(b.cycleCount ?? 0) cycles" } } ?? "—"),
+                .heading("SLEEP"),
+                .toggle("Enable Awake", registry.feature(id: "awake")?.isEnabled == true),
+                .toggle("Keep the display on too", Preferences.awakeKeepsDisplayOn),
+                .toggle("Stay awake with the lid closed", Preferences.awakeWhenLidClosed),
+            ]
+        case .display:
+            let screen = telemetry.temperatures.isEmpty ? nil : DisplayControl().screens().first
+            return [
+                .heading("DISPLAY"),
+                .toggle("Enable Display", registry.feature(id: "display")?.isEnabled == true),
+                .pair("Built-in display", screen.map { "\($0.width) × \($0.height) on \($0.pixelWidth) pixels across" } ?? "—"),
+                .value("Brightness", Double((screen?.brightness ?? 0.75) * 100), "%", 0...100),
+                .statement("A resolution is put back by itself unless you confirm you can still see."),
+            ]
+        case .input:
+            return [
+                .heading("KEYBOARD"),
+                .toggle("Enable Keyboard", registry.feature(id: "keyboard")?.isEnabled == true),
+                .pair("Caps Lock", "→  Escape"),
+                .heading("POINTER"),
+                .toggle("Enable Pointer", registry.feature(id: "pointer")?.isEnabled == true),
+                .toggle("Reverse scrolling on a mouse", Preferences.reverseMouseScroll),
+                .toggle("Take the acceleration out of the pointer", Preferences.flattenPointerAcceleration),
+                .pair("Side button 1", "Previous desktop"),
+                .pair("Side button 2", "Next desktop"),
+            ]
+        case .profiles:
+            return [
+                .heading("PROFILES"),
+                .toggle("Enable Profiles", registry.feature(id: "profiles")?.isEnabled == true),
+                .pair("In force now", "On battery"),
+                .heading("ON BATTERY"),
+                .statement("Fires when all of these hold — power is battery"),
+                .pair("Then set", "Turbo Boost off"),
+                .pair("", "Graphics: Integrated only"),
+                .pair("", "Stop charging at 80 %"),
+            ]
+        case .menuBar:
+            return [
+                .heading("MENU BAR"),
+                .pair("Now showing", "50°  1834 rpm  99 %  2.3 GHz  57 %"),
+                .toggle("Label each number", Preferences.showMenuBarCaptions),
+                .heading("SHOWN, IN THIS ORDER"),
+                .pair("1", "Temperature"),
+                .pair("2", "Fan speed"),
+                .pair("3", "Battery"),
+                .pair("4", "CPU speed"),
+                .pair("5", "Memory"),
+            ]
+        }
+    }
+
+    @ViewBuilder private func render(_ rows: [Row]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                switch row {
+                case .heading(let text):
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(text)
+                            .font(style.font(10, weight: .semibold))
+                            .tracking(style.monospaced ? 2.2 : 1.4)
+                            .foregroundColor(style.accent)
+                        Rectangle().fill(style.rule).frame(height: 1)
+                    }
+                    .padding(.top, 6)
+                case .toggle(let title, let on):
+                    HStack { switchGlyph(on); Text(title).font(mono).foregroundColor(style.text); Spacer() }
+                case .segmented(let options, let selected):
+                    segmented(Dictionary(uniqueKeysWithValues: options.map { ($0, $0) }),
+                              selected: selected) { _ in }
+                case .value(let title, let value, let unit, let range):
+                    valueRow(title, value: value, unit: unit, range: range) { _ in }
+                case .statement(let text):
+                    Text(text).font(mono).foregroundColor(style.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .pair(let key, let value):
+                    HStack {
+                        Text(key).font(mono).foregroundColor(style.dim)
+                            .frame(width: 160, alignment: .leading)
+                        Text(value).font(mono).foregroundColor(style.text)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
     private var placeholder: some View {
         Text("This section is not part of the prototype. Only Thermals is wired, because one section fully working says more about the design than seven half-drawn ones.")
             .font(mono)
-            .foregroundColor(TerminalPalette.dim)
+            .foregroundColor(style.dim)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -283,11 +485,26 @@ struct TerminalDesignView: View {
                                       @ViewBuilder _ body: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(heading)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .tracking(2.2)
-                .foregroundColor(TerminalPalette.accent)
-            Rectangle().fill(TerminalPalette.rule).frame(height: 1)
+                .font(style.font(10, weight: .semibold))
+                .tracking(style.monospaced ? 2.2 : 1.4)
+                .foregroundColor(style.accent)
+            Rectangle().fill(style.rule).frame(height: 1)
             body()
+        }
+    }
+
+    /// A switch, written the way the language writes one.
+    @ViewBuilder private func switchGlyph(_ on: Bool) -> some View {
+        if style.bracketSelection {
+            Text(on ? "[x]" : "[ ]").font(mono).foregroundColor(on ? style.accent : style.dim)
+        } else {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(on ? style.accent : style.dim.opacity(0.35))
+                .frame(width: 26, height: 15)
+                .overlay(
+                    Circle().fill(.white).frame(width: 11, height: 11)
+                        .offset(x: on ? 5.5 : -5.5)
+                )
         }
     }
 
@@ -295,9 +512,8 @@ struct TerminalDesignView: View {
         let feature = registry.feature(id: id)
         let on = feature?.isEnabled == true
         return HStack {
-            Text(on ? "[x]" : "[ ]")
-                .font(mono).foregroundColor(on ? TerminalPalette.accent : TerminalPalette.dim)
-            Text(title).font(mono).foregroundColor(TerminalPalette.text)
+            switchGlyph(on)
+            Text(title).font(mono).foregroundColor(style.text)
             Spacer()
         }
         .contentShape(Rectangle())
@@ -306,9 +522,8 @@ struct TerminalDesignView: View {
 
     private func toggleRow(_ title: String, isOn: Bool, _ set: @escaping (Bool) -> Void) -> some View {
         HStack {
-            Text(isOn ? "[x]" : "[ ]")
-                .font(mono).foregroundColor(isOn ? TerminalPalette.accent : TerminalPalette.dim)
-            Text(title).font(mono).foregroundColor(TerminalPalette.text)
+            switchGlyph(isOn)
+            Text(title).font(mono).foregroundColor(style.text)
             Spacer()
         }
         .contentShape(Rectangle())
@@ -323,9 +538,16 @@ struct TerminalDesignView: View {
                 // Brackets rather than a filled pill: in a monospaced setting
                 // they are how selection has always been written, and they cost
                 // no colour.
-                Text(active ? "[ \(label) ]" : "  \(label)  ")
+                Text(style.bracketSelection ? (active ? "[ \(label) ]" : "  \(label)  ") : label)
                     .font(mono)
-                    .foregroundColor(active ? TerminalPalette.accent : TerminalPalette.dim)
+                    .foregroundColor(active ? (style.filledSelection ? .white : style.accent) : style.dim)
+                    .padding(.horizontal, style.bracketSelection ? 0 : 10)
+                    .padding(.vertical, style.bracketSelection ? 0 : 4)
+                    .background(
+                        style.filledSelection && active
+                            ? AnyView(RoundedRectangle(cornerRadius: 5).fill(style.accent))
+                            : AnyView(Color.clear)
+                    )
                     .contentShape(Rectangle())
                     .onTapGesture { set(tag) }
             }
@@ -340,21 +562,21 @@ struct TerminalDesignView: View {
         // the unit cannot be pushed off the edge by a long label — which is
         // exactly what happened when the row was free to grow.
         HStack(spacing: 14) {
-            Text(title).font(mono).foregroundColor(TerminalPalette.text)
+            Text(title).font(mono).foregroundColor(style.text)
                 .frame(width: 220, alignment: .leading)
-            TerminalSlider(value: value, range: range, set: set)
+            TerminalSlider(value: value, range: range, style: style, set: set)
                 .frame(width: 250, height: 18)
             Text(String(format: "%.0f", value))
-                .font(mono).foregroundColor(TerminalPalette.text)
+                .font(style.numberFont(12)).foregroundColor(style.text)
                 .frame(width: 52, alignment: .trailing)
                 .padding(.vertical, 3)
                 .padding(.horizontal, 8)
                 .overlay(
                     // A box, because this is a field you can type into — the
                     // border is what says so.
-                    Rectangle().stroke(TerminalPalette.rule, lineWidth: 1)
+                    Rectangle().stroke(style.rule, lineWidth: 1)
                 )
-            Text(unit).font(mono).foregroundColor(TerminalPalette.dim)
+            Text(unit).font(mono).foregroundColor(style.dim)
                 .frame(width: 26, alignment: .leading)
             Spacer(minLength: 0)
         }
@@ -362,7 +584,7 @@ struct TerminalDesignView: View {
     }
 
     private func statement(_ text: String) -> some View {
-        Text(text).font(mono).foregroundColor(TerminalPalette.dim)
+        Text(text).font(mono).foregroundColor(style.dim)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -377,6 +599,7 @@ struct TerminalDesignView: View {
 private struct TerminalSlider: View {
     let value: Double
     let range: ClosedRange<Double>
+    let style: PreviewStyle
     let set: (Double) -> Void
 
     var body: some View {
@@ -388,16 +611,23 @@ private struct TerminalSlider: View {
             let x = travel * CGFloat(fraction)
 
             ZStack(alignment: .leading) {
-                Rectangle()
-                    .fill(TerminalPalette.rule)
-                    .frame(height: 1)
-                Rectangle()
-                    .fill(TerminalPalette.accent.opacity(0.55))
-                    .frame(width: x + knob / 2, height: 1)
-                Rectangle()
-                    .fill(TerminalPalette.accent)
-                    .frame(width: knob, height: knob)
-                    .offset(x: x)
+                Capsule()
+                    .fill(style.rule)
+                    .frame(height: style.monospaced ? 1 : 3)
+                Capsule()
+                    .fill(style.accent.opacity(style.monospaced ? 0.55 : 1))
+                    .frame(width: x + knob / 2, height: style.monospaced ? 1 : 3)
+                // A square in a monospaced setting, a disc elsewhere: the knob
+                // should be made of the same geometry as everything around it.
+                Group {
+                    if style.monospaced {
+                        Rectangle().fill(style.accent)
+                    } else {
+                        Circle().fill(.white).shadow(radius: 1)
+                    }
+                }
+                .frame(width: knob, height: knob)
+                .offset(x: x)
             }
             .frame(height: geometry.size.height, alignment: .center)
             .contentShape(Rectangle())

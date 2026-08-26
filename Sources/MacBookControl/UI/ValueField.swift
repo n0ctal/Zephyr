@@ -68,7 +68,11 @@ struct ValueField: View {
     static func tickStep(range: ClosedRange<Double>, step: Double) -> Double? {
         let span = range.upperBound - range.lowerBound
         guard step > 0 else { return nil }
-        return span / step <= 40 ? step : nil
+        // Sixteen, not forty. Forty ticks under a 40 °C range is a picket
+        // fence: the marks stop being readable long before they stop being
+        // drawable, and the number beside the slider is what anyone uses to
+        // hit an exact value anyway.
+        return span / step <= 16 ? step : nil
     }
 
     private func format(_ value: Double) -> String {

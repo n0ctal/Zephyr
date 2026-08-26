@@ -145,6 +145,14 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "menubar.memoryStyle") }
     }
 
+    /// Which appearance the window takes. "System" is the neutral option and
+    /// the default: an app that ignores the system setting is the one that
+    /// looks out of place.
+    static var appearance: String {
+        get { d.string(forKey: "window.appearance") ?? "system" }
+        set { d.set(newValue, forKey: "window.appearance") }
+    }
+
     // MARK: Cooling
 
     /// Manual RPM per fan index, or nil for the curve. Stored as a dictionary
