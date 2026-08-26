@@ -163,11 +163,26 @@ final class DisplayControl {
                     pixelWidth: mode.pixelWidth, refreshHz: Int(mode.refreshRate))
     }
 
+    /// The mode in force before the last change, so it can be put back.
+    private var modeBeforeChange: [CGDirectDisplayID: CGDisplayMode] = [:]
+    private var revertTimer: Timer?
+
+    /// True while a change is waiting to be confirmed.
+    private(set) var awaitingConfirmation: CGDirectDisplayID?
+
     /// Switches resolution inside a configuration transaction, so the change
     /// lands in one step rather than as a sequence the window server has to
     /// animate through.
+    ///
+    /// The old mode is kept and put back automatically unless `confirm()` is
+    /// called within `revertAfter` seconds. A display can be told to use a mode
+    /// it cannot actually show — the panel goes black, and the button that
+    /// would undo it is on the screen that just went dark. macOS guards its own
+    /// Displays pane this way for the same reason, and a utility that changes
+    /// resolutions without the guard is strictly more dangerous than the system
+    /// tool it replaces.
     @discardableResult
-    func apply(_ target: Mode, to display: CGDirectDisplayID) -> Bool {
+    func apply(_ target: Mode, to display: CGDirectDisplayID, revertAfter: TimeInterval = 15) -> Bool {
         let options = [kCGDisplayShowDuplicateLowResolutionModes as String: true] as CFDictionary
         guard let raw = CGDisplayCopyAllDisplayModes(display, options) as? [CGDisplayMode],
               let match = raw.first(where: {
@@ -176,12 +191,104 @@ final class DisplayControl {
               })
         else { return false }
 
+        let previous = CGDisplayCopyDisplayMode(display)
+
         var config: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&config) == .success else { return false }
         CGConfigureDisplayWithDisplayMode(config, display, match, nil)
         // Only for this login session: a resolution that turns out to be
         // unreadable should not survive a restart, which is the one way back.
-        return CGCompleteDisplayConfiguration(config, CGConfigureOption.forSession) == .success
+        let ok = CGCompleteDisplayConfiguration(config, CGConfigureOption.forSession) == .success
+        guard ok else { return false }
+
+        if let previous = previous, revertAfter > 0 {
+            modeBeforeChange[display] = previous
+            awaitingConfirmation = display
+            revertTimer?.invalidate()
+            let timer = Timer.scheduledTimer(withTimeInterval: revertAfter, repeats: false) { [weak self] _ in
+                self?.revert(display)
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            revertTimer = timer
+        }
+        return true
+    }
+
+    /// Keeps the new mode. Called when the user confirms they can still see.
+    func confirm() {
+        revertTimer?.invalidate()
+        revertTimer = nil
+        awaitingConfirmation = nil
+        modeBeforeChange.removeAll()
+    }
+
+    /// Puts the previous mode back.
+    func revert(_ display: CGDirectDisplayID) {
+        revertTimer?.invalidate()
+        revertTimer = nil
+        awaitingConfirmation = nil
+        guard let previous = modeBeforeChange.removeValue(forKey: display) else { return }
+        var config: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&config) == .success else { return }
+        CGConfigureDisplayWithDisplayMode(config, display, previous, nil)
+        _ = CGCompleteDisplayConfiguration(config, CGConfigureOption.forSession)
+    }
+
+    // MARK: Displays coming and going
+
+    /// Called whenever a display is attached, removed or reconfigured.
+    var onConfigurationChange: (() -> Void)?
+
+    /// Starts watching. Polling for this was wrong in two ways: it noticed a
+    /// display leaving up to five seconds late, and five seconds is long
+    /// enough to be stranded.
+    func startWatchingConfiguration() {
+        guard !isWatching else { return }
+        isWatching = true
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        CGDisplayRegisterReconfigurationCallback({ _, flags, userInfo in
+            guard let userInfo = userInfo else { return }
+            let control = Unmanaged<DisplayControl>.fromOpaque(userInfo).takeUnretainedValue()
+            // Only the settled state matters; the "begin" phase fires before
+            // anything has actually changed.
+            guard flags.contains(.setModeFlag) || flags.contains(.addFlag)
+                    || flags.contains(.removeFlag) || flags.contains(.disabledFlag)
+                    || flags.contains(.enabledFlag) else { return }
+            DispatchQueue.main.async { control.handleConfigurationChange() }
+        }, context)
+    }
+
+    private var isWatching = false
+
+    private func handleConfigurationChange() {
+        // A display left while a resolution change on another one was still
+        // waiting to be confirmed: nobody is going to click anything now, so
+        // put it back rather than leaving a mode nobody agreed to.
+        if let pending = awaitingConfirmation, !activeDisplayIDs().contains(pending) {
+            revert(pending)
+        }
+        onConfigurationChange?()
+    }
+
+    private func activeDisplayIDs() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
+        return ids
+    }
+
+    /// Whether turning this display off would leave the machine with none.
+    ///
+    /// This is the rule that prevents the failure people report of other
+    /// display utilities: switch the built-in panel off while an external one
+    /// is attached, unplug the external, and there is now nowhere to draw the
+    /// window that would switch the built-in back on. The only way out is a
+    /// restart. Zephyr has no such switch yet — and when it gets one, it goes
+    /// through here, and the watcher above re-enables the panel the moment the
+    /// external display leaves.
+    func canSafelyDisable(_ display: CGDirectDisplayID) -> Bool {
+        activeDisplayIDs().filter { $0 != display }.isEmpty == false
     }
 
     deinit { clearAllDimming() }

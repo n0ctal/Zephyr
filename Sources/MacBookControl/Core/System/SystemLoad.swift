@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import IOKit
 
 /// Processor load per logical core, and memory pressure.
 ///
@@ -8,6 +9,12 @@ import Foundation
 /// the answer, which is why this holds the previous sample rather than being
 /// a free function.
 final class SystemLoad {
+    struct Disk {
+        let usedBytes: UInt64
+        let totalBytes: UInt64
+        var fraction: Double { totalBytes > 0 ? Double(usedBytes) / Double(totalBytes) : 0 }
+    }
+
     struct Snapshot {
         /// One entry per logical core, 0...1. Sixteen of them on this machine.
         let perCore: [Double]
@@ -15,6 +22,11 @@ final class SystemLoad {
         /// Bytes.
         let memoryUsed: UInt64
         let memoryTotal: UInt64
+        /// Integrated GPU busy fraction, 0...1. The discrete card reports
+        /// nothing while it is asleep, which is the usual state and not a
+        /// failure — so this follows whichever accelerator is answering.
+        let gpuFraction: Double?
+        let disk: Disk?
         var memoryFraction: Double {
             memoryTotal > 0 ? Double(memoryUsed) / Double(memoryTotal) : 0
         }
@@ -60,7 +72,52 @@ final class SystemLoad {
         }
         let total = perCore.isEmpty ? 0 : perCore.reduce(0, +) / Double(perCore.count)
         return Snapshot(perCore: perCore, total: total,
-                        memoryUsed: memoryUsed(), memoryTotal: Self.memoryTotal)
+                        memoryUsed: memoryUsed(), memoryTotal: Self.memoryTotal,
+                        gpuFraction: gpuUtilisation(), disk: Self.diskUsage())
+    }
+
+    /// Busy fraction from the graphics accelerator.
+    ///
+    /// `PerformanceStatistics` is where macOS publishes this; there is no
+    /// public API. The frequency is deliberately not read from here — the
+    /// dictionary does not contain one on this hardware, and a number that is
+    /// not there cannot be shown honestly.
+    private func gpuUtilisation() -> Double? {
+        var iterator: io_iterator_t = 0
+        // kIOMainPortDefault is macOS 12; the deprecated spelling is what
+        // works on the oldest system this still supports, and they are the
+        // same port.
+        let port: mach_port_t = kIOMasterPortDefault
+        guard IOServiceGetMatchingServices(port,
+                                           IOServiceMatching("IOAccelerator"),
+                                           &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+
+        var best: Double?
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer {
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+            var raw: Unmanaged<CFMutableDictionary>?
+            guard IORegistryEntryCreateCFProperties(service, &raw, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+                  let props = raw?.takeRetainedValue() as? [String: Any],
+                  let stats = props["PerformanceStatistics"] as? [String: Any],
+                  let used = stats["Device Utilization %"] as? Int else { continue }
+            // The busiest accelerator wins: with the discrete card awake both
+            // answer, and the one doing the work is the interesting one.
+            best = max(best ?? 0, Double(used) / 100)
+        }
+        return best
+    }
+
+    static func diskUsage() -> Disk? {
+        guard let attributes = try? FileManager.default.attributesOfFileSystem(forPath: "/"),
+              let total = (attributes[.systemSize] as? NSNumber)?.uint64Value,
+              let free = (attributes[.systemFreeSize] as? NSNumber)?.uint64Value,
+              total > 0 else { return nil }
+        return Disk(usedBytes: total > free ? total - free : 0, totalBytes: total)
     }
 
     // MARK: Sources

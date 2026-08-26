@@ -169,6 +169,14 @@ final class AppController: NSObject, NSMenuDelegate {
     /// by hand, which kept catching whatever else was on the screen. An
     /// offscreen render is exact and involves nobody's desktop.
     func dumpDesignPreview(to path: String) {
+        // Load is a rate and needs two samples; rendering before the second one
+        // lands shows dashes where the numbers will be, which is a picture of
+        // the render's timing rather than of the design.
+        // Wait for the rate to exist rather than for a guessed interval.
+        let deadline = Date().addingTimeInterval(8)
+        while telemetry.load == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
         let view = TerminalDesignView(registry: registry, telemetry: telemetry)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(x: 0, y: 0, width: 900, height: 640)

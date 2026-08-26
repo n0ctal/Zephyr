@@ -140,6 +140,11 @@ struct BatteryStatus {
     let healthPercent: Int?
     let cycleCount: Int?
     let power: PowerDraw?
+    /// Minutes until empty, when the system is willing to estimate. It answers
+    /// 65535 — "do not know" — whenever the machine is on the charger or the
+    /// reading has not settled, and that is reported as nil rather than as a
+    /// wildly wrong number.
+    let minutesRemaining: Int?
 
     var stateLabel: String {
         if isCharging { return "charging" }

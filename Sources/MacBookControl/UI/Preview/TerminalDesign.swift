@@ -133,43 +133,71 @@ struct TerminalDesignView: View {
         VStack(alignment: .leading, spacing: 3) {
             Rectangle().fill(TerminalPalette.rule).frame(height: 1)
                 .padding(.bottom, 6)
-            if let cpu = telemetry.cpuTemperature {
-                statusLine("CPU", String(format: "%.0f°C", cpu.celsius))
-            }
-            if let hottest = telemetry.temperatures.max(by: { $0.celsius < $1.celsius }),
-               hottest.key != telemetry.cpuTemperature?.key {
-                statusLine(String(hottest.label.prefix(3)).uppercased(),
-                           String(format: "%.0f°C", hottest.celsius))
-            }
-            ForEach(telemetry.fans, id: \.index) { fan in
-                statusLine("FAN\(fan.index + 1)", "\(fan.actualRPM) rpm")
-            }
-            if let battery = telemetry.battery {
-                statusLine("BAT", "\(battery.percent) %")
-                if let watts = battery.power?.batteryWatts, abs(watts) >= 0.1 {
-                    statusLine("PWR", String(format: "%+.1f W", watts))
-                }
-            }
-            if let load = telemetry.load {
-                statusLine("LOAD", "\(Int((load.total * 100).rounded())) %")
-                statusLine("RAM", "\(Int((load.memoryFraction * 100).rounded())) %")
+            ForEach(statusLines, id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(TerminalPalette.text)
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 18)
         .padding(.bottom, 4)
     }
 
-    private func statusLine(_ key: String, _ value: String) -> some View {
-        HStack(spacing: 0) {
-            Text(key)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(TerminalPalette.dim)
-                .frame(width: 52, alignment: .leading)
-            Text(value)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(TerminalPalette.text)
-            Spacer(minLength: 0)
+    /// Composed as whole strings so the columns line up by character count,
+    /// which is what a monospaced face is for. Laying them out as separate
+    /// views would need widths guessed per column and would drift the moment
+    /// a value gained a digit.
+    private var statusLines: [String] {
+        func pad(_ text: String, _ width: Int) -> String {
+            text.count >= width ? text : text + String(repeating: " ", count: width - text.count)
         }
+        func right(_ text: String, _ width: Int) -> String {
+            text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
+        }
+        func gb(_ bytes: UInt64) -> String {
+            String(format: "%.0f", Double(bytes) / 1_073_741_824)
+        }
+
+        var lines: [String] = []
+
+        // CPU: temperature, load, and the frequency the firmware is allowing.
+        // Not the live clock — macOS on Intel does not publish one — so this
+        // is the ceiling, and it is labelled that way in the section itself.
+        let cpuTemp = telemetry.cpuTemperature.map { String(format: "%.0f°C", $0.celsius) } ?? "—"
+        let cpuLoad = telemetry.load.map { "\(Int(($0.total * 100).rounded()))%" } ?? "—"
+        var cpuGHz = "—"
+        if let limit = telemetry.thermal?.speedLimitPercent, SystemLoad.nominalHz > 0 {
+            cpuGHz = String(format: "%.1f GHz", Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100)
+        }
+        lines.append(pad("CPU", 5) + right(cpuTemp, 6) + right(cpuLoad, 6) + right(cpuGHz, 9))
+
+        // GPU: temperature and load. There is no frequency — the accelerator
+        // does not publish one on this hardware, and a dash is more honest
+        // than a number that came from somewhere else.
+        let gpuTemp = telemetry.temperatures.first { $0.key == "TG0P" }
+            .map { String(format: "%.0f°C", $0.celsius) } ?? "—"
+        let gpuLoad = telemetry.load?.gpuFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
+        lines.append(pad("GPU", 5) + right(gpuTemp, 6) + right(gpuLoad, 6) + right("—", 9))
+
+        if let load = telemetry.load, load.memoryTotal > 0 {
+            let ram = "\(gb(load.memoryUsed))/\(gb(load.memoryTotal)) GB"
+            lines.append(pad("RAM", 5) + right(ram, 12) + right("\(Int((load.memoryFraction * 100).rounded()))%", 9))
+        }
+        // Read directly rather than out of the load snapshot: disk usage is a
+        // single reading and has no business waiting for the second poll that
+        // a *rate* like CPU load needs.
+        if let disk = SystemLoad.diskUsage() {
+            let rom = "\(gb(disk.usedBytes))/\(gb(disk.totalBytes)) GB"
+            lines.append(pad("ROM", 5) + right(rom, 12) + right("\(Int((disk.fraction * 100).rounded()))%", 9))
+        }
+        if let battery = telemetry.battery {
+            // Time is only shown while the system is willing to estimate it —
+            // on the charger there is nothing to count down to.
+            let remaining = battery.minutesRemaining.map { "\($0 / 60)h \($0 % 60)m" }
+                ?? (battery.isCharging ? "charging" : "—")
+            lines.append(pad("BAT", 5) + right("\(battery.percent)%", 6) + right(remaining, 15))
+        }
+        return lines
     }
 
     // MARK: Content

@@ -27,6 +27,11 @@ final class DisplayFeature: Feature {
     }
 
     override func activate() {
+        control.onConfigurationChange = { [weak self] in
+            self?.refresh()
+            self?.objectWillChange.send()
+        }
+        control.startWatchingConfiguration()
         refresh()
         guard refreshTimer == nil else { return }
         // Displays come and go. Five seconds is quick enough that plugging a
@@ -77,6 +82,19 @@ final class DisplayFeature: Feature {
 
     func currentMode(for display: CGDirectDisplayID) -> DisplayControl.Mode? {
         control.currentMode(for: display)
+    }
+
+    var awaitingConfirmation: CGDirectDisplayID? { control.awaitingConfirmation }
+
+    func confirmResolution() {
+        control.confirm()
+        objectWillChange.send()
+    }
+
+    func revertResolution() {
+        if let display = control.awaitingConfirmation { control.revert(display) }
+        screens = control.screens()
+        objectWillChange.send()
     }
 
     func apply(_ mode: DisplayControl.Mode, to display: CGDirectDisplayID) {
@@ -146,7 +164,16 @@ private struct ScreenControls: View {
                     Text(mode.label).tag(mode.id)
                 }
             }
-            Text("A resolution set here lasts for this login session only. If one turns out to be unreadable, restarting is the way back.")
+            if feature.awaitingConfirmation == screen.id {
+                HStack {
+                    Text("Keep this resolution? It goes back on its own in a few seconds.")
+                        .font(.caption).foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Keep") { feature.confirmResolution() }
+                    Button("Undo") { feature.revertResolution() }
+                }
+            }
+            Text("A resolution is put back by itself unless you confirm you can still see. A panel can be told to use a mode it cannot show, and the button that would undo it is on the screen that just went dark.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

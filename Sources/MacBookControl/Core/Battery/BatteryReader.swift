@@ -23,7 +23,8 @@ final class BatteryReader {
             isPluggedIn: props["ExternalConnected"] as? Bool ?? false,
             healthPercent: health(props),
             cycleCount: props["CycleCount"] as? Int,
-            power: power(batteryWatts: batteryWatts(props))
+            power: power(batteryWatts: batteryWatts(props)),
+            minutesRemaining: minutesRemaining(props)
         )
     }
 
@@ -52,6 +53,37 @@ final class BatteryReader {
         guard let milliAmps = props["Amperage"] as? Int,
               let milliVolts = props["Voltage"] as? Int else { return nil }
         return Double(milliAmps) * Double(milliVolts) / 1_000_000
+    }
+
+    /// How long the battery has left, or how long until it is full.
+    ///
+    /// The system's own estimate is asked first, but it answers 65535 — "do
+    /// not know" — far more often than it answers a number: on the charger,
+    /// after a wake, whenever the reading has not settled. So when it declines,
+    /// the figure is worked out instead: charge remaining divided by the
+    /// current flowing. Both are already read for other purposes and the
+    /// arithmetic is exact, which beats waiting for the system to feel ready.
+    private func minutesRemaining(_ props: [String: Any]) -> Int? {
+        for key in ["TimeRemaining", "AvgTimeToEmpty", "InstantTimeToEmpty"] {
+            if let value = props[key] as? Int, value > 0, value < 65535 { return value }
+        }
+
+        guard let milliAmps = props["Amperage"] as? Int, milliAmps != 0 else { return nil }
+        let current = abs(Double(milliAmps))
+
+        if milliAmps < 0 {
+            // Discharging: what is left, over what is being drawn.
+            guard let charge = (props["AppleRawCurrentCapacity"] as? Int)
+                    ?? (props["CurrentCapacity"] as? Int), charge > 0 else { return nil }
+            return Int((Double(charge) / current) * 60)
+        }
+        // Charging: the gap to full, over what is going in.
+        guard let charge = (props["AppleRawCurrentCapacity"] as? Int)
+                ?? (props["CurrentCapacity"] as? Int),
+              let full = (props["AppleRawMaxCapacity"] as? Int)
+                ?? (props["MaxCapacity"] as? Int),
+              full > charge else { return nil }
+        return Int((Double(full - charge) / current) * 60)
     }
 
     private func power(batteryWatts: Double?) -> PowerDraw? {

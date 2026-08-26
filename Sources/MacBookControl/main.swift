@@ -454,7 +454,7 @@ func runIconDump() {
     for (name, percent, charging, plugged, role) in cases {
         MenuBarComposer.forcedFillRole = role
         let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
-                                   healthPercent: 82, cycleCount: 393, power: nil)
+                                   healthPercent: 82, cycleCount: 393, power: nil, minutesRemaining: nil)
         for withNumber in [false, true] {
             guard let image = MenuBarComposer.batteryImage(status, showingPercentage: withNumber,
                                                           darkMenuBar: false),
@@ -479,7 +479,7 @@ func runIconDump() {
         let (name, percent, charging, plugged, role) = entry
         MenuBarComposer.forcedFillRole = role
         let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
-                                   healthPercent: 82, cycleCount: 393, power: nil)
+                                   healthPercent: 82, cycleCount: 393, power: nil, minutesRemaining: nil)
         let y = sheetSize.height - CGFloat(index + 1) * rowHeight
         (name as NSString).draw(at: NSPoint(x: 8, y: y + 6), withAttributes: [
             .font: NSFont.systemFont(ofSize: 11),

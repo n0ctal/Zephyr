@@ -42,6 +42,7 @@ enum SelfTest {
         batteryColours()
         powerLimitBounds()
         helperStates()
+        displaySafety()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -410,6 +411,39 @@ enum SelfTest {
                "an unauthorised one does")
         expect(HelperState.notAuthorized.summary != HelperState.notInstalled.summary,
                "the two failures do not read the same")
+    }
+
+    // MARK: Display safety
+
+    private static func displaySafety() {
+        // The rule that prevents the failure people report of other display
+        // utilities: switch the built-in panel off with an external attached,
+        // unplug the external, and there is nowhere left to draw the window
+        // that would switch it back on. Only a restart recovers.
+        let control = DisplayControl()
+        let screens = control.screens()
+        expect(!screens.isEmpty, "at least one display is present")
+
+        if let only = screens.first, screens.count == 1 {
+            expect(!control.canSafelyDisable(only.id),
+                   "the last remaining display may never be switched off")
+        }
+        for screen in screens where screens.count > 1 {
+            expect(control.canSafelyDisable(screen.id),
+                   "with more than one display, any single one may be switched off")
+        }
+
+        // Modes must always be offered against a display that exists, and the
+        // list must contain the one currently in use — a picker that cannot
+        // show the current state is how a wrong choice gets made.
+        if let first = screens.first {
+            let modes = control.modes(for: first.id)
+            expect(!modes.isEmpty, "the display offers modes")
+            if let current = control.currentMode(for: first.id) {
+                expect(modes.contains { $0.id == current.id },
+                       "the current mode is among those offered")
+            }
+        }
     }
 
     // MARK: Fan curve
