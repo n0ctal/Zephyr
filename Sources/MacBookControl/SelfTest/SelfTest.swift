@@ -49,6 +49,7 @@ enum SelfTest {
         sectionCoverage()
         statusAlignment()
         terminalSliderMath()
+        fanPercentages()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -595,6 +596,31 @@ enum SelfTest {
         expectEqual(at(189, 10...110, 7), 108,
                     "while everything short of the end still lands on the step")
         expectEqual(at(100, 45...45, 1), 45, "a range of one value has one answer")
+    }
+
+    // MARK: Fans by percentage
+
+    private static func fanPercentages() {
+        // The two fans in this machine, which do not share a range — the whole
+        // reason the control that drives both at once is a share and not a
+        // speed.
+        func left(_ percent: Double) -> Int {
+            CoolingFeature.targetRPM(percent: percent, min: 1836, max: 5616)
+        }
+        func right(_ percent: Double) -> Int {
+            CoolingFeature.targetRPM(percent: percent, min: 1800, max: 5200)
+        }
+        expectEqual(left(0), 1836, "0 % is the fan's own minimum, not a stop")
+        expectEqual(right(0), 1800, "which differs per fan")
+        expectEqual(left(100), 5616, "100 % is its own maximum")
+        expectEqual(right(100), 5200, "which also differs per fan")
+        expectEqual(left(50), 3726, "and halfway is halfway along its own range")
+        expectEqual(right(50), 3500, "for each of them separately")
+        expectEqual(left(-20), 1836, "a percentage below zero clamps")
+        expectEqual(left(150), 5616, "and one above a hundred clamps too")
+        // A fan reporting the same minimum and maximum must not divide by zero.
+        expectEqual(CoolingFeature.targetRPM(percent: 60, min: 2000, max: 2000), 2000,
+                    "a fan with no range at all still answers its one speed")
     }
 
     // MARK: Fan curve

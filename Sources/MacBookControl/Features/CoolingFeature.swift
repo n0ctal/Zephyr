@@ -81,6 +81,46 @@ final class CoolingFeature: Feature {
         }
     }
 
+    /// Every fan at the same share of its own range.
+    ///
+    /// A share rather than a speed, because the two fans in this machine do not
+    /// have the same range — 1836…5616 and 1800…5200 here — so "5000 rpm on
+    /// both" is not the same amount of cooling on each, while "75 %" is.
+    ///
+    /// Zero is each fan's own minimum, not a stop. These fans cannot be
+    /// stopped: the firmware refuses a target below the minimum it reports,
+    /// and a fan that could be stopped from a settings window would be the one
+    /// control in this app able to cook the machine.
+    func setAllFans(percent: Double) {
+        for fan in telemetry.fans {
+            setManual(fan: fan.index,
+                      rpm: Self.targetRPM(percent: percent,
+                                          min: fan.minRPM, max: fan.maxRPM))
+        }
+    }
+
+    /// Pure, and separate, because it is the arithmetic that decides how fast
+    /// a fan actually turns.
+    static func targetRPM(percent: Double, min minRPM: Int, max maxRPM: Int) -> Int {
+        let fraction = Swift.min(Swift.max(percent, 0), 100) / 100
+        let span = Double(Swift.max(0, maxRPM - minRPM))
+        return Int((Double(minRPM) + fraction * span).rounded())
+    }
+
+    /// Where the fans actually are, as a share of their ranges — not the last
+    /// percentage typed. Read back from the targets themselves so that setting
+    /// one fan by hand below moves this too, instead of leaving a slider that
+    /// disagrees with the machine.
+    var allFansPercent: Double {
+        let fractions = telemetry.fans.compactMap { fan -> Double? in
+            guard fan.maxRPM > fan.minRPM else { return nil }
+            let rpm = manualRPM[fan.index] ?? fan.actualRPM
+            return Double(rpm - fan.minRPM) / Double(fan.maxRPM - fan.minRPM)
+        }
+        guard !fractions.isEmpty else { return 0 }
+        return min(max(fractions.reduce(0, +) / Double(fractions.count) * 100, 0), 100)
+    }
+
     func setManual(fan: Int, rpm: Int) {
         manualRPM[fan] = rpm
         guard isEnabled, mode == "manual" else { return }
@@ -125,6 +165,8 @@ private struct CoolingView: View {
             }
 
             if feature.mode == "manual" {
+                allFans
+                Divider()
                 ForEach(telemetry.fans, id: \.index) { fan in
                     IntField(title: "Fan \(fan.index + 1) — \(fan.actualRPM) rpm now",
                              range: fan.minRPM...fan.maxRPM,
@@ -138,6 +180,28 @@ private struct CoolingView: View {
 
             Divider()
             ThrottleReadout(telemetry: telemetry)
+        }
+    }
+
+    /// Both fans at once, in percent. The rows underneath stay in revolutions,
+    /// because a fan's own minimum and maximum are the only numbers that make
+    /// a revolution count mean anything — and those differ per fan, which is
+    /// exactly why the control that drives both of them at once is a share.
+    private var allFans: some View {
+        let percent = Binding(get: { feature.allFansPercent },
+                              set: { feature.setAllFans(percent: $0) })
+        return VStack(alignment: .leading, spacing: 8) {
+            SegmentedChoice(label: "All fans",
+                            selection: Binding(
+                                get: { Int(percent.wrappedValue.rounded()) },
+                                set: { feature.setAllFans(percent: Double($0)) }),
+                            options: [("0%", 0), ("25%", 25), ("50%", 50),
+                                      ("75%", 75), ("100%", 100)])
+            ValueField(title: "All fans", range: 0...100, step: 1,
+                       suffix: "%", value: percent)
+            Text("0 % is each fan's own minimum rather than a stop: the firmware refuses a target below the minimum it reports, and a fan a settings window could stop would be the one control here able to cook the machine.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
