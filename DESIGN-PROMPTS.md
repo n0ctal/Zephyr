@@ -472,3 +472,62 @@ characters, a blinking cursor, scanlines, CRT curvature, a prompt symbol like $
 or >, glow or bloom on the text, or bright phosphor green. Any of these turn a
 restrained panel into a costume.
 ```
+
+---
+
+# Третий заход: информативность
+
+Направление выбрано — терминальная панель с боковым списком. Она уже собрана
+живьём (`--preview-design`), поэтому дальше не «нарисуй окно», а «разберись с
+одним вопросом»: что показывает блок состояния и чем он отличается от строки
+меню. Промт описывает существующее и просит варианты только по этой оси.
+
+```
+I have a working macOS utility called Zephyr and its design is already decided.
+Do not redesign it. I need variations on one specific question.
+
+WHAT EXISTS. A window 900×640, true black (#0B0B0B), everything monospaced,
+one muted green accent (#7DD48F). A 236px sidebar on the left lists seven
+sections — Thermals, Graphics, Battery & Sleep, Display, Input, Profiles,
+Menu Bar — each with a [x] or [ ] switch at its right edge, except Menu Bar
+which has none because it touches no hardware. The selected row is marked by a
+green "›" and green text, no fill. At the foot of the sidebar, above the window
+edge and under a hairline rule, sits a status block: key on the left in grey,
+value on the right in white, one line each — CPU 49°C, FAN1 1832 rpm, FAN2 1711
+rpm, BAT 100 %, LOAD 12 %, RAM 57 %.
+
+The right pane shows the selected section. Headings are green capitals with wide
+letter spacing (FANS, POWER, THROTTLING), each under a hairline rule. Settings
+are rows: label left, a thin slider with a small square green handle, a bordered
+numeric field, a grey unit. Selection in a segmented choice is written with
+brackets: [ Temperature curve ]. Statements are plain grey sentences.
+
+THE QUESTION. This app also puts a compact readout in the macOS menu bar, and
+the user chooses what goes there — temperature, fan, battery, watts, CPU speed,
+load, memory. So the status block at the foot of the sidebar risks repeating
+what is already three centimetres above it, and for a user who has put
+everything in the menu bar it may say nothing new.
+
+Give me five variations of the status block, and only the status block. The rest
+of the window stays exactly as described. For each, say in one sentence what
+problem it solves.
+
+Constraints for every variation:
+  - monospaced, the same palette, no new colours
+  - it must fit in a 236px column and be readable at a glance
+  - no graphs with axes, no gauges, no sparkline that needs a legend
+  - it must be honest about units and never invent a reading
+
+Directions worth considering, but propose your own too:
+  - the full reading, deliberately overlapping the menu bar, because a summary
+    and its detail are supposed to agree
+  - only what the menu bar does NOT show, so the two never repeat
+  - not values at all, but what has changed since the app started: peaks, how
+    long the CPU has been capped, how far the battery has moved
+  - a single sentence in plain words rather than a table of numbers
+  - nothing at all, and the argument for why the space is better left empty
+
+Do NOT draw: the whole window again, a light version, top tabs, icons, coloured
+status pills, ASCII art, box-drawing borders, a blinking cursor, or bright
+phosphor green.
+```

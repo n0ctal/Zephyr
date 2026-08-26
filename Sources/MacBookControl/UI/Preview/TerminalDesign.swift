@@ -85,6 +85,7 @@ struct TerminalDesignView: View {
                 sidebarRow(section)
             }
             Spacer()
+            statusBlock
         }
         .padding(.vertical, 18)
         .frame(width: 236, alignment: .leading)
@@ -114,6 +115,61 @@ struct TerminalDesignView: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .onTapGesture { selection = section }
+    }
+
+    /// The full reading, at the foot of the sidebar.
+    ///
+    /// It overlaps the menu bar, and that is the point rather than a fault:
+    /// the menu bar is a glance and holds five or six values chosen by hand,
+    /// while this is everything the machine is reporting — both fans, every
+    /// temperature, the power split three ways. A summary and its detail are
+    /// supposed to agree.
+    ///
+    /// The alternative — showing only what the menu bar does not — was
+    /// considered and dropped: the contents would then change whenever the
+    /// menu bar is edited, and a panel that rearranges itself for reasons
+    /// elsewhere is harder to read than one that repeats a number.
+    private var statusBlock: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Rectangle().fill(TerminalPalette.rule).frame(height: 1)
+                .padding(.bottom, 6)
+            if let cpu = telemetry.cpuTemperature {
+                statusLine("CPU", String(format: "%.0f°C", cpu.celsius))
+            }
+            if let hottest = telemetry.temperatures.max(by: { $0.celsius < $1.celsius }),
+               hottest.key != telemetry.cpuTemperature?.key {
+                statusLine(String(hottest.label.prefix(3)).uppercased(),
+                           String(format: "%.0f°C", hottest.celsius))
+            }
+            ForEach(telemetry.fans, id: \.index) { fan in
+                statusLine("FAN\(fan.index + 1)", "\(fan.actualRPM) rpm")
+            }
+            if let battery = telemetry.battery {
+                statusLine("BAT", "\(battery.percent) %")
+                if let watts = battery.power?.batteryWatts, abs(watts) >= 0.1 {
+                    statusLine("PWR", String(format: "%+.1f W", watts))
+                }
+            }
+            if let load = telemetry.load {
+                statusLine("LOAD", "\(Int((load.total * 100).rounded())) %")
+                statusLine("RAM", "\(Int((load.memoryFraction * 100).rounded())) %")
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 4)
+    }
+
+    private func statusLine(_ key: String, _ value: String) -> some View {
+        HStack(spacing: 0) {
+            Text(key)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(TerminalPalette.dim)
+                .frame(width: 52, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(TerminalPalette.text)
+            Spacer(minLength: 0)
+        }
     }
 
     // MARK: Content
