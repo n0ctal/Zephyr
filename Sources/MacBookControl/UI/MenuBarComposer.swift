@@ -65,6 +65,20 @@ enum MenuBarComposer {
         }
     }
 
+    /// Which of the three powers the field shows. The machine reports all
+    /// three and they answer different questions: what the battery is doing,
+    /// what the machine is drawing, what the charger is supplying.
+    enum PowerStyle: String, CaseIterable {
+        case battery, system, adapter
+        var label: String {
+            switch self {
+            case .battery: return "Battery flow"
+            case .system: return "System draw"
+            case .adapter: return "From the charger"
+            }
+        }
+    }
+
     enum MemoryStyle: String, CaseIterable {
         case off, percent, used
         var label: String {
@@ -189,11 +203,25 @@ enum MenuBarComposer {
             }
 
         case .power:
-            // Signed on purpose: the sign is the whole message. A plus means
-            // the battery is filling, a minus means it is carrying the
-            // machine, and the number alone cannot say which.
-            guard let watts = telemetry.battery?.power?.batteryWatts, abs(watts) >= 0.1 else { return [] }
-            return text(String(format: "%+.1f W", watts))
+            guard let draw = telemetry.battery?.power else { return [] }
+            switch Preferences.powerStyle {
+            case .battery:
+                // Signed on purpose: the sign is the whole message. A plus
+                // means the battery is filling, a minus that it is carrying
+                // the machine, and the number alone cannot say which.
+                //
+                // Shown even at zero. A field switched on that then displays
+                // nothing reads as broken — and "0.0 W" is the true answer for
+                // a full battery sitting on a charger.
+                guard let watts = draw.batteryWatts else { return [] }
+                return text(String(format: "%+.1f W", watts))
+            case .system:
+                guard let watts = draw.systemWatts else { return [] }
+                return text(String(format: "%.1f W", watts))
+            case .adapter:
+                guard let watts = draw.adapterWatts else { return [] }
+                return text(String(format: "%.1f W", watts))
+            }
 
         case .cpuSpeed:
             guard let limit = telemetry.thermal?.speedLimitPercent else { return [] }
@@ -377,11 +405,11 @@ enum MenuBarComposer {
 
     private static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool,
                                    darkMenuBar: Bool) -> NSImage {
-        let height: CGFloat = 13
-        // The same width either way. The phone widens the pill for the number,
-        // but in a menu bar that makes the battery tower over everything
-        // beside it; the digits are shrunk to fit instead.
-        let bodyWidth: CGFloat = 22
+        let height: CGFloat = 15
+        // Wide enough for the digits to be read, which is the point of putting
+        // them inside at all. The phone does the same: the number nearly fills
+        // the pill rather than hiding in it.
+        let bodyWidth: CGFloat = showingPercentage ? 30 : 23
         let capWidth: CGFloat = 2
         let capGap: CGFloat = 1.2
         let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
@@ -419,8 +447,8 @@ enum MenuBarComposer {
         // The cap follows the empty colour until the battery is full, which is
         // what the phone does.
         (fraction >= 1 ? paint : empty).setFill()
-        NSBezierPath(roundedRect: NSRect(x: bodyWidth + capGap, y: height / 2 - 2,
-                                         width: capWidth, height: 4),
+        NSBezierPath(roundedRect: NSRect(x: bodyWidth + capGap, y: height / 2 - 2.5,
+                                         width: capWidth, height: 5),
                      xRadius: 1, yRadius: 1).fill()
 
         if showingPercentage {
@@ -428,7 +456,9 @@ enum MenuBarComposer {
             // against both the filled part and the grey remainder, and against
             // a light or dark menu bar, without picking a colour for each case.
             let text = "\(battery.percent)" as NSString
-            let font = NSFont.systemFont(ofSize: battery.percent >= 100 ? 7.5 : 9, weight: .bold)
+            // Sized against the pill rather than fixed: three digits need to
+            // give a little, two do not.
+            let font = NSFont.systemFont(ofSize: battery.percent >= 100 ? 9.5 : 11, weight: .bold)
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
             let measured = text.size(withAttributes: attributes)
             let origin = NSPoint(x: (bodyWidth - measured.width) / 2,

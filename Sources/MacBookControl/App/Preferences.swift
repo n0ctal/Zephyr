@@ -122,22 +122,40 @@ enum Preferences {
     /// telling apart, a temperature does not — "T 55°" says nothing that "55°"
     /// did not, and every caption costs width in a bar that has none to spare.
     static var captionedMenuBarItems: Set<String> {
-        get { Set(d.stringArray(forKey: "menubar.captionedItems") ?? []) }
+        get {
+            seedCaptionsIfNeeded()
+            return Set(d.stringArray(forKey: "menubar.captionedItems") ?? [])
+        }
         set { d.set(Array(newValue), forKey: "menubar.captionedItems") }
     }
 
     static func menuBarItemIsCaptioned(_ item: MenuBarComposer.Item) -> Bool {
-        // Carried over from the single switch: everything captioned, or
-        // nothing, depending on what it was set to.
-        if d.object(forKey: "menubar.captionedItems") == nil {
-            return d.bool(forKey: "menubar.captions")
-        }
+        seedCaptionsIfNeeded()
         return captionedMenuBarItems.contains(item.rawValue)
+    }
+
+    /// Turns the old single switch into a set, once.
+    ///
+    /// Reading the fallback on every query was not enough: the first time one
+    /// caption was switched off, the set was written starting from empty —
+    /// because it did not exist yet — so removing one item removed all of
+    /// them. The set has to exist, holding the state that was in force, before
+    /// anything can be taken out of it.
+    private static func seedCaptionsIfNeeded() {
+        guard d.object(forKey: "menubar.captionedItems") == nil else { return }
+        let everything = d.bool(forKey: "menubar.captions")
+        d.set(everything ? MenuBarComposer.Item.allCases.map(\.rawValue) : [],
+              forKey: "menubar.captionedItems")
     }
 
     static var fanStyle: MenuBarComposer.FanStyle {
         get { MenuBarComposer.FanStyle(rawValue: d.string(forKey: "menubar.fanStyle") ?? "") ?? .rpm }
         set { d.set(newValue.rawValue, forKey: "menubar.fanStyle") }
+    }
+
+    static var powerStyle: MenuBarComposer.PowerStyle {
+        get { MenuBarComposer.PowerStyle(rawValue: d.string(forKey: "menubar.powerStyle") ?? "") ?? .battery }
+        set { d.set(newValue.rawValue, forKey: "menubar.powerStyle") }
     }
 
     static var batteryIcon: MenuBarComposer.BatteryIcon {

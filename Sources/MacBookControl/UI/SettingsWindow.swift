@@ -31,6 +31,9 @@ final class SettingsWindowController {
         // Remembers whatever size it is dragged to, so a preference about the
         // window is stated once rather than every launch.
         window.setFrameAutosaveName("ZephyrSettings")
+        // Applied again here: setting it during launch can be overwritten
+        // before the first window exists.
+        AppearanceControl.apply()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
@@ -285,7 +288,11 @@ private struct MenuBarTab: View {
                 ForEach(MenuBarComposer.MemoryStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
             }
         case .power:
-            Text("Plus while the battery is filling, minus while it is carrying the machine. The sign is the whole message.")
+            Picker("Shown as", selection: bind({ Preferences.powerStyle.rawValue },
+                                               { Preferences.powerStyle = .init(rawValue: $0) ?? .battery })) {
+                ForEach(MenuBarComposer.PowerStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+            }
+            Text("Battery flow is signed: plus while it fills, minus while it carries the machine — and 0.0 W for a full battery on a charger, which is the true answer rather than nothing at all.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         case .throttle:

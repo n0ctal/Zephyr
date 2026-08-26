@@ -43,6 +43,7 @@ enum SelfTest {
         powerLimitBounds()
         helperStates()
         displaySafety()
+        menuBarCaptions()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -449,6 +450,40 @@ enum SelfTest {
                        "the current mode is among those offered")
             }
         }
+    }
+
+    // MARK: Menu-bar captions
+
+    private static func menuBarCaptions() {
+        // The set has to exist, holding what was in force, before anything can
+        // be taken out of it. Without that, switching one caption off wrote a
+        // set starting from empty and removed every caption at once — which is
+        // exactly what was reported.
+        let defaults = UserDefaults.standard
+        let savedSet = defaults.object(forKey: "menubar.captionedItems")
+        let savedFlag = defaults.object(forKey: "menubar.captions")
+        defer {
+            defaults.set(savedSet, forKey: "menubar.captionedItems")
+            defaults.set(savedFlag, forKey: "menubar.captions")
+        }
+
+        // Upgrading from "everything captioned".
+        defaults.removeObject(forKey: "menubar.captionedItems")
+        defaults.set(true, forKey: "menubar.captions")
+        var set = Preferences.captionedMenuBarItems
+        expectEqual(set.count, MenuBarComposer.Item.allCases.count,
+                    "the old all-on switch becomes every item")
+        set.remove(MenuBarComposer.Item.memory.rawValue)
+        Preferences.captionedMenuBarItems = set
+        expect(Preferences.menuBarItemIsCaptioned(.cpuLoad),
+               "taking one caption off leaves the others alone")
+        expect(!Preferences.menuBarItemIsCaptioned(.memory), "and takes that one off")
+
+        // Upgrading from "nothing captioned".
+        defaults.removeObject(forKey: "menubar.captionedItems")
+        defaults.set(false, forKey: "menubar.captions")
+        expectEqual(Preferences.captionedMenuBarItems.count, 0,
+                    "the old all-off switch becomes no items")
     }
 
     // MARK: Fan curve
