@@ -233,7 +233,12 @@ struct SidebarSettingsView: View {
             Text("Zephyr")
                 .font(font(13, .medium))
                 .foregroundColor(palette.dim)
-                .padding(.leading, Self.trafficLightWidth)
+                // Against the far side of the sidebar, one button-margin in.
+                // Beside the buttons it was one more gap to argue about; at
+                // the other end there is only one, and it is the same 20
+                // points the buttons are inset by on their side.
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 20)
                 // Centred on the window buttons, which the system centres in
                 // the titlebar — and the titlebar is this tall because of the
                 // unified toolbar the window carries. No padding under it:
@@ -316,8 +321,12 @@ struct SidebarSettingsView: View {
                         .lineLimit(1)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
+            // Centred rather than padded. Every line is the same number of
+            // characters, so centring the block puts exactly the same gap on
+            // both sides — which a fixed inset cannot do, since it would have
+            // to know the width of a character to match the slack left over
+            // on the right.
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 14)
         }
     }

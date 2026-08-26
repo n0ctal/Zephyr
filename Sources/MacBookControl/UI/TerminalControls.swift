@@ -122,8 +122,10 @@ struct SegmentedChoice<Value: Hashable>: View {
             HStack(spacing: 10) {
                 if let label = label {
                     // The same column the drop-downs and the value rows use,
-                    // so every label in a section shares one right edge.
-                    Text(label)
+                    // so every label in a section shares one right edge — and
+                    // the same colon, since it is the same kind of statement:
+                    // this setting, then what it is set to.
+                    Text(label + ":")
                         .foregroundColor(palette.text)
                         .frame(width: TerminalMetrics.labelColumn, alignment: .trailing)
                 }
@@ -310,9 +312,14 @@ struct MenuChoice<Value: Hashable>: View {
         // brackets — the value reads as a value because of the colon in front
         // of it and the marker after it.
         Menu {
+            // The bracket style is set on the whole window and would reach
+            // these too — and a menu item is an NSMenuItem, which can render a
+            // label and nothing else. It took the first piece of that style's
+            // body and drew a column of "[" where the choices should be.
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 Button(option.0) { selection = option.1 }
             }
+            .buttonStyle(DefaultButtonStyle())
         } label: {
             Text(currentLabel)
                 .font(.system(size: 13, design: .monospaced))
