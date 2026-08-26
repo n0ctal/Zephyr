@@ -214,7 +214,7 @@ struct SidebarSettingsView: View {
         // feature views this file knows nothing about.
         .environment(\.terminalStyling, layout.monospaced)
         .environment(\.terminalPalette, palette)
-        .modifier(BracketToggles(on: layout.monospaced, palette: palette))
+        .modifier(TerminalControlStyles(on: layout.monospaced, palette: palette))
         // Without this the window's safe area keeps the whole hierarchy below
         // the title bar — which is why removing the title bar left a bare grey
         // strip where it used to be instead of the sidebar reaching the top.
@@ -233,10 +233,11 @@ struct SidebarSettingsView: View {
                 .font(font(13, .medium))
                 .foregroundColor(palette.dim)
                 .padding(.leading, Self.trafficLightWidth)
-                // Centred on the window buttons, which sit in the middle of a
-                // titlebar 28 points tall whether or not one is drawn.
-                .frame(height: 28)
-                .padding(.bottom, 10)
+                // Centred on the window buttons, which the system centres in
+                // the titlebar — and the titlebar is this tall because of the
+                // unified toolbar the window carries.
+                .frame(height: Self.titlebarHeight)
+                .padding(.bottom, 14)
 
             ForEach(SettingsSection.allCases) { section in
                 row(section)
@@ -253,6 +254,10 @@ struct SidebarSettingsView: View {
     /// titlebar view that does not exist to ask while the content is being
     /// laid out — and this number has not changed in a decade of macOS.
     private static let trafficLightWidth: CGFloat = 78
+
+    /// The height of a unified titlebar. Not a guess about a drawing: it is
+    /// the size AppKit gives that style, and the buttons are centred in it.
+    private static let titlebarHeight: CGFloat = 52
 
     private func row(_ item: SettingsSection) -> some View {
         // No switch in the list. It duplicated the one at the top of the
@@ -326,7 +331,8 @@ struct SidebarSettingsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(EdgeInsets(top: 34, leading: 24, bottom: 24, trailing: 24))
+            .padding(EdgeInsets(top: Self.titlebarHeight + 6, leading: 24,
+                                bottom: 24, trailing: 24))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -341,16 +347,18 @@ struct SidebarSettingsView: View {
 /// changes the design of whatever font each of them picked and leaves the size
 /// and weight alone, which is the only way to reach controls this file does
 /// not own.
-/// Applies the bracket switch to the whole hierarchy, or leaves the system's
-/// checkbox alone. Separate from the environment flag because a `ToggleStyle`
-/// cannot be chosen conditionally inside one modifier chain.
-struct BracketToggles: ViewModifier {
+/// Applies the bracket switch and the bracket button to the whole hierarchy,
+/// or leaves the system's own alone. Separate from the environment flag
+/// because a style cannot be chosen conditionally inside one modifier chain.
+struct TerminalControlStyles: ViewModifier {
     let on: Bool
     let palette: LayoutPalette
 
     @ViewBuilder func body(content: Content) -> some View {
         if on {
-            content.toggleStyle(BracketToggleStyle(palette: palette))
+            content
+                .toggleStyle(BracketToggleStyle(palette: palette))
+                .buttonStyle(BracketButtonStyle(palette: palette))
         } else {
             content
         }

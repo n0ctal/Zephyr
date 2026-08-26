@@ -114,6 +114,20 @@ if let index = arguments.firstIndex(of: "--dump-window"), index + 1 < arguments.
     }
 }
 
+if let index = arguments.firstIndex(of: "--dump-real-window"), index + 1 < arguments.count {
+    let path = arguments[index + 1]
+    let layout = arguments.first { $0.hasPrefix("--layout=") }
+        .flatMap { WindowLayout(rawValue: String($0.dropFirst("--layout=".count))) }
+        ?? .terminal
+    let strip = arguments.first { $0.hasPrefix("--strip=") }
+        .flatMap { Double(String($0.dropFirst("--strip=".count))) }
+        .map { CGFloat($0) } ?? 170
+    DispatchQueue.main.async {
+        controller.dumpRealWindow(to: path, layout: layout, strip: strip)
+        exit(0)
+    }
+}
+
 if arguments.contains("--preview-design") {
     DispatchQueue.main.async {
         controller.openDesignPreview()

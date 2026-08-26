@@ -292,6 +292,48 @@ final class AppController: NSObject, NSMenuDelegate {
         }
     }
 
+    /// Photographs the settings window as the window server draws it —
+    /// titlebar, window buttons and all — without putting it on the screen.
+    ///
+    /// The offscreen render used everywhere else builds the view hierarchy by
+    /// hand and therefore has no window chrome at all, which is exactly the
+    /// part that needed checking. This opens the real window at a position
+    /// nobody can see and asks its frame view to draw itself into a bitmap. It
+    /// is entirely local: no screen recording, and nothing else on the desktop
+    /// is in the picture.
+    func dumpRealWindow(to path: String, layout: WindowLayout, strip: CGFloat = 170) {
+        Preferences.windowLayout = layout
+        let deadline = Date().addingTimeInterval(6)
+        while telemetry.load == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        // Shown as it looks when the helper is answering, which is the normal
+        // case. The warning banner is worth checking too, but it is not what
+        // this picture is for: it covers the strip being inspected.
+        settingsWindow.show(registry: registry, telemetry: telemetry, helperState: .working(version: "dev"))
+        guard let window = settingsWindow.windowForTesting else { return }
+        // A size as well as a place: offscreen and unconstrained, the window
+        // otherwise grows to whatever height its content would like, and the
+        // picture comes out several thousand points tall.
+        window.setFrame(NSRect(x: -9000, y: -9000, width: 960, height: 720), display: true)
+        // Two turns of the run loop: the first lays the window out, the second
+        // lets SwiftUI finish its own pass. Without them the picture is of a
+        // half-built window.
+        RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+        // Only the top of the window. A SwiftUI hosting controller reports a
+        // preferred size and the window obligingly grows to it, so the frame
+        // view here is thousands of points tall — and the part worth looking
+        // at is the strip with the buttons and the name in it.
+        guard let frame = window.contentView?.superview else { return }
+        let region = NSRect(x: 0, y: max(0, frame.bounds.height - strip),
+                            width: frame.bounds.width, height: min(strip, frame.bounds.height))
+        guard let rep = frame.bitmapImageRepForCachingDisplay(in: region) else { return }
+        frame.cacheDisplay(in: region, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        FileHandle.standardError.write(Data("wrote \(path)\n".utf8))
+    }
+
     /// The 2.0 prototype, behind `--preview-design`. Deliberately unreachable
     /// from the menu: it is something to look at, not something shipped.
     func openDesignPreview() {

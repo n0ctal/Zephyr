@@ -44,8 +44,12 @@ struct ValueField: View {
             Text(title)
                 .foregroundColor(palette.text)
                 .frame(width: TerminalMetrics.labelColumn, alignment: .trailing)
+            // Allowed to shrink. Fixed at its full width, this row had a
+            // minimum wider than the pane, and SwiftUI centres what it cannot
+            // fit — which is what kept nudging the sidebar sideways.
             TerminalSlider(value: $value, range: range, step: step, palette: palette)
-                .frame(width: 240, height: 18)
+                .frame(minWidth: 110, maxWidth: 240)
+                .frame(height: 18)
             TerminalNumberBox(text: $text, commit: commit, palette: palette)
             Text(suffix).foregroundColor(palette.dim)
                 .frame(width: 30, alignment: .leading)

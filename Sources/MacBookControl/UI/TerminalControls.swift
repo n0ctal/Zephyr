@@ -27,7 +27,7 @@ enum TerminalMetrics {
     /// field instead of stranded a long way to the left of it. That is what a
     /// settings form has always done and it is the only arrangement where both
     /// the labels and the fields have an edge in common.
-    static let labelColumn: CGFloat = 240
+    static let labelColumn: CGFloat = 200
 
     /// The width every field is at least. Fields wider than this are lists
     /// with something long in them, and those grow rather than truncate.
@@ -78,6 +78,25 @@ struct BracketToggleStyle: ToggleStyle {
     }
 }
 
+/// A button written the way a terminal writes one: in brackets, with no
+/// bezel. The rounded grey pill is the last system shape left in the theme —
+/// and there are enough buttons in the Input section for it to read as two
+/// designs at once.
+struct BracketButtonStyle: ButtonStyle {
+    let palette: LayoutPalette
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 0) {
+            Text("[ ").foregroundColor(palette.dim)
+            configuration.label
+                .foregroundColor(configuration.isPressed ? palette.accent : palette.text)
+            Text(" ]").foregroundColor(palette.dim)
+        }
+        .font(.system(size: 13, design: .monospaced))
+        .contentShape(Rectangle())
+    }
+}
+
 /// A row of choices in a ruled frame, the selected one in brackets.
 ///
 /// A segmented control is the one thing `fontDesign` cannot reach: AppKit draws
@@ -96,7 +115,11 @@ struct SegmentedChoice<Value: Hashable>: View {
         if terminal {
             HStack(spacing: 10) {
                 if let label = label {
-                    Text(label).foregroundColor(palette.text)
+                    // The same column the drop-downs and the value rows use,
+                    // so every label in a section shares one right edge.
+                    Text(label)
+                        .foregroundColor(palette.text)
+                        .frame(width: TerminalMetrics.labelColumn, alignment: .trailing)
                 }
                 cells
             }
@@ -119,10 +142,15 @@ struct SegmentedChoice<Value: Hashable>: View {
         HStack(spacing: 18) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 let active = option.1 == selection
-                Text(active ? "[ \(option.0) ]" : "  \(option.0)  ")
+                // The gap either side is padding rather than two spaces of
+                // text: the same look for half the width, which matters in a
+                // row that has to hold three or five of these.
+                Text(active ? "[ \(option.0) ]" : option.0)
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundColor(active ? palette.accent : palette.text)
                     .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, active ? 0 : 8)
                     .contentShape(Rectangle())
                     .onTapGesture { selection = option.1 }
                     .id(index)

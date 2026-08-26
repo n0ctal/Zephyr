@@ -38,7 +38,7 @@ final class SettingsWindowController {
         // Wide enough for the eleven tab labels the classic layout carries.
         // Below this the strip truncates them, and "Grap…" beside "Batt…" is
         // worse than a window that takes more of the screen.
-        window.setContentSize(NSSize(width: 900, height: 700))
+        window.setContentSize(NSSize(width: 960, height: 720))
         window.center()
         // Remembers whatever size it is dragged to, so a preference about the
         // window is stated once rather than every launch.
@@ -51,6 +51,9 @@ final class SettingsWindowController {
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
     }
+
+    /// For `--dump-real-window` only.
+    var windowForTesting: NSWindow? { window }
 
     private func makeRoot() -> AnyView {
         guard let context = context else { return AnyView(EmptyView()) }
@@ -83,8 +86,20 @@ final class SettingsWindowController {
         window.titlebarAppearsTransparent = sidebar
         if sidebar {
             window.styleMask.insert(.fullSizeContentView)
+            // An empty toolbar in the unified style, for one reason: it makes
+            // the titlebar taller, and the system centres the three window
+            // buttons in whatever height that is. The buttons themselves
+            // cannot be moved — they can be dragged around by hand through
+            // their superview, but that resets on every resize and on every
+            // trip through full screen. Making the strip they live in the
+            // right height is the supported way to lower them.
+            let toolbar = NSToolbar(identifier: "ZephyrTitlebar")
+            toolbar.showsBaselineSeparator = false
+            window.toolbar = toolbar
+            window.toolbarStyle = .unified
         } else {
             window.styleMask.remove(.fullSizeContentView)
+            window.toolbar = nil
         }
     }
 }
@@ -116,11 +131,20 @@ struct SettingsRootView: View {
                                     helperState: helperState,
                                     layout: Preferences.windowLayout,
                                     selection: $selection)
-                    .frame(minWidth: 860, minHeight: 460, idealHeight: 560)
+                    // Wide enough for the widest row in the terminal theme —
+                    // Graphics, whose three choices plus a label column need
+                    // every point of it. Narrower and SwiftUI centres what it
+                    // cannot fit, which moves the sidebar.
+                    .frame(minWidth: 940, minHeight: 460, idealHeight: 560)
             } else {
                 tabs
             }
         }
+        // The whole stack, not just the part below the banner. Without this
+        // the window's own grey shows in the strip where the title bar used to
+        // be — which is the strip the window buttons sit in, so it is the one
+        // place the app cannot afford to leave unpainted.
+        .modifier(IgnoreTopSafeArea(on: Preferences.windowLayout.usesSidebar))
     }
 
     /// Above every tab, not inside one. When the helper is not answering,
@@ -149,7 +173,7 @@ struct SettingsRootView: View {
         // colour still runs to the edge of the window: in the sidebar layouts
         // there is no title bar, and the three window buttons sit on top of
         // whatever is drawn up there.
-        .padding(EdgeInsets(top: Preferences.windowLayout.usesSidebar ? 34 : 10,
+        .padding(EdgeInsets(top: Preferences.windowLayout.usesSidebar ? 58 : 10,
                             leading: 10, bottom: 10, trailing: 10))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.12))
@@ -188,6 +212,15 @@ struct SettingsRootView: View {
         // clips its labels rather than scrolling them, and "Grap…" next to
         // "Batt…" is worse than a window that takes more of the screen.
         .frame(minWidth: 880, minHeight: 420, idealHeight: 520)
+    }
+}
+
+/// Extends the content under the title bar, or leaves the system's inset in
+/// place for the classic layout, which still has a title bar to sit below.
+private struct IgnoreTopSafeArea: ViewModifier {
+    let on: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if on { content.ignoresSafeArea(.container, edges: .top) } else { content }
     }
 }
 
