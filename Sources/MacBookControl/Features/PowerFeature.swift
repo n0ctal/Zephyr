@@ -196,6 +196,9 @@ private struct PowerLimitControls: View {
                     }
                     Button("Check again") { feature.refreshLimits() }
                 }
+                Text("macOS will then ask you to approve the extension: System Settings → Privacy & Security → Security, at the bottom. Approval is per extension, so having allowed the Turbo Boost one does not carry over. After approving, restart.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("The script says at the end whether the firmware has locked the register. If it has, the limits can be read but not changed — by anything, not just by Zephyr.")
                     .font(.caption).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

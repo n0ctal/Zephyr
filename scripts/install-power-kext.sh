@@ -114,6 +114,34 @@ if printf '%s' "$LOAD_OUTPUT" | grep -qi "restart\|staged\|reboot"; then
     exit 0
 fi
 
+# Code 27 is the ordinary "a human has to say yes" answer, not a fault. It
+# needs a click that no script is allowed to make on the user's behalf, so the
+# only useful thing to do is say exactly where the click is.
+if [ "$LOAD_RC" -eq 27 ] || printf '%s' "$LOAD_OUTPUT" | grep -qi "not approved"; then
+    echo "macOS is asking you to approve it, which no script may do for you."
+    echo
+    echo "  1. Open System Settings, then Privacy & Security."
+    echo "  2. Scroll to the bottom, to Security. There is a line about system"
+    echo "     software being blocked, with an Allow button."
+    echo "  3. Allow it, then restart."
+    echo
+    echo "Approval is per bundle: the Turbo Boost extension being allowed"
+    echo "already does not carry over to this one."
+    echo
+    echo "Everything stays in place — the extension at"
+    echo "  $DST_DIR/$NAME.kext"
+    echo "and the boot-time loader at"
+    echo "  $DAEMON"
+    echo "so after the restart it loads on its own. If the Allow line is not"
+    echo "there, run this script again to make macOS ask."
+    echo
+    echo "There is a way to skip the approval entirely, and it is worth knowing"
+    echo "what it costs: 'sudo spctl kext-consent disable' lets ANY unsigned"
+    echo "extension load from then on, not just this one. Not recommended, and"
+    echo "deliberately not done for you."
+    exit 0
+fi
+
 echo "The extension did not load and did not ask for a restart (kmutil exit $LOAD_RC)." >&2
 echo "Nothing has been removed, so this can be retried after fixing the cause." >&2
 echo "Look at what the kernel said with:" >&2
