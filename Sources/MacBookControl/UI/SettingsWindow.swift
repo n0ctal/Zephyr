@@ -163,11 +163,7 @@ private struct MenuBarTab: View {
             preview
             Divider()
 
-            Toggle("Label each number", isOn: Binding(
-                get: { Preferences.showMenuBarCaptions },
-                set: { Preferences.showMenuBarCaptions = $0; revision += 1 }
-            ))
-            Text("Four percentages in a row say nothing about which is which. The labels are short because a menu bar is not a place for sentences.")
+            Text("Four percentages in a row say nothing about which is which — but a temperature needs no label, and every one costs width. So it is per field, below.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -210,6 +206,18 @@ private struct MenuBarTab: View {
                 ))
                 Spacer()
                 if let index = index {
+                    if !item.caption.isEmpty {
+                        Toggle("Label", isOn: Binding(
+                            get: { Preferences.menuBarItemIsCaptioned(item) },
+                            set: { on in
+                                var set = Preferences.captionedMenuBarItems
+                                if on { set.insert(item.rawValue) } else { set.remove(item.rawValue) }
+                                Preferences.captionedMenuBarItems = set
+                                revision += 1
+                            }
+                        ))
+                        .font(.caption)
+                    }
                     Text("\(index + 1)").font(.caption).foregroundColor(.secondary)
                     Button("↑") { move(item, by: -1) }.buttonStyle(BorderlessButtonStyle())
                     Button("↓") { move(item, by: 1) }.buttonStyle(BorderlessButtonStyle())

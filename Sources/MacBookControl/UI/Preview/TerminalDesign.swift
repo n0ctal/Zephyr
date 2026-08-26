@@ -27,6 +27,8 @@ struct PreviewStyle {
     let bracketSelection: Bool
     /// A fill behind the selected sidebar row.
     let filledSelection: Bool
+    /// Tabs across the top instead of a sidebar.
+    var topTabs: Bool = false
 
     func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         monospaced
@@ -87,7 +89,17 @@ struct PreviewStyle {
         rule: Color(white: 1).opacity(0.09),
         monospaced: false, bracketSelection: false, filledSelection: true)
 
-    static let all: [PreviewStyle] = [ma, instrument, ink, darkGlass, terminal]
+    static let classic = PreviewStyle(
+        name: "Classic",
+        ground: Color(red: 0.129, green: 0.129, blue: 0.137),
+        panel: Color(red: 0.129, green: 0.129, blue: 0.137),
+        text: Color(white: 0.95), dim: Color(white: 0.58),
+        accent: Color(red: 0.20, green: 0.52, blue: 0.96),
+        rule: Color(white: 1).opacity(0.10),
+        monospaced: false, bracketSelection: false, filledSelection: true,
+        topTabs: true)
+
+    static let all: [PreviewStyle] = [ma, terminal, classic]
 }
 
 enum TerminalPalette {
@@ -101,7 +113,7 @@ enum TerminalPalette {
 
 /// The seven sections, after merging the ten tabs by meaning.
 enum PreviewSection: String, CaseIterable, Identifiable {
-    case thermals, graphics, batterySleep, display, input, profiles, menuBar
+    case thermals, graphics, batterySleep, display, input, profiles, menuBar, settings
 
     var id: String { rawValue }
     var title: String {
@@ -113,6 +125,9 @@ enum PreviewSection: String, CaseIterable, Identifiable {
         case .input: return "Input"
         case .profiles: return "Profiles"
         case .menuBar: return "Menu Bar"
+        // Last, and about the app rather than the machine — which is why it
+        // sits apart from the seven that touch hardware.
+        case .settings: return "Settings"
         }
     }
 
@@ -127,7 +142,7 @@ enum PreviewSection: String, CaseIterable, Identifiable {
         case .display: return ["display"]
         case .input: return ["keyboard", "pointer"]
         case .profiles: return ["profiles"]
-        case .menuBar: return []
+        case .menuBar, .settings: return []
         }
     }
 }
@@ -143,13 +158,48 @@ struct TerminalDesignView: View {
     private var mono: Font { style.font(12) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            Rectangle().fill(style.rule).frame(width: 1)
-            content
+        Group {
+            if style.topTabs {
+                VStack(spacing: 0) {
+                    topTabRow
+                    Rectangle().fill(style.rule).frame(height: 1)
+                    content
+                }
+            } else {
+                HStack(spacing: 0) {
+                    sidebar
+                    Rectangle().fill(style.rule).frame(width: 1)
+                    content
+                }
+            }
         }
         .background(style.ground)
         .frame(minWidth: 880, minHeight: 620)
+    }
+
+    /// The familiar arrangement, for comparison. Eight labels is close to the
+    /// limit of what a row can hold before the words start truncating — which
+    /// is the argument the sidebar makes for itself.
+    private var topTabRow: some View {
+        HStack(spacing: 2) {
+            ForEach(PreviewSection.allCases) { section in
+                Text(section.title)
+                    .font(style.font(12))
+                    .foregroundColor(selection == section ? .white : style.text)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        selection == section
+                            ? AnyView(RoundedRectangle(cornerRadius: 5).fill(style.accent))
+                            : AnyView(Color.clear)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectionOverride = section }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     // MARK: Sidebar
@@ -174,8 +224,10 @@ struct TerminalDesignView: View {
     }
 
     private func sidebarRow(_ section: PreviewSection) -> some View {
+        // No switch here on purpose. It duplicated the one at the top of the
+        // section, and two controls for one thing means guessing which is
+        // authoritative when they ever disagree.
         let isSelected = selection == section
-        let on = section.featureIDs.contains { registry.feature(id: $0)?.isEnabled == true }
         return HStack(spacing: 6) {
             // In a monospaced list the marker is a character, so every label
             // keeps the same left edge. Elsewhere a fill reads faster.
@@ -186,9 +238,6 @@ struct TerminalDesignView: View {
                 .font(mono)
                 .foregroundColor(isSelected && !style.filledSelection ? style.accent : style.text)
             Spacer()
-            if !section.featureIDs.isEmpty {
-                switchGlyph(on)
-            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
@@ -422,11 +471,24 @@ struct TerminalDesignView: View {
                 .pair("", "Graphics: Integrated only"),
                 .pair("", "Stop charging at 80 %"),
             ]
+        case .settings:
+            return [
+                .heading("APPEARANCE"),
+                .segmented(["Light", "System", "Dark"],
+                           Preferences.appearance == "light" ? "Light"
+                             : Preferences.appearance == "dark" ? "Dark" : "System"),
+                .statement("System follows whatever the Mac is set to. The menu-bar readout always follows the menu bar's own appearance, which is not always the window's."),
+                .heading("STARTUP"),
+                .toggle("Launch at login", LaunchAtLogin.isEnabled),
+                .heading("HELPER"),
+                .pair("State", "running"),
+                .statement("Fans, graphics, Turbo Boost, the charge ceiling and the power limit all write to hardware, which needs root."),
+            ]
         case .menuBar:
             return [
                 .heading("MENU BAR"),
                 .pair("Now showing", "50°  1834 rpm  99 %  2.3 GHz  57 %"),
-                .toggle("Label each number", Preferences.showMenuBarCaptions),
+                .toggle("Label this number", !Preferences.captionedMenuBarItems.isEmpty),
                 .heading("SHOWN, IN THIS ORDER"),
                 .pair("1", "Temperature"),
                 .pair("2", "Fan speed"),

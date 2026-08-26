@@ -527,7 +527,7 @@ func runIconDump() {
     telemetry.start()
     RunLoop.current.run(until: Date().addingTimeInterval(2.5))
     let saved = Preferences.menuBarItems
-    let savedCaptions = Preferences.showMenuBarCaptions
+    let savedCaptions = Preferences.captionedMenuBarItems
     let savedBattery = Preferences.batteryStyle
     let savedSpeed = Preferences.cpuSpeedStyle
     let savedLoad = Preferences.cpuLoadStyle
@@ -538,7 +538,8 @@ func runIconDump() {
     Preferences.cpuLoadStyle = .perThread
     Preferences.memoryStyle = .percent
     for captions in [false, true] {
-        Preferences.showMenuBarCaptions = captions
+        Preferences.captionedMenuBarItems = captions
+            ? Set(MenuBarComposer.Item.allCases.map(\.rawValue)) : []
         let line = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: true)
         barY -= rowHeight + 4
         ((captions ? "with labels" : "plain") as NSString).draw(
@@ -552,7 +553,7 @@ func runIconDump() {
         }
     }
     Preferences.menuBarItems = saved
-    Preferences.showMenuBarCaptions = savedCaptions
+    Preferences.captionedMenuBarItems = savedCaptions
     Preferences.batteryStyle = savedBattery
     Preferences.cpuSpeedStyle = savedSpeed
     Preferences.cpuLoadStyle = savedLoad

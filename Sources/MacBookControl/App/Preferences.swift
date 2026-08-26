@@ -116,11 +116,23 @@ enum Preferences {
         }
     }
 
-    /// Short captions before each number. Off by default — but four
-    /// percentages in a row are unreadable without them.
-    static var showMenuBarCaptions: Bool {
-        get { d.bool(forKey: "menubar.captions") }
-        set { d.set(newValue, forKey: "menubar.captions") }
+    /// Which fields carry a caption, by raw value.
+    ///
+    /// Per field rather than one switch for all of them: two percentages need
+    /// telling apart, a temperature does not — "T 55°" says nothing that "55°"
+    /// did not, and every caption costs width in a bar that has none to spare.
+    static var captionedMenuBarItems: Set<String> {
+        get { Set(d.stringArray(forKey: "menubar.captionedItems") ?? []) }
+        set { d.set(Array(newValue), forKey: "menubar.captionedItems") }
+    }
+
+    static func menuBarItemIsCaptioned(_ item: MenuBarComposer.Item) -> Bool {
+        // Carried over from the single switch: everything captioned, or
+        // nothing, depending on what it was set to.
+        if d.object(forKey: "menubar.captionedItems") == nil {
+            return d.bool(forKey: "menubar.captions")
+        }
+        return captionedMenuBarItems.contains(item.rawValue)
     }
 
     static var fanStyle: MenuBarComposer.FanStyle {

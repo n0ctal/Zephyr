@@ -99,7 +99,9 @@ enum MenuBarComposer {
         /// them, which is the whole reason they exist.
         var caption: String {
             switch self {
-            case .temperature: return "T"
+            // No caption: the degree sign already says what this is, and a
+            // letter in front of it only takes width.
+            case .temperature: return ""
             case .fan: return "FAN"
             case .battery: return "BAT"
             case .power: return "W"
@@ -144,7 +146,7 @@ enum MenuBarComposer {
     }
 
     private static func render(_ item: Item, telemetry: Telemetry, darkMenuBar: Bool) -> [Segment] {
-        let caption = Preferences.showMenuBarCaptions && !item.caption.isEmpty
+        let caption = Preferences.menuBarItemIsCaptioned(item) && !item.caption.isEmpty
             ? item.caption + " " : ""
         func text(_ value: String) -> [Segment] { [.text(caption + value)] }
 
@@ -159,7 +161,7 @@ enum MenuBarComposer {
             case .rpm:
                 return text("\(fan.actualRPM) rpm")
             case .percent:
-                return text("\(Int((fan.loadFraction * 100).rounded())) %")
+                return text("\(Int((fan.loadFraction * 100).rounded()))%")
             }
 
         case .battery:
@@ -168,7 +170,7 @@ enum MenuBarComposer {
             case .off:
                 return []
             case .percent:
-                return text("\(battery.percent) %")
+                return text("\(battery.percent)%")
             case .icon:
                 guard let icon = batteryImage(battery, darkMenuBar: darkMenuBar) else { return [] }
                 return caption.isEmpty ? [.drawing(icon)] : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(icon)]
@@ -197,7 +199,7 @@ enum MenuBarComposer {
             guard let limit = telemetry.thermal?.speedLimitPercent else { return [] }
             switch Preferences.cpuSpeedStyle {
             case .off: return []
-            case .percent: return text("\(limit) %")
+            case .percent: return text("\(limit)%")
             case .frequency:
                 guard SystemLoad.nominalHz > 0 else { return [] }
                 let ghz = Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100
@@ -208,7 +210,7 @@ enum MenuBarComposer {
             guard let load = telemetry.load else { return [] }
             switch Preferences.cpuLoadStyle {
             case .off: return []
-            case .total: return text("\(Int((load.total * 100).rounded())) %")
+            case .total: return text("\(Int((load.total * 100).rounded()))%")
             case .perThread:
                 guard let bars = threadBars(load.perCore, darkMenuBar: darkMenuBar) else { return [] }
                 return caption.isEmpty ? [.drawing(bars)]
@@ -219,19 +221,23 @@ enum MenuBarComposer {
             guard let load = telemetry.load else { return [] }
             switch Preferences.memoryStyle {
             case .off: return []
-            case .percent: return text("\(Int((load.memoryFraction * 100).rounded())) %")
+            case .percent: return text("\(Int((load.memoryFraction * 100).rounded()))%")
             case .used: return text(String(format: "%.1f GB", Double(load.memoryUsed) / 1_073_741_824))
             }
 
         case .throttle:
             guard let thermal = telemetry.thermal, thermal.isThrottling,
                   let limit = thermal.speedLimitPercent else { return [] }
-            return [.text("↓\(limit) %")]
+            return [.text("↓\(limit)%")]
         }
     }
 
     /// Lays the pieces out with one gap between them and no other spacing, so
     /// the fields are evenly separated however many there are.
+    ///
+    /// The percent sign sits against its number — "99%", not "99 %". The space
+    /// is correct typography and wrong here: six fields each pay for it, and
+    /// the menu bar is the one place on the screen with no room to give.
     private static func layout(_ segments: [Segment], darkMenuBar: Bool) -> NSImage {
         let height: CGFloat = 18
         let gap: CGFloat = 7

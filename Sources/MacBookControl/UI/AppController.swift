@@ -181,7 +181,7 @@ final class AppController: NSObject, NSMenuDelegate {
         // One file per style, each showing three sections whose content differs
         // as much as the app allows — a language that holds on Thermals may
         // fall apart on Profiles, and that is exactly what needs seeing.
-        let sections: [PreviewSection] = [.thermals, .input, .profiles]
+        let sections: [PreviewSection] = [.thermals, .input, .settings]
         let base = URL(fileURLWithPath: path).deletingPathExtension().path
         for style in PreviewStyle.all {
             let sheetWidth: CGFloat = 900
