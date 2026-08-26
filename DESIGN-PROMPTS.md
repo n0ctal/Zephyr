@@ -294,3 +294,51 @@ controls. At least a third of the window is empty.
 Do NOT include: rounded group containers, hairline dividers, icons, a sidebar
 background fill, shadows, or colour beyond the single accent.
 ```
+
+---
+
+# Настоящее содержимое вкладки Cooling
+
+Первый заход генератор придумал правдоподобные, но чужие подписи — «Fan target
+temperature», «Throttling: No». Судить макет по выдуманному содержимому нельзя:
+непонятно, годится ли он для настоящего. Этот блок вставлять в любой промт
+вместо описания содержимого.
+
+```
+The content is the Cooling section, and these are its real controls — use these
+exact words, do not invent plausible-sounding alternatives:
+
+  Checkbox: "Enable Cooling"
+  Grey explanatory line: "Drive the fans yourself instead of leaving them to the
+  firmware, and see when heat is capping the CPU."
+
+  Segmented control labelled "Fans follow": Firmware / Temperature curve / Fixed speed
+
+  With "Temperature curve" chosen, two value rows:
+    "Start lifting the fans at"   55 °C
+    "Reach full speed at"         85 °C
+
+  A section headed "Throttling" with two lines of plain text:
+    "The CPU is running at full speed."
+    "Nothing has been capped since Zephyr started."
+  (when it is capped these read, for example, "The firmware is holding the CPU at
+  60 % of full speed right now." and "Lowest this session: 60 % · held back for
+  4 minutes")
+
+Every value row is a label on the left and, on the right, a slider followed by
+an editable numeric field and a grey unit. The number is editable because a
+slider cannot be aimed at 80.
+
+Sliders have NO tick marks. A tick per step is unreadable past a few dozen and
+the fan range has thousands.
+
+Colour: any accent used for a selected segment must not be red. Red is reserved
+for a value that is wrong or dangerous, and spending it on ordinary selection
+leaves nothing to say "look here" with.
+```
+
+## Ещё одно наблюдение по первым макетам
+
+Десять вкладок в верхнем ряду физически тесны — в самом узком варианте подписи
+уже нечитаемы. Это не придирка к отрисовке, а та же причина, по которой живое
+окно пришлось расширить до 820 точек. Ещё один довод за боковой список.
