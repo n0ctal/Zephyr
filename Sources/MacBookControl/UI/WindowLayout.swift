@@ -555,11 +555,17 @@ enum StatusReadout {
         // reason they do: it is something the machine is doing, not something
         // to set, and it is worth seeing from whichever section is open.
         if let thermal = telemetry.thermal, let limit = thermal.speedLimitPercent {
-            let held = thermal.isThrottling
-            let detail = held ? "at \(limit) % now"
-                : (telemetry.stats.everThrottled
-                   ? "low \(telemetry.stats.lowestSpeedLimit) %" : "—")
-            lines.append(pad("THR", 5) + right(held ? "Yes" : "No", 7) + right(detail, 17))
+            // The last column is the speed the firmware is allowing, which is
+            // the number Hot shows — not load, which is already on the CPU
+            // line above. It was a dash whenever nothing had been capped yet,
+            // which said nothing at all and was the most common case.
+            var detail = "\(limit) %"
+            if telemetry.stats.everThrottled {
+                detail += " · low \(telemetry.stats.lowestSpeedLimit) %"
+            }
+            lines.append(pad("THR", 5)
+                         + right(thermal.isThrottling ? "Yes" : "No", 7)
+                         + right(detail, 17))
         } else {
             lines.append(pad("THR", 5) + right("—", 7) + right("—", 17))
         }
