@@ -96,22 +96,20 @@ private struct CoolingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("Fans follow", selection: $feature.mode) {
-                Text("Firmware").tag("auto")
-                Text("Temperature curve").tag("curve")
-                Text("Fixed speed").tag("manual")
-            }
-            .pickerStyle(SegmentedPickerStyle())
+            SegmentedChoice(label: "Fans follow", selection: $feature.mode,
+                            options: [("Firmware", "auto"),
+                                      ("Temperature curve", "curve"),
+                                      ("Fixed speed", "manual")])
 
             if feature.mode == "curve" {
                 VStack(alignment: .leading, spacing: 6) {
-                    Picker("Follow", selection: $feature.curveSensor) {
-                        Text("Whatever looks like the CPU").tag("")
-                        Text("The hottest sensor of the moment").tag(FanCurve.hottestSensorKey)
-                        ForEach(telemetry.temperatures) { reading in
-                            Text("\(reading.label) — \(Int(reading.celsius)) °C").tag(reading.key)
-                        }
-                    }
+                    MenuChoice(label: "Follow", selection: $feature.curveSensor,
+                               options: [("Whatever looks like the CPU", ""),
+                                         ("The hottest sensor of the moment",
+                                          FanCurve.hottestSensorKey)]
+                                   + telemetry.temperatures.map {
+                                       ("\($0.label) — \(Int($0.celsius)) °C", $0.key)
+                                   })
                     ValueField(title: "Start lifting the fans at", range: 40...80, step: 1,
                                suffix: "°C", value: $feature.curveMin)
                     ValueField(title: "Reach full speed at", range: 60...100, step: 1,

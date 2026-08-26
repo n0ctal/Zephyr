@@ -175,6 +175,15 @@ struct SidebarSettingsView: View {
         }
         .background(palette.ground)
         .modifier(MonospacedThroughout(on: layout.monospaced))
+        // Read by every control underneath, including the ones inside the
+        // feature views this file knows nothing about.
+        .environment(\.terminalStyling, layout.monospaced)
+        .environment(\.terminalPalette, palette)
+        .modifier(BracketToggles(on: layout.monospaced, palette: palette))
+        // Without this the window's safe area keeps the whole hierarchy below
+        // the title bar — which is why removing the title bar left a bare grey
+        // strip where it used to be instead of the sidebar reaching the top.
+        .ignoresSafeArea(.container, edges: .top)
     }
 
     // MARK: Sidebar
@@ -289,6 +298,22 @@ struct SidebarSettingsView: View {
 /// changes the design of whatever font each of them picked and leaves the size
 /// and weight alone, which is the only way to reach controls this file does
 /// not own.
+/// Applies the bracket switch to the whole hierarchy, or leaves the system's
+/// checkbox alone. Separate from the environment flag because a `ToggleStyle`
+/// cannot be chosen conditionally inside one modifier chain.
+struct BracketToggles: ViewModifier {
+    let on: Bool
+    let palette: LayoutPalette
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if on {
+            content.toggleStyle(BracketToggleStyle(palette: palette))
+        } else {
+            content
+        }
+    }
+}
+
 struct MonospacedThroughout: ViewModifier {
     let on: Bool
 
@@ -305,6 +330,8 @@ struct MonospacedThroughout: ViewModifier {
 /// tab or stacked with another in a section.
 struct FeatureBlock: View {
     @ObservedObject var feature: Feature
+    @Environment(\.terminalStyling) private var terminal
+    @Environment(\.terminalPalette) private var palette
     /// Shown when a section holds more than one, because "Enable Cooling"
     /// above "Enable Power" is otherwise the only thing saying where one ends.
     var showsTitle: Bool = false
@@ -315,8 +342,11 @@ struct FeatureBlock: View {
                 if showsTitle {
                     Text(feature.title.uppercased())
                         .font(.system(size: 10, weight: .semibold))
-                        .tracking(1.4)
-                        .foregroundColor(.secondary)
+                        .tracking(terminal ? 2.2 : 1.4)
+                        .foregroundColor(terminal ? palette.accent : .secondary)
+                    if terminal {
+                        Rectangle().fill(palette.rule).frame(height: 1)
+                    }
                 }
                 Toggle(isOn: Binding(get: { feature.isEnabled },
                                      set: { feature.setEnabled($0) })) {
@@ -349,14 +379,12 @@ struct AppSettingsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Layout").font(.headline)
-            Picker("", selection: Binding(
-                get: { Preferences.windowLayout },
-                set: { Preferences.windowLayout = $0; SettingsWindowController.layoutDidChange() }
-            )) {
-                ForEach(WindowLayout.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .labelsHidden()
+            SegmentedChoice(label: nil,
+                            selection: Binding(
+                                get: { Preferences.windowLayout },
+                                set: { Preferences.windowLayout = $0
+                                       SettingsWindowController.layoutDidChange() }),
+                            options: WindowLayout.allCases.map { ($0.title, $0) })
             Text(Preferences.windowLayout.explanation)
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -366,16 +394,12 @@ struct AppSettingsSection: View {
 
             Divider()
             Text("Appearance").font(.headline)
-            Picker("", selection: Binding(
-                get: { Preferences.appearance },
-                set: { Preferences.appearance = $0; AppearanceControl.apply(); revision += 1 }
-            )) {
-                Text("Light").tag("light")
-                Text("System").tag("system")
-                Text("Dark").tag("dark")
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .labelsHidden()
+            SegmentedChoice(label: nil,
+                            selection: Binding(
+                                get: { Preferences.appearance },
+                                set: { Preferences.appearance = $0
+                                       AppearanceControl.apply(); revision += 1 }),
+                            options: [("Light", "light"), ("System", "system"), ("Dark", "dark")])
             Text("System follows whatever the Mac is set to. The menu-bar readout is not affected: it always follows the menu bar's own appearance, which is not always the window's.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

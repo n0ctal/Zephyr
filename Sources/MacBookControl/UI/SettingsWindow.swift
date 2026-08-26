@@ -308,57 +308,57 @@ struct MenuBarTab: View {
     @ViewBuilder private func options(for item: MenuBarComposer.Item) -> some View {
         switch item {
         case .temperature:
-            Picker("Sensor", selection: bind({ Preferences.temperatureSensorKey },
-                                             { Preferences.temperatureSensorKey = $0 })) {
-                Text("Whatever looks like the CPU").tag("")
-                ForEach(telemetry.temperatures) { reading in
-                    Text("\(reading.label) — \(Int(reading.celsius)) °C").tag(reading.key)
-                }
-            }
+            MenuChoice(label: "Sensor",
+                       selection: bind({ Preferences.temperatureSensorKey },
+                                       { Preferences.temperatureSensorKey = $0 }),
+                       options: [("Whatever looks like the CPU", "")]
+                           + telemetry.temperatures.map {
+                               ("\($0.label) — \(Int($0.celsius)) °C", $0.key)
+                           })
         case .fan:
-            Picker("Shown as", selection: bind({ Preferences.fanStyle.rawValue },
-                                               { Preferences.fanStyle = .init(rawValue: $0) ?? .rpm })) {
-                ForEach(MenuBarComposer.FanStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.fanStyle.rawValue },
+                                       { Preferences.fanStyle = .init(rawValue: $0) ?? .rpm }),
+                       options: MenuBarComposer.FanStyle.allCases.map { ($0.label, $0.rawValue) })
         case .battery:
-            Picker("Shown as", selection: bind({ Preferences.batteryStyle.rawValue },
-                                               { Preferences.batteryStyle = .init(rawValue: $0) ?? .off })) {
-                ForEach(MenuBarComposer.BatteryStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.batteryStyle.rawValue },
+                                       { Preferences.batteryStyle = .init(rawValue: $0) ?? .off }),
+                       options: MenuBarComposer.BatteryStyle.allCases.map { ($0.label, $0.rawValue) })
             if Preferences.batteryStyle == .icon || Preferences.batteryStyle == .iconAndPercent {
-                Picker("Icon", selection: bind({ Preferences.batteryIcon.rawValue },
-                                               { Preferences.batteryIcon = .init(rawValue: $0) ?? .iOS })) {
-                    ForEach(MenuBarComposer.BatteryIcon.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-                }
+                MenuChoice(label: "Icon",
+                           selection: bind({ Preferences.batteryIcon.rawValue },
+                                           { Preferences.batteryIcon = .init(rawValue: $0) ?? .iOS }),
+                           options: MenuBarComposer.BatteryIcon.allCases.map { ($0.label, $0.rawValue) })
             }
         case .cpuSpeed:
-            Picker("Shown as", selection: bind({ Preferences.cpuSpeedStyle.rawValue },
-                                               { Preferences.cpuSpeedStyle = .init(rawValue: $0) ?? .off })) {
-                ForEach(MenuBarComposer.SpeedStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.cpuSpeedStyle.rawValue },
+                                       { Preferences.cpuSpeedStyle = .init(rawValue: $0) ?? .off }),
+                       options: MenuBarComposer.SpeedStyle.allCases.map { ($0.label, $0.rawValue) })
         case .cpuLoad:
-            Picker("Shown as", selection: bind({ Preferences.cpuLoadStyle.rawValue },
-                                               { Preferences.cpuLoadStyle = .init(rawValue: $0) ?? .off })) {
-                ForEach(MenuBarComposer.LoadStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.cpuLoadStyle.rawValue },
+                                       { Preferences.cpuLoadStyle = .init(rawValue: $0) ?? .off }),
+                       options: MenuBarComposer.LoadStyle.allCases.map { ($0.label, $0.rawValue) })
         case .memory:
-            Picker("Shown as", selection: bind({ Preferences.memoryStyle.rawValue },
-                                               { Preferences.memoryStyle = .init(rawValue: $0) ?? .off })) {
-                ForEach(MenuBarComposer.MemoryStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.memoryStyle.rawValue },
+                                       { Preferences.memoryStyle = .init(rawValue: $0) ?? .off }),
+                       options: MenuBarComposer.MemoryStyle.allCases.map { ($0.label, $0.rawValue) })
         case .power:
-            Picker("Shown as", selection: bind({ Preferences.powerStyle.rawValue },
-                                               { Preferences.powerStyle = .init(rawValue: $0) ?? .battery })) {
-                ForEach(MenuBarComposer.PowerStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.powerStyle.rawValue },
+                                       { Preferences.powerStyle = .init(rawValue: $0) ?? .battery }),
+                       options: MenuBarComposer.PowerStyle.allCases.map { ($0.label, $0.rawValue) })
             Text("Battery flow is signed: plus while it fills, minus while it carries the machine — and 0.0 W for a full battery on a charger, which is the true answer rather than nothing at all.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         case .network:
-            Picker("Shown as", selection: bind({ Preferences.networkStyle.rawValue },
-                                               { Preferences.networkStyle = .init(rawValue: $0) ?? .both })) {
-                ForEach(MenuBarComposer.NetworkStyle.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-            }
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.networkStyle.rawValue },
+                                       { Preferences.networkStyle = .init(rawValue: $0) ?? .both }),
+                       options: MenuBarComposer.NetworkStyle.allCases.map { ($0.label, $0.rawValue) })
             Text("Everything that is up, added together, minus loopback and VPN tunnels — a tunnel carries the same bytes as the Wi-Fi underneath it, and counting both would double the reading the moment a VPN connects.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

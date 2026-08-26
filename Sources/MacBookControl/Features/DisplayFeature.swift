@@ -133,15 +133,13 @@ private struct DisplayView: View {
             // One display at a time, chosen here — the same shape as Keyboard
             // and Pointer. Stacking every screen's controls down the tab made
             // it read as though the sliders applied to all of them.
-            Picker("These apply to", selection: Binding(
-                get: { feature.scopedScreen?.id ?? 0 },
-                set: { feature.scope = $0 }
-            )) {
-                ForEach(feature.screens) { screen in
-                    Text(screen.name + (screen.isBuiltIn ? " · built in" : "")).tag(screen.id)
-                }
-            }
-            .disabled(feature.screens.count < 2)
+            MenuChoice(label: "These apply to",
+                       selection: Binding(get: { feature.scopedScreen?.id ?? 0 },
+                                          set: { feature.scope = $0 }),
+                       options: feature.screens.map {
+                           ($0.name + ($0.isBuiltIn ? " · built in" : ""), $0.id)
+                       })
+                .disabled(feature.screens.count < 2)
 
             Divider()
             if let screen = feature.scopedScreen {
@@ -188,17 +186,15 @@ private struct ScreenControls: View {
                 set: { feature.setDimming($0, on: screen.id) }
             ), in: 0.1...1)
 
-            Picker("Resolution", selection: Binding(
-                get: { feature.currentMode(for: screen.id)?.id ?? "" },
-                set: { id in
-                    guard let mode = feature.modes(for: screen.id).first(where: { $0.id == id }) else { return }
-                    feature.apply(mode, to: screen.id)
-                }
-            )) {
-                ForEach(feature.modes(for: screen.id)) { mode in
-                    Text(mode.label).tag(mode.id)
-                }
-            }
+            MenuChoice(label: "Resolution",
+                       selection: Binding(
+                           get: { feature.currentMode(for: screen.id)?.id ?? "" },
+                           set: { id in
+                               guard let mode = feature.modes(for: screen.id)
+                                   .first(where: { $0.id == id }) else { return }
+                               feature.apply(mode, to: screen.id)
+                           }),
+                       options: feature.modes(for: screen.id).map { ($0.label, $0.id) })
             if feature.awaitingConfirmation == screen.id {
                 HStack {
                     Text("Keep this resolution? It goes back on its own in a few seconds.")

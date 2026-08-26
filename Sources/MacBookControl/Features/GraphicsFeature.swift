@@ -115,15 +115,10 @@ private struct GraphicsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("Use", selection: Binding(
-                get: { feature.mode },
-                set: { feature.setMode($0) }
-            )) {
-                ForEach(GPUMode.allCases, id: \.rawValue) { mode in
-                    Text(mode.label).tag(mode)
-                }
-            }
-            .pickerStyle(SegmentedPickerStyle())
+            SegmentedChoice(label: "Use",
+                            selection: Binding(get: { feature.mode },
+                                               set: { feature.setMode($0) }),
+                            options: GPUMode.allCases.map { ($0.label, $0) })
 
             VStack(alignment: .leading, spacing: 4) {
                 if let integrated = feature.info.integratedName {

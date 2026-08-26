@@ -29,8 +29,34 @@ struct ValueField: View {
     }
 
     @State private var text: String = ""
+    @Environment(\.terminalStyling) private var terminal
+    @Environment(\.terminalPalette) private var palette
 
     var body: some View {
+        if terminal { terminalRow } else { nativeRows }
+    }
+
+    /// Label, rule, number, unit — all on one line. The stacked form below is
+    /// the right shape for a window of boxed controls; in a ruled one it
+    /// leaves the number stranded a line above the slider it belongs to.
+    private var terminalRow: some View {
+        HStack(spacing: 14) {
+            Text(title)
+                .foregroundColor(palette.text)
+                .frame(width: 240, alignment: .leading)
+            TerminalSlider(value: $value, range: range, step: step, palette: palette)
+                .frame(width: 240, height: 18)
+            TerminalNumberBox(text: $text, commit: commit, palette: palette)
+            Text(suffix).foregroundColor(palette.dim)
+                .frame(width: 30, alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: 700, alignment: .leading)
+        .onAppear { text = format(value) }
+        .onChange(of: value) { text = format($0) }
+    }
+
+    private var nativeRows: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title).font(.subheadline)

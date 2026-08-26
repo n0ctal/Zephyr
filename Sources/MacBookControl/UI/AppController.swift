@@ -251,8 +251,10 @@ final class AppController: NSObject, NSMenuDelegate {
             // and the one that is about the app. A frame that holds one and
             // breaks the other is the usual way a layout goes wrong.
             let panes: [String] = layout.usesSidebar
-                ? [SettingsSection.thermals.rawValue, SettingsSection.settings.rawValue]
-                : ["cooling", "appsettings"]
+                ? [SettingsSection.thermals.rawValue,
+                   SettingsSection.menuBar.rawValue,
+                   SettingsSection.settings.rawValue]
+                : ["cooling", "menubar", "appsettings"]
             let width: CGFloat = 940
             let paneHeight: CGFloat = 620
             let sheet = NSImage(size: NSSize(width: width, height: paneHeight * CGFloat(panes.count)))

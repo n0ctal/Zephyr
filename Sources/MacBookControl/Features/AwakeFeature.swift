@@ -53,12 +53,10 @@ private struct AwakeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("Hold awake", selection: Binding(
-                get: { feature.durationMinutes },
-                set: { feature.durationMinutes = $0 }
-            )) {
-                ForEach(Self.durations, id: \.1) { Text($0.0).tag($0.1) }
-            }
+            MenuChoice(label: "Hold awake",
+                       selection: Binding(get: { feature.durationMinutes },
+                                          set: { feature.durationMinutes = $0 }),
+                       options: Self.durations)
 
             Toggle("Keep the display on too", isOn: Binding(
                 get: { feature.keepDisplayOn },

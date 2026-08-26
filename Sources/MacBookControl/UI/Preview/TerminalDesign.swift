@@ -543,7 +543,7 @@ struct TerminalDesignView: View {
         HStack(spacing: 14) {
             Text(title).font(mono).foregroundColor(style.text)
                 .frame(width: 220, alignment: .leading)
-            TerminalSlider(value: value, range: range, style: style, set: set)
+            PrototypeSlider(value: value, range: range, style: style, set: set)
                 .frame(width: 250, height: 18)
             Text(String(format: "%.0f", value))
                 .font(style.numberFont(12)).foregroundColor(style.text)
@@ -575,7 +575,7 @@ struct TerminalDesignView: View {
 /// round grey knob, which in a monospaced green panel reads as a control
 /// borrowed from another application. This is a thin rule with a square knob —
 /// the same square the text is set on.
-private struct TerminalSlider: View {
+private struct PrototypeSlider: View {
     let value: Double
     let range: ClosedRange<Double>
     let style: PreviewStyle

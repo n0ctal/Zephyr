@@ -48,6 +48,7 @@ enum SelfTest {
         networkFormatting()
         sectionCoverage()
         statusAlignment()
+        terminalSliderMath()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -570,6 +571,30 @@ enum SelfTest {
             expectEqual(lines[0].count, lines[1].count,
                         "and they are the same width, or the columns do not line up")
         }
+    }
+
+    // MARK: Terminal slider
+
+    private static func terminalSliderMath() {
+        // A 200-point track with a 10-point knob leaves 190 of travel, and the
+        // knob is grabbed at its centre.
+        let knob: CGFloat = 10, travel: CGFloat = 190
+        func at(_ x: CGFloat, _ range: ClosedRange<Double>, _ step: Double) -> Double {
+            TerminalSlider.value(atX: x, knob: knob, travel: travel, range: range, step: step)
+        }
+        expectEqual(at(5, 0...100, 1), 0, "the far left is the low end")
+        expectEqual(at(195, 0...100, 1), 100, "the far right is the high end")
+        expectEqual(at(100, 0...100, 1), 50, "and the middle is the middle")
+        expectEqual(at(-40, 0...100, 1), 0, "dragging off the left edge clamps")
+        expectEqual(at(400, 0...100, 1), 100, "and so does dragging off the right")
+        // Watts, where a wrong answer is written to a register.
+        expectEqual(at(100, 10...110, 5), 60, "steps land on multiples of the step")
+        expectEqual(at(103, 10...110, 5), 60, "a pixel either side rounds to the same step")
+        expectEqual(at(195, 10...110, 7), 110,
+                    "the top is reachable even when the step does not divide the range")
+        expectEqual(at(189, 10...110, 7), 108,
+                    "while everything short of the end still lands on the step")
+        expectEqual(at(100, 45...45, 1), 45, "a range of one value has one answer")
     }
 
     // MARK: Fan curve

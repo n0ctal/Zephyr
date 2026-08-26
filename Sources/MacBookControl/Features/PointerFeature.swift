@@ -185,16 +185,13 @@ private struct PointerView: View {
             }
 
             HStack {
-                Picker("These apply to", selection: Binding(
-                    get: { feature.scope ?? "" },
-                    set: { feature.scope = $0.isEmpty ? nil : $0 }
-                )) {
-                    Text("Every pointing device").tag("")
-                    ForEach(feature.devices, id: \.identity) { device in
-                        Text(device.name + (feature.store.isCustomised(device.identity) ? " ·" : ""))
-                            .tag(device.identity)
-                    }
-                }
+                MenuChoice(label: "These apply to",
+                           selection: Binding(get: { feature.scope ?? "" },
+                                              set: { feature.scope = $0.isEmpty ? nil : $0 }),
+                           options: [("Every pointing device", "")] + feature.devices.map {
+                               ($0.name + (feature.store.isCustomised($0.identity) ? " ·" : ""),
+                                $0.identity)
+                           })
                 if feature.scopeIsCustomised {
                     Button("Follow the default") { feature.followDefaults() }
                 }

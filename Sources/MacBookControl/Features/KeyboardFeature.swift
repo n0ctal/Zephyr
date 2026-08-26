@@ -111,16 +111,13 @@ private struct KeyboardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Picker("These apply to", selection: Binding(
-                    get: { feature.scope ?? "" },
-                    set: { feature.scope = $0.isEmpty ? nil : $0 }
-                )) {
-                    Text("Every keyboard").tag("")
-                    ForEach(feature.devices) { device in
-                        Text(device.name + (feature.store.isCustomised(device.identity) ? " ·" : ""))
-                            .tag(device.identity)
-                    }
-                }
+                MenuChoice(label: "These apply to",
+                           selection: Binding(get: { feature.scope ?? "" },
+                                              set: { feature.scope = $0.isEmpty ? nil : $0 }),
+                           options: [("Every keyboard", "")] + feature.devices.map {
+                               ($0.name + (feature.store.isCustomised($0.identity) ? " ·" : ""),
+                                $0.identity)
+                           })
                 if feature.scopeIsCustomised {
                     Button("Follow the default") { feature.followDefaults() }
                 }
