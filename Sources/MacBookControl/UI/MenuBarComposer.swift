@@ -406,14 +406,27 @@ enum MenuBarComposer {
     private static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool,
                                    darkMenuBar: Bool) -> NSImage {
         let height: CGFloat = 15
-        // Wide enough for the digits to be read, which is the point of putting
-        // them inside at all. The phone does the same: the number nearly fills
-        // the pill rather than hiding in it.
-        let bodyWidth: CGFloat = showingPercentage ? 30 : 23
         let capWidth: CGFloat = 2
         let capGap: CGFloat = 1.2
-        let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
         let fraction = max(0, min(1, Double(battery.percent) / 100))
+
+        // The digits are sized from the pill rather than fixed, and the pill is
+        // then widened to fit them. Fixing the font and guessing the width is
+        // what made the number sit in the middle of a lot of empty space —
+        // on the phone it very nearly fills the shape, and that is most of why
+        // it reads at a glance.
+        let text = "\(battery.percent)" as NSString
+        let font = NSFont.systemFont(ofSize: height * 0.72, weight: .bold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+        let measured = showingPercentage ? text.size(withAttributes: attributes) : .zero
+        // Sized for the widest number it will ever hold, not for the one it is
+        // holding now. Fitting the pill to "9" and then to "100" makes the
+        // whole menu bar shift sideways every time the battery ticks over,
+        // which is the sort of movement the eye cannot help following.
+        let widest = ("100" as NSString).size(withAttributes: attributes).width
+        let bodyWidth: CGFloat = showingPercentage ? widest + 8 : 23
+
+        let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
 
         let fill = (Self.forcedFillRole
             ?? fillRole(percent: battery.percent, isCharging: battery.isCharging,
@@ -428,15 +441,15 @@ enum MenuBarComposer {
         image.lockFocus()
 
         let body = NSRect(x: 0, y: 0, width: bodyWidth, height: height)
-        let radius = height * 0.34
+        // Squarer than a stadium: iOS 27 rounds the corners noticeably less
+        // than 26 did, and that is a large part of why the shape reads as new.
+        let radius = height * 0.30
         let pill = NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius)
 
         empty.setFill()
         pill.fill()
 
         if fraction > 0 {
-            // Clipped to the pill so the fill keeps the rounded ends instead
-            // of squaring off where it stops.
             NSGraphicsContext.saveGraphicsState()
             pill.addClip()
             paint.setFill()
@@ -444,8 +457,6 @@ enum MenuBarComposer {
             NSGraphicsContext.restoreGraphicsState()
         }
 
-        // The cap follows the empty colour until the battery is full, which is
-        // what the phone does.
         (fraction >= 1 ? paint : empty).setFill()
         NSBezierPath(roundedRect: NSRect(x: bodyWidth + capGap, y: height / 2 - 2.5,
                                          width: capWidth, height: 5),
@@ -453,14 +464,8 @@ enum MenuBarComposer {
 
         if showingPercentage {
             // Punched through rather than painted on: the digits then read
-            // against both the filled part and the grey remainder, and against
-            // a light or dark menu bar, without picking a colour for each case.
-            let text = "\(battery.percent)" as NSString
-            // Sized against the pill rather than fixed: three digits need to
-            // give a little, two do not.
-            let font = NSFont.systemFont(ofSize: battery.percent >= 100 ? 9.5 : 11, weight: .bold)
-            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
-            let measured = text.size(withAttributes: attributes)
+            // against the filled part, against the grey remainder, and against
+            // a light or dark menu bar without choosing a colour for each case.
             let origin = NSPoint(x: (bodyWidth - measured.width) / 2,
                                  y: (height - measured.height) / 2)
             NSGraphicsContext.current?.compositingOperation = .destinationOut

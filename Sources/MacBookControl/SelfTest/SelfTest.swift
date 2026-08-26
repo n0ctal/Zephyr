@@ -317,6 +317,19 @@ enum SelfTest {
         expect(wide.size.width > bars.size.width, "more threads means a wider drawing")
         expect(MenuBarComposer.threadBars([]) == nil, "no threads draws nothing")
 
+        // The battery pill keeps one width whatever number it holds. Fitting
+        // it to the digits makes the whole menu bar shift sideways every time
+        // the charge ticks over.
+        func pill(_ percent: Int) -> NSSize {
+            let status = BatteryStatus(percent: percent, isCharging: false, isPluggedIn: true,
+                                       healthPercent: 82, cycleCount: 393, power: nil,
+                                       minutesRemaining: nil)
+            return MenuBarComposer.batteryImage(status, showingPercentage: true)?.size ?? .zero
+        }
+        expectEqual(pill(5).width, pill(100).width, "one digit and three take the same width")
+        expectEqual(pill(99).width, pill(100).width, "and so do two")
+        expect(pill(100).width > 0, "the pill has a width at all")
+
         // The bars hang from the top. Standing on the bottom, an idle machine
         // drew a row of specks along the lower edge that read as dirt rather
         // than as a graph. Checked by looking at the pixels, since that is the
