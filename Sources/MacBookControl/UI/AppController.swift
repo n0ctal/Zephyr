@@ -310,10 +310,9 @@ final class AppController: NSObject, NSMenuDelegate {
         // this picture is for: it covers the strip being inspected.
         settingsWindow.show(registry: registry, telemetry: telemetry, helperState: .working(version: "dev"))
         guard let window = settingsWindow.windowForTesting else { return }
-        // A size as well as a place: offscreen and unconstrained, the window
-        // otherwise grows to whatever height its content would like, and the
-        // picture comes out several thousand points tall.
-        window.setFrame(NSRect(x: -9000, y: -9000, width: 960, height: 720), display: true)
+        // Only a place. The window sizes itself from the view it holds, and
+        // forcing a size here would photograph a window nobody will ever see.
+        window.setFrameOrigin(NSPoint(x: -9000, y: -9000))
         // Two turns of the run loop: the first lays the window out, the second
         // lets SwiftUI finish its own pass. Without them the picture is of a
         // half-built window.

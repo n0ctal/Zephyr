@@ -337,10 +337,11 @@ struct SidebarSettingsView: View {
     // MARK: Content
 
     private var content: some View {
-        // No scroll view. Every section is meant to fit the window, and one
-        // that does not is a bug to be found rather than something to hide
-        // behind a scrollbar — `--measure-sections` is what finds it.
-        Group {
+        // A scroll view that mostly does not scroll. The window is one fixed
+        // size and every section but Input fits inside it — and macOS only
+        // draws a scrollbar when there is somewhere to scroll to, so the ones
+        // that fit show none. `--measure-sections` says which is which.
+        ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text(section.title)
                     .font(font(19, .medium))

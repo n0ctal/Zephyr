@@ -139,13 +139,18 @@ struct SettingsRootView: View {
                                     helperState: helperState,
                                     layout: Preferences.windowLayout,
                                     selection: $selection)
-                    // One fixed width — wide enough for the widest row there
-                    // is, Graphics — and no height at all, so the window takes
-                    // the height of whichever section is open. With nothing
-                    // scrolling, a fixed height would either clip the tallest
-                    // section or leave the shortest half empty; this is what
-                    // System Settings does with its own panes.
-                    .frame(width: 960)
+                    // One size, always. Wide enough for the widest row there
+                    // is (Graphics) and tall enough for every section but
+                    // Input, which is the one that scrolls. A window that
+                    // resized itself to each section was the other way to
+                    // avoid a scrollbar and it looked like a fault.
+                    // A minimum rather than an exact height: with the title
+                    // bar hidden the window ends up 52 points taller than the
+                    // content it was given, and a view pinned to exactly 720
+                    // left that difference unpainted along the bottom edge.
+                    // The minimum fixes the size; the flexible top lets the
+                    // view fill whatever the window turns out to be.
+                    .frame(minWidth: 960, maxWidth: 960, minHeight: 720, maxHeight: .infinity)
             } else {
                 tabs
             }
