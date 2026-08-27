@@ -185,6 +185,20 @@ private struct DisplayView: View {
                        })
                 .disabled(feature.screens.count < 2)
 
+            // Above everything, and not inside a screen's own row: the change
+            // waiting to be confirmed may be to a screen that has just been
+            // switched off, and a prompt nobody can reach is a change that
+            // always reverts.
+            if feature.awaitingConfirmation != nil {
+                HStack {
+                    Text("Keep this change? It goes back on its own in a few seconds.")
+                        .font(.caption).foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Keep") { feature.confirmResolution() }
+                    Button("Undo") { feature.revertResolution() }
+                }
+            }
+
             Divider()
             if let screen = feature.scopedScreen {
                 ScreenControls(feature: feature, screen: screen)
@@ -241,13 +255,18 @@ private struct ScreenControls: View {
 
             if feature.canSwitchDisplaysOff {
                 Toggle(isOn: Binding(
-                    get: { true },   // a listed screen is by definition on
-                    set: { on in if !on { feature.setDisplayEnabled(false, of: screen.id) } }
+                    get: { screen.isOn },
+                    set: { feature.setDisplayEnabled($0, of: screen.id) }
                 )) {
                     Text("Screen on").font(.headline)
                 }
-                .disabled(!feature.canTurnOff(screen.id))
-                Text(feature.canTurnOff(screen.id)
+                .disabled(screen.isOn && !feature.canTurnOff(screen.id))
+                if !WindowArrangement.isPermitted {
+                    Text("Windows will not be put back where they were: that needs the same Accessibility permission the Pointer section asks for. macOS moves every window onto whatever screen is left and returns none of them by itself.")
+                        .font(.caption).foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(feature.canTurnOff(screen.id) || !screen.isOn
                      ? "Switching a screen off is for this session only — a restart brings it back whatever else has happened. It also comes back by itself in a few seconds unless you confirm, and Zephyr puts the arrangement back if the machine is ever left with no screen at all."
                      : "This is the only screen the machine has. Switching it off would leave nowhere to switch it back on from, which is exactly the state other display utilities are known for.")
                     .font(.caption).foregroundColor(.secondary)
@@ -280,15 +299,6 @@ private struct ScreenControls: View {
                                feature.apply(mode, to: screen.id)
                            }),
                        options: feature.modes(for: screen.id).map { ($0.label, $0.id) })
-            if feature.awaitingConfirmation == screen.id {
-                HStack {
-                    Text("Keep this resolution? It goes back on its own in a few seconds.")
-                        .font(.caption).foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Keep") { feature.confirmResolution() }
-                    Button("Undo") { feature.revertResolution() }
-                }
-            }
             Text("A resolution is put back by itself unless you confirm you can still see. A panel can be told to use a mode it cannot show, and the button that would undo it is on the screen that just went dark.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

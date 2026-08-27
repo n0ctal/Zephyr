@@ -25,6 +25,8 @@ final class DisplayControl {
         let height: Int
         let pixelWidth: Int
         let brightness: Float?
+        /// False for a panel that is attached but switched off.
+        var isOn = true
     }
 
     /// What the monitor calls itself, which is what the Displays pane shows.
@@ -85,11 +87,18 @@ final class DisplayControl {
 
     // MARK: Screens
 
+    /// Every display attached, whether or not it is switched on.
+    ///
+    /// The online list rather than the active one: a panel that has been
+    /// switched off is still connected, and listing only the active ones meant
+    /// the row carrying the switch vanished the moment it was used — leaving
+    /// no way to switch it back on and making the control look broken.
     func screens() -> [Screen] {
         var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
+        guard CGGetOnlineDisplayList(count, &ids, &count) == .success else { return [] }
+        let active = Set(activeDisplayIDs())
 
         return ids.map { id in
             let mode = CGDisplayCopyDisplayMode(id)
@@ -101,7 +110,8 @@ final class DisplayControl {
                 width: mode?.width ?? 0,
                 height: mode?.height ?? 0,
                 pixelWidth: mode?.pixelWidth ?? 0,
-                brightness: brightness(of: id)
+                brightness: brightness(of: id),
+                isOn: active.contains(id)
             )
         }
     }
@@ -193,6 +203,8 @@ final class DisplayControl {
     private var rotationBeforeChange: (display: CGDirectDisplayID, rotation: Rotation)?
     /// Set while a switched-off panel is waiting to be confirmed.
     private var disabledDisplay: CGDirectDisplayID?
+    /// Where the windows were before a screen was switched off.
+    private var arrangementBeforeChange: [WindowArrangement.Placement] = []
 
     /// Switches resolution inside a configuration transaction, so the change
     /// lands in one step rather than as a sequence the window server has to
@@ -372,12 +384,26 @@ final class DisplayControl {
         guard enabled || canSafelyDisable(display) else { return false }
         guard let configure = Self.configureDisplayEnabled else { return false }
 
+        // Taken before the screen goes: macOS herds every window onto whatever
+        // is left and puts none of them back afterwards.
+        if !enabled { arrangementBeforeChange = WindowArrangement.capture() }
+
         var configuration: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&configuration) == .success,
               let configuration = configuration else { return false }
         _ = configure(configuration, display, enabled)
         guard CGCompleteDisplayConfiguration(configuration, .forSession) == .success else {
             return false
+        }
+
+        if enabled, !arrangementBeforeChange.isEmpty {
+            // A moment for the window server to finish rearranging, or the
+            // windows are put back and then moved again.
+            let arrangement = arrangementBeforeChange
+            arrangementBeforeChange = []
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                WindowArrangement.restore(arrangement)
+            }
         }
 
         guard !enabled, revertAfter > 0 else { return true }

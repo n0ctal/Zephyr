@@ -33,6 +33,11 @@ if arguments.contains("--test-network") {
     exit(0)
 }
 
+if arguments.contains("--test-windows") {
+    runWindowTest()
+    exit(0)
+}
+
 if arguments.contains("--test-diagnostics") {
     runDiagnosticsTest()
     exit(0)
@@ -310,6 +315,31 @@ func runNetworkTest() {
                      (NetworkThroughput.format(now.uploadBytes) as NSString).utf8String!,
                      now.downloadBytes, now.uploadBytes))
     }
+}
+
+/// Proves that the window arrangement can be read at all.
+///
+/// It is the accessibility interface, so the answer is either "several dozen
+/// windows" or "no permission" — and which one it is cannot be guessed from
+/// the code.
+func runWindowTest() {
+    guard WindowArrangement.isPermitted else {
+        print("no Accessibility permission — windows cannot be read or moved")
+        return
+    }
+    let placements = WindowArrangement.capture()
+    print("windows visible: \(placements.count)")
+    for placement in placements.prefix(8) {
+        print(String(format: "   pid %d  %@  %.0f,%.0f %.0f×%.0f",
+                     placement.pid,
+                     (placement.title.isEmpty ? "(untitled)" : placement.title) as NSString,
+                     placement.frame.origin.x, placement.frame.origin.y,
+                     placement.frame.width, placement.frame.height))
+    }
+    // Restoring what was just captured moves nothing: every window already
+    // sits where it belongs, which is also the check that the write path
+    // matches the read path.
+    print("moved by a restore of the current arrangement: \(WindowArrangement.restore(placements))")
 }
 
 /// Proves the read-only diagnostics against the real machine.
