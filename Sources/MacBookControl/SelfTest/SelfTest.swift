@@ -446,6 +446,17 @@ enum SelfTest {
     // MARK: Display safety
 
     private static func displaySafety() {
+        // The control that makes other display utilities dangerous. The guard
+        // is checked here rather than trusted: with one display attached it
+        // must refuse, and it must keep refusing however it is asked.
+        let guardControl = DisplayControl()
+        if let only = guardControl.screens().first, guardControl.screens().count == 1 {
+            expect(!guardControl.setEnabled(false, of: only.id),
+                   "switching off the only screen is refused outright")
+            expect(guardControl.isEnabled(only.id),
+                   "and the screen is still on afterwards")
+        }
+
         // The rule that prevents the failure people report of other display
         // utilities: switch the built-in panel off with an external attached,
         // unplug the external, and there is nowhere left to draw the window

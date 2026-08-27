@@ -13,6 +13,11 @@ import SwiftUI
 /// Nothing is read until this section is on screen, and everything stops the
 /// moment it is not. See `Polled`.
 struct DiagnosticsSection: View {
+    /// The whole sensor set and the fans, which is the screen TG Pro is opened
+    /// for. Passed in rather than polled: telemetry is already reading every
+    /// sensor while the window is open, and a second reader would be a second
+    /// sweep of forty-eight SMC keys for the same numbers.
+    @ObservedObject var telemetry: Telemetry
     @StateObject private var drive = Polled(every: 300) { DriveHealth.read() }
     @StateObject private var sleep = Polled(every: 5) { SleepDiagnostics.assertions() }
     @StateObject private var record = Polled(every: 30) { SleepDiagnostics.powerRecord() }
@@ -24,6 +29,8 @@ struct DiagnosticsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            sensorBlock
+            Divider()
             driveBlock
             Divider()
             sleepBlock
@@ -36,6 +43,33 @@ struct DiagnosticsSection: View {
         .polling(sleep)
         .polling(record)
         .polling(startup)
+    }
+
+    // MARK: Sensors
+
+    @ViewBuilder private var sensorBlock: some View {
+        heading("SENSORS")
+        let readings = telemetry.temperatures.sorted { $0.celsius > $1.celsius }
+        if readings.isEmpty {
+            note("Reading…")
+        } else {
+            // Hottest first. A list of forty-eight in the order the SMC
+            // happens to enumerate them answers nothing; the top of this list
+            // is the answer to "what is hot".
+            ForEach(readings) { reading in
+                row(reading.label, String(format: "%.0f °C", reading.celsius) + "   " + reading.key)
+            }
+            explainer("Every temperature the SMC will answer for, hottest first. The names are the machine's own — several of these sit on parts nobody has a word for, and a key like TC0P is more honest than inventing one.")
+        }
+
+        if !telemetry.fans.isEmpty {
+            ForEach(telemetry.fans) { fan in
+                row("Fan \(fan.index + 1)",
+                    "\(fan.actualRPM) rpm  ·  \(Int((fan.loadFraction * 100).rounded())) % of "
+                    + "\(fan.minRPM)–\(fan.maxRPM)"
+                    + (fan.isManual ? "  ·  held" : ""))
+            }
+        }
     }
 
     // MARK: Drive

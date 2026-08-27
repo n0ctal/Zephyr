@@ -188,6 +188,11 @@ final class DisplayControl {
 
     /// True while a change is waiting to be confirmed.
     private(set) var awaitingConfirmation: CGDirectDisplayID?
+    /// Set while a rotation is waiting to be confirmed, so the revert puts
+    /// back an orientation rather than a resolution.
+    private var rotationBeforeChange: (display: CGDirectDisplayID, rotation: Rotation)?
+    /// Set while a switched-off panel is waiting to be confirmed.
+    private var disabledDisplay: CGDirectDisplayID?
 
     /// Switches resolution inside a configuration transaction, so the change
     /// lands in one step rather than as a sequence the window server has to
@@ -239,6 +244,8 @@ final class DisplayControl {
         revertTimer = nil
         awaitingConfirmation = nil
         modeBeforeChange.removeAll()
+        rotationBeforeChange = nil
+        disabledDisplay = nil
     }
 
     /// Puts the previous mode back.
@@ -246,6 +253,23 @@ final class DisplayControl {
         revertTimer?.invalidate()
         revertTimer = nil
         awaitingConfirmation = nil
+
+        // A panel switched off comes back first: everything else assumes
+        // there is something to draw on.
+        if disabledDisplay == display {
+            disabledDisplay = nil
+            setEnabled(true, of: display, revertAfter: 0)
+            return
+        }
+
+        // A rotation waiting to be confirmed is put back the way it was
+        // applied, not through a display configuration.
+        if let rotation = rotationBeforeChange, rotation.display == display {
+            rotationBeforeChange = nil
+            setRotation(rotation.rotation, of: display, revertAfter: 0)
+            return
+        }
+
         guard let previous = modeBeforeChange.removeValue(forKey: display) else { return }
         var config: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&config) == .success else { return }
@@ -321,6 +345,180 @@ final class DisplayControl {
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
         return ids
+    }
+
+    // MARK: Switching a panel off
+
+    /// Turns a display off or back on.
+    ///
+    /// This is the control that makes other utilities dangerous, and the
+    /// reason the guard exists before the call rather than after it: switch
+    /// the built-in panel off with an external attached, unplug the external,
+    /// and there is nowhere left to draw the window that would switch the
+    /// built-in back on. Three things stand between a person and that:
+    ///
+    /// - it refuses outright when this is the last display standing;
+    /// - it puts the panel back by itself unless confirmed, like a resolution;
+    /// - the change is for this session only, so a restart undoes it even if
+    ///   everything else has failed — which is precisely the escape the
+    ///   reported failure did not have.
+    ///
+    /// And separately from all three, the watcher further down notices a
+    /// machine with no active display at all and asks for the permanent
+    /// arrangement back.
+    @discardableResult
+    func setEnabled(_ enabled: Bool, of display: CGDirectDisplayID,
+                    revertAfter: TimeInterval = 15) -> Bool {
+        guard enabled || canSafelyDisable(display) else { return false }
+        guard let configure = Self.configureDisplayEnabled else { return false }
+
+        var configuration: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&configuration) == .success,
+              let configuration = configuration else { return false }
+        _ = configure(configuration, display, enabled)
+        guard CGCompleteDisplayConfiguration(configuration, .forSession) == .success else {
+            return false
+        }
+
+        guard !enabled, revertAfter > 0 else { return true }
+        disabledDisplay = display
+        awaitingConfirmation = display
+        revertTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: revertAfter, repeats: false) { [weak self] _ in
+            self?.revert(display)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        revertTimer = timer
+        return true
+    }
+
+    func isEnabled(_ display: CGDirectDisplayID) -> Bool {
+        activeDisplayIDs().contains(display)
+    }
+
+    /// There is no published call for this. Looked up by name rather than
+    /// linked against, so that a system which no longer offers it leaves the
+    /// control unavailable instead of refusing to launch.
+    private static let configureDisplayEnabled: (@convention(c) (CGDisplayConfigRef?, CGDirectDisplayID, Bool) -> Int32)? = {
+        guard let symbol = dlsym(dlopen(nil, RTLD_NOW), "CGSConfigureDisplayEnabled") else {
+            return nil
+        }
+        return unsafeBitCast(symbol, to: (@convention(c) (CGDisplayConfigRef?, CGDirectDisplayID, Bool) -> Int32).self)
+    }()
+
+    /// True when the machine has a call for this at all.
+    static var canSwitchDisplaysOff: Bool { configureDisplayEnabled != nil }
+
+    // MARK: Rotation
+
+    /// The four orientations a panel can be driven at.
+    enum Rotation: Int, CaseIterable, Identifiable {
+        case standard = 0, ninety = 1, oneEighty = 2, twoSeventy = 3
+        var id: Int { rawValue }
+        var label: String {
+            switch self {
+            case .standard: return "Standard"
+            case .ninety: return "90°"
+            case .oneEighty: return "180°"
+            case .twoSeventy: return "270°"
+            }
+        }
+    }
+
+    func rotation(of display: CGDirectDisplayID) -> Rotation {
+        // CoreGraphics answers in degrees; the framebuffer wants an index.
+        switch Int(CGDisplayRotation(display).rounded()) {
+        case 90: return .ninety
+        case 180: return .oneEighty
+        case 270: return .twoSeventy
+        default: return .standard
+        }
+    }
+
+    /// Rotates a panel, and puts it back by itself unless confirmed.
+    ///
+    /// There is no public call for this: the window server takes it as a probe
+    /// on the framebuffer with the orientation packed into the option bits,
+    /// which is what every tool that offers rotation does. The guard matters
+    /// more here than for a resolution — a screen turned on its side is still
+    /// readable, but a screen turned upside down with the mouse moving the
+    /// wrong way is not something to be stuck with.
+    @discardableResult
+    func setRotation(_ rotation: Rotation, of display: CGDirectDisplayID,
+                     revertAfter: TimeInterval = 15) -> Bool {
+        guard let framebuffer = framebuffer(for: display) else { return false }
+        defer { IOObjectRelease(framebuffer) }
+
+        let previous = self.rotation(of: display)
+        // kIOFBSetTransform, with the orientation in the high half.
+        let options = IOOptionBits(0x00000400 | (rotation.rawValue << 16))
+        guard IOServiceRequestProbe(framebuffer, options) == KERN_SUCCESS else { return false }
+
+        guard rotation != previous, revertAfter > 0 else { return true }
+        rotationBeforeChange = (display, previous)
+        awaitingConfirmation = display
+        revertTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: revertAfter, repeats: false) { [weak self] _ in
+            self?.revert(display)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        revertTimer = timer
+        return true
+    }
+
+    /// The framebuffer driving a display, matched on the identifiers both
+    /// sides publish — the vendor, the model and the serial from the monitor's
+    /// own EDID. Matching on names would collide the moment somebody attaches
+    /// two identical monitors.
+    private func framebuffer(for display: CGDirectDisplayID) -> io_service_t? {
+        let vendor = CGDisplayVendorNumber(display)
+        let model = CGDisplayModelNumber(display)
+        let serial = CGDisplaySerialNumber(display)
+
+        var found: io_service_t?
+        Registry.forEachService(matching: "IOFramebuffer") { framebuffer in
+            guard found == nil else { return }
+            Registry.forEachChild(of: framebuffer) { child in
+                guard found == nil,
+                      let info = IODisplayCreateInfoDictionary(child, IOOptionBits(0))?
+                        .takeRetainedValue() as? [String: Any],
+                      (info[kDisplayVendorID as String] as? UInt32) == vendor,
+                      (info[kDisplayProductID as String] as? UInt32) == model
+                else { return }
+                // The serial is absent on some panels; when both sides have
+                // one it must agree, and when they do not the vendor and
+                // model are as far as anyone can go.
+                if let theirs = info[kDisplaySerialNumber as String] as? UInt32,
+                   serial != 0, theirs != serial { return }
+                IOObjectRetain(framebuffer)
+                found = framebuffer
+            }
+        }
+        return found
+    }
+
+    // MARK: Mirroring
+
+    /// Which display this one is mirroring, if any.
+    func mirrorSource(of display: CGDirectDisplayID) -> CGDirectDisplayID? {
+        let source = CGDisplayMirrorsDisplay(display)
+        return source == kCGNullDirectDisplay ? nil : source
+    }
+
+    /// Mirrors `display` onto `source`, or stops mirroring when `source` is
+    /// nil.
+    ///
+    /// Public CoreGraphics all the way, and reversible in one call — which is
+    /// why it needs no confirm-or-revert dance the way a resolution does:
+    /// nothing here can leave a panel showing a mode it cannot display.
+    @discardableResult
+    func setMirroring(of display: CGDirectDisplayID, to source: CGDirectDisplayID?) -> Bool {
+        var configuration: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&configuration) == .success,
+              let configuration = configuration else { return false }
+        CGConfigureDisplayMirrorOfDisplay(configuration, display,
+                                          source ?? kCGNullDirectDisplay)
+        return CGCompleteDisplayConfiguration(configuration, .permanently) == .success
     }
 
     /// Whether turning this display off would leave the machine with none.

@@ -352,7 +352,7 @@ struct SidebarSettingsView: View {
 
                 switch section {
                 case .diagnostics:
-                    DiagnosticsSection()
+                    DiagnosticsSection(telemetry: telemetry)
                 case .menuBar:
                     MenuBarTab(telemetry: telemetry)
                 case .settings:

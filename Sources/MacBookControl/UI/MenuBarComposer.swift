@@ -105,10 +105,22 @@ enum MenuBarComposer {
         }
     }
 
+    /// Which card the machine is drawing on, as a letter or spelled out.
+    enum GraphicsStyle: String, CaseIterable {
+        case off, short, full
+        var label: String {
+            switch self {
+            case .off: return "Off"
+            case .short: return "iGPU / dGPU"
+            case .full: return "Integrated / Discrete"
+            }
+        }
+    }
+
     /// One thing the status item can show. The order is the user's, so this is
     /// a list rather than a set of switches.
     enum Item: String, CaseIterable, Codable {
-        case temperature, fan, battery, power, cpuSpeed, cpuLoad, memory, network, throttle
+        case temperature, fan, battery, power, cpuSpeed, cpuLoad, memory, network, graphics, throttle
 
         var title: String {
             switch self {
@@ -120,6 +132,7 @@ enum MenuBarComposer {
             case .cpuLoad: return "CPU load"
             case .memory: return "Memory"
             case .network: return "Network speed"
+            case .graphics: return "Graphics card"
             case .throttle: return "Throttle mark"
             }
         }
@@ -144,6 +157,7 @@ enum MenuBarComposer {
             // No caption: the arrows already say which direction is which,
             // and they say it in less width than the word would.
             case .network: return ""
+            case .graphics: return "GPU"
             case .throttle: return ""
             }
         }
@@ -157,6 +171,10 @@ enum MenuBarComposer {
             var needs = Telemetry.Needs()
             switch self {
             case .temperature: needs.oneSensor = true
+            // Read from the registry by the composer itself: it is a fact
+            // about processes rather than a hardware reading, and asking for
+            // it does not wake the card the way asking Metal would.
+            case .graphics: break
             case .fan: needs.fans = true
             case .battery, .power: needs.battery = true
             // The thermal reading is taken every tick regardless, because the
@@ -204,6 +222,18 @@ enum MenuBarComposer {
     /// is repainted as a flat mask and the coloured battery would lose its
     /// colour. So the text colour is chosen from the menu bar's own appearance
     /// instead, passed in by the caller.
+    /// Cached between composes. The status item is redrawn every two seconds,
+    /// and walking a card's clients that often — to learn a fact that changes
+    /// when an application opens a window — is more than it is worth.
+    private static var discreteBusy = (value: false, at: Date.distantPast)
+
+    private static var discreteIsBusy: Bool {
+        if Date().timeIntervalSince(discreteBusy.at) >= 10 {
+            discreteBusy = (AcceleratorClients.discreteIsBusy(), Date())
+        }
+        return discreteBusy.value
+    }
+
     static func compose(telemetry: Telemetry, darkMenuBar: Bool) -> Content {
         var segments: [Segment] = []
         for item in Preferences.menuBarItems {
@@ -318,6 +348,13 @@ enum MenuBarComposer {
                 return text("↓" + NetworkThroughput.format(network.downloadBytes))
             case .upload:
                 return text("↑" + NetworkThroughput.format(network.uploadBytes))
+            }
+
+        case .graphics:
+            switch Preferences.graphicsStyle {
+            case .off: return []
+            case .short: return text(discreteIsBusy ? "dGPU" : "iGPU")
+            case .full: return text(discreteIsBusy ? "Discrete" : "Integrated")
             }
 
         case .throttle:

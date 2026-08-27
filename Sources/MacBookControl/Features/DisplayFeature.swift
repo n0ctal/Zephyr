@@ -106,6 +106,38 @@ final class DisplayFeature: Feature {
         control.setExtraDimming(value, on: display)
     }
 
+    var canSwitchDisplaysOff: Bool { DisplayControl.canSwitchDisplaysOff }
+
+    func canTurnOff(_ display: CGDirectDisplayID) -> Bool {
+        control.canSafelyDisable(display)
+    }
+
+    @discardableResult
+    func setDisplayEnabled(_ enabled: Bool, of display: CGDirectDisplayID) -> Bool {
+        let applied = control.setEnabled(enabled, of: display)
+        refresh()
+        return applied
+    }
+
+    func rotation(of display: CGDirectDisplayID) -> DisplayControl.Rotation {
+        control.rotation(of: display)
+    }
+
+    func setRotation(_ rotation: DisplayControl.Rotation, of display: CGDirectDisplayID) {
+        control.setRotation(rotation, of: display)
+        screens = control.screens()
+        objectWillChange.send()
+    }
+
+    func mirrorSource(of display: CGDirectDisplayID) -> CGDirectDisplayID? {
+        control.mirrorSource(of: display)
+    }
+
+    func setMirroring(of display: CGDirectDisplayID, to source: CGDirectDisplayID?) {
+        control.setMirroring(of: display, to: source)
+        refresh()
+    }
+
     func modes(for display: CGDirectDisplayID) -> [DisplayControl.Mode] {
         modeCache[display] ?? []
     }
@@ -206,6 +238,38 @@ private struct ScreenControls: View {
                 get: { dim },
                 set: { feature.setDimming($0, on: screen.id) }
             ), in: 0.1...1)
+
+            if feature.canSwitchDisplaysOff {
+                Toggle(isOn: Binding(
+                    get: { true },   // a listed screen is by definition on
+                    set: { on in if !on { feature.setDisplayEnabled(false, of: screen.id) } }
+                )) {
+                    Text("Screen on").font(.headline)
+                }
+                .disabled(!feature.canTurnOff(screen.id))
+                Text(feature.canTurnOff(screen.id)
+                     ? "Switching a screen off is for this session only — a restart brings it back whatever else has happened. It also comes back by itself in a few seconds unless you confirm, and Zephyr puts the arrangement back if the machine is ever left with no screen at all."
+                     : "This is the only screen the machine has. Switching it off would leave nowhere to switch it back on from, which is exactly the state other display utilities are known for.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            SegmentedChoice(label: "Rotation",
+                            selection: Binding(get: { feature.rotation(of: screen.id) },
+                                               set: { feature.setRotation($0, of: screen.id) }),
+                            options: DisplayControl.Rotation.allCases.map { ($0.label, $0) })
+
+            // Only worth offering with something to mirror onto.
+            if feature.screens.count > 1 {
+                MenuChoice(label: "Mirroring",
+                           selection: Binding(
+                               get: { feature.mirrorSource(of: screen.id) ?? 0 },
+                               set: { feature.setMirroring(of: screen.id,
+                                                           to: $0 == 0 ? nil : $0) }),
+                           options: [("Off — its own picture", CGDirectDisplayID(0))]
+                               + feature.screens.filter { $0.id != screen.id }
+                                   .map { ("Show what \($0.name) shows", $0.id) })
+            }
 
             MenuChoice(label: "Resolution",
                        selection: Binding(

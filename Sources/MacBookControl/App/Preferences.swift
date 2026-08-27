@@ -180,6 +180,11 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "menubar.memoryStyle") }
     }
 
+    static var graphicsStyle: MenuBarComposer.GraphicsStyle {
+        get { MenuBarComposer.GraphicsStyle(rawValue: d.string(forKey: "menubar.graphicsStyle") ?? "") ?? .short }
+        set { d.set(newValue.rawValue, forKey: "menubar.graphicsStyle") }
+    }
+
     static var networkStyle: MenuBarComposer.NetworkStyle {
         get { MenuBarComposer.NetworkStyle(rawValue: d.string(forKey: "menubar.networkStyle") ?? "") ?? .both }
         set { d.set(newValue.rawValue, forKey: "menubar.networkStyle") }

@@ -34,6 +34,14 @@ enum AcceleratorClients {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// Whether anything is running work on the discrete card right now.
+    ///
+    /// This is gfxCardStatus's indicator, and it is read from the registry
+    /// rather than by asking Metal which device is default — asking Metal
+    /// wakes the discrete card, which is the opposite of what someone
+    /// watching this wants.
+    static func discreteIsBusy() -> Bool { !discreteHolders().isEmpty }
+
     /// Which accelerator is the discrete one, by the vendor's own name.
     static func isDiscrete(_ acceleratorName: String) -> Bool {
         acceleratorName.contains("AMD") || acceleratorName.contains("NVDA")

@@ -259,7 +259,7 @@ struct SettingsRootView: View {
             // top of the window, and the only way back was to guess that the
             // window needed resizing.
             ScrollView {
-                DiagnosticsSection()
+                DiagnosticsSection(telemetry: telemetry)
                     .padding(4)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -479,6 +479,14 @@ struct MenuBarTab: View {
                                        { Preferences.networkStyle = .init(rawValue: $0) ?? .both }),
                        options: MenuBarComposer.NetworkStyle.allCases.map { ($0.label, $0.rawValue) })
             Text("Everything that is up, added together, minus loopback and VPN tunnels — a tunnel carries the same bytes as the Wi-Fi underneath it, and counting both would double the reading the moment a VPN connects.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .graphics:
+            MenuChoice(label: "Shown as",
+                       selection: bind({ Preferences.graphicsStyle.rawValue },
+                                       { Preferences.graphicsStyle = .init(rawValue: $0) ?? .short }),
+                       options: MenuBarComposer.GraphicsStyle.allCases.map { ($0.label, $0.rawValue) })
+            Text("Read from the processes running work on the discrete card, not by asking Metal which device is default — asking Metal is itself enough to wake the card, which is the opposite of what watching this is for.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         case .throttle:
