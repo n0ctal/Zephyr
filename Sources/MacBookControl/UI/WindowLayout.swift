@@ -271,6 +271,27 @@ struct SidebarSettingsView: View {
     /// the size AppKit gives that style, and the buttons are centred in it.
     private static let titlebarHeight: CGFloat = 52
 
+    /// Where the section's name has to start for its baseline to be the same
+    /// as the window name's, over in the sidebar.
+    ///
+    /// Computed from the two fonts rather than nudged by eye: the sidebar name
+    /// is centred in the titlebar band and the section name is a different
+    /// size, so the inset that makes them sit on one line is a subtraction of
+    /// ascents and changes with either font. Guessing it is what made this the
+    /// third round of moving titles up and down.
+    private var titleTopInset: CGFloat {
+        let weight = NSFont.Weight.medium
+        let name: NSFont = layout.monospaced
+            ? .monospacedSystemFont(ofSize: 13, weight: weight)
+            : .systemFont(ofSize: 13, weight: weight)
+        let title: NSFont = layout.monospaced
+            ? .monospacedSystemFont(ofSize: 19, weight: weight)
+            : .systemFont(ofSize: 19, weight: weight)
+        let nameLine = name.ascender - name.descender
+        let nameBaseline = (Self.titlebarHeight - nameLine) / 2 + name.ascender
+        return max(0, nameBaseline - title.ascender)
+    }
+
     private func row(_ item: SettingsSection) -> some View {
         // No switch in the list. It duplicated the one at the top of the
         // section, and two controls for one thing means guessing which is
@@ -360,10 +381,7 @@ struct SidebarSettingsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            // Not the full titlebar height: the window buttons are over on
-            // the sidebar, so this side has nothing to clear and the clearance
-            // read as a band of nothing above every section's name.
-            .padding(EdgeInsets(top: 26, leading: 24, bottom: 24, trailing: 24))
+            .padding(EdgeInsets(top: titleTopInset, leading: 24, bottom: 24, trailing: 24))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
