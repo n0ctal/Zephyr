@@ -377,19 +377,13 @@ struct TerminalDesignView: View {
                 .pair("Side button 1", "Previous desktop"),
                 .pair("Side button 2", "Next desktop"),
             ]
-        case .profiles:
+        case .settings:
             return [
+                // Profiles moved in here when the section list dropped from
+                // eight to seven; the prototype keeps the sketch of it.
                 .heading("PROFILES"),
                 .toggle("Enable Profiles", registry.feature(id: "profiles")?.isEnabled == true),
                 .pair("In force now", "On battery"),
-                .heading("ON BATTERY"),
-                .statement("Fires when all of these hold — power is battery"),
-                .pair("Then set", "Turbo Boost off"),
-                .pair("", "Graphics: Integrated only"),
-                .pair("", "Stop charging at 80 %"),
-            ]
-        case .settings:
-            return [
                 .heading("APPEARANCE"),
                 .segmented(["Light", "System", "Dark"],
                            Preferences.appearance == "light" ? "Light"

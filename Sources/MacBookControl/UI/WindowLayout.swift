@@ -129,7 +129,7 @@ extension LayoutPalette {
 /// Pointer, and a list that says so is quicker to search than one that makes
 /// you remember which tab the fan curve was under.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case thermals, graphics, batterySleep, display, input, profiles, menuBar, settings
+    case thermals, graphics, batterySleep, display, input, menuBar, settings
 
     var id: String { rawValue }
 
@@ -140,7 +140,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .batterySleep: return "Battery & Sleep"
         case .display: return "Display"
         case .input: return "Input"
-        case .profiles: return "Profiles"
         case .menuBar: return "Menu Bar"
         // Last, and about the app rather than the machine — which is why it
         // sits apart from the seven that touch hardware.
@@ -158,8 +157,9 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .batterySleep: return ["battery", "awake"]
         case .display: return ["display"]
         case .input: return ["keyboard", "pointer"]
-        case .profiles: return ["profiles"]
-        case .menuBar, .settings: return []
+        case .menuBar: return []
+        // Rules that apply settings by themselves belong with the settings.
+        case .settings: return ["profiles"]
         }
     }
 }
@@ -344,6 +344,11 @@ struct SidebarSettingsView: View {
                 case .menuBar:
                     MenuBarTab(telemetry: telemetry)
                 case .settings:
+                    ForEach(section.featureIDs, id: \.self) { id in
+                        if let feature = registry.feature(id: id) {
+                            FeatureBlock(feature: feature, showsTitle: true)
+                        }
+                    }
                     AppSettingsSection(helperState: helperState)
                 default:
                     ForEach(section.featureIDs, id: \.self) { id in
@@ -355,8 +360,10 @@ struct SidebarSettingsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(EdgeInsets(top: Self.titlebarHeight + 6, leading: 24,
-                                bottom: 24, trailing: 24))
+            // Not the full titlebar height: the window buttons are over on
+            // the sidebar, so this side has nothing to clear and the clearance
+            // read as a band of nothing above every section's name.
+            .padding(EdgeInsets(top: 26, leading: 24, bottom: 24, trailing: 24))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -465,8 +472,7 @@ struct AppSettingsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Layout").font(.headline)
-            SegmentedChoice(label: nil,
+            SegmentedChoice(label: "Layout",
                             selection: Binding(
                                 get: { Preferences.windowLayout },
                                 set: { Preferences.windowLayout = $0
@@ -480,8 +486,7 @@ struct AppSettingsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider()
-            Text("Appearance").font(.headline)
-            SegmentedChoice(label: nil,
+            SegmentedChoice(label: "Appearance",
                             selection: Binding(
                                 get: { Preferences.appearance },
                                 set: { Preferences.appearance = $0

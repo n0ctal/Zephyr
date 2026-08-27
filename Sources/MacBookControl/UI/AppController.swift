@@ -125,13 +125,11 @@ final class AppController: NSObject, NSMenuDelegate {
     private func rebuildMenu() {
         menu.removeAllItems()
 
-        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
-        menu.addItem(helperItem())
-
-        let login = item("Launch at login", #selector(toggleLaunchAtLogin))
-        login.state = LaunchAtLogin.isEnabled ? .on : .off
-        menu.addItem(login)
-
+        // Two items. The helper's state and the login item both live in the
+        // window's own Settings section now, and a control in two places is a
+        // question about which one is authoritative the first time they
+        // disagree. What is left is the way in and the way out.
+        menu.addItem(item("Options…", #selector(openSettings), key: ","))
         menu.addItem(item("Quit Zephyr", #selector(quit), key: "q"))
     }
 

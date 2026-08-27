@@ -555,6 +555,8 @@ enum SelfTest {
         expectEqual(Set(ids), ["cooling", "power", "graphics", "battery", "awake",
                                "display", "keyboard", "pointer", "profiles"],
                     "every feature the app builds has a section to live in")
+        expect(SettingsSection(rawValue: "profiles") == nil,
+               "Profiles is no longer a section of its own")
         expect(SettingsSection.allCases.last == .settings,
                "Settings comes last, after Menu Bar")
         expect(!WindowLayout.classic.usesSidebar, "the classic layout keeps its tabs")
