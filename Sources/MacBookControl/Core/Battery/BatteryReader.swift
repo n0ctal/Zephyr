@@ -26,11 +26,13 @@ final class BatteryReader {
             fullChargeCapacity: (props["AppleRawMaxCapacity"] as? Int)
                 ?? (props["MaxCapacity"] as? Int),
             designCapacity: props["DesignCapacity"] as? Int,
-            // Hundredths of a degree Celsius already — this machine reports
-            // 3065 for a battery at 30.65 °C. Subtracting 273.15 as if it were
-            // kelvin produced −243 °C, which is the temperature of a battery
-            // nobody has ever owned.
-            celsius: (props["Temperature"] as? Int).map { Double($0) / 100 },
+            // Tenths of a kelvin. Two wrong readings of this register were
+            // shipped before it was checked against something: hundredths of a
+            // kelvin gave −243 °C, hundredths of a degree gave 30.0 °C while
+            // the SMC's own battery sensors read 27.4–27.7 °C for the same
+            // moment. Tenths of a kelvin puts 3002 at 27.05 °C, which is what
+            // the sensors beside it say.
+            celsius: (props["Temperature"] as? Int).map { Double($0) / 10 - 273.15 },
             power: power(batteryWatts: batteryWatts(props)),
             minutesRemaining: minutesRemaining(props)
         )

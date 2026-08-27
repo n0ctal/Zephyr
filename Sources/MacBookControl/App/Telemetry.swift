@@ -41,6 +41,12 @@ final class Telemetry: ObservableObject {
     /// how the settings window came to feel slow to open.
     private let queue = DispatchQueue(label: "com.n0ctal.zephyr.telemetry", qos: .utility)
     private var isReading = false
+    /// Set when a refresh was asked for while one was already running with a
+    /// smaller set of needs. Without it, opening the window can hand the
+    /// pickers a list of one sensor: the immediate read is dropped as
+    /// duplicate and the read already in flight — taken for a closed window —
+    /// is what lands.
+    private var needsAnotherRead = false
 
     /// Seconds between reads. Also the unit `ThermalStats` integrates over, so
     /// changing it here keeps the "held back for" figure honest.
@@ -165,7 +171,10 @@ final class Telemetry: ObservableObject {
     private func refresh() {
         // A slow read must not queue up behind itself. Skipping a tick is
         // harmless; stacking them turns a busy machine into a growing backlog.
-        guard !isReading else { return }
+        guard !isReading else {
+            needsAnotherRead = true
+            return
+        }
         isReading = true
         let needs = currentNeeds
         let sensorKey = Preferences.temperatureSensorKey
@@ -222,6 +231,10 @@ final class Telemetry: ObservableObject {
                 self.thermal = status
                 self.stats.record(status, interval: Int(Self.interval))
                 self.isReading = false
+                if self.needsAnotherRead {
+                    self.needsAnotherRead = false
+                    self.refresh()
+                }
             }
         }
     }

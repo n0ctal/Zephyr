@@ -61,6 +61,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// For `--dump-real-window` only.
     var windowForTesting: NSWindow? { window }
 
+    /// Also for the capture flags: a window parked off every screen is
+    /// occluded by definition, and downgrading the readings for it is how a
+    /// picture of the window comes back with half its numbers missing.
+    var ignoresVisibilityChanges = false
+
     // MARK: Whether anybody is looking
     //
     // Closing is not the only way to stop looking: the window can be
@@ -79,7 +84,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowDidChangeOcclusionState(_ notification: Notification) { updateVisibility() }
 
     private func updateVisibility() {
-        guard let window = window else { return }
+        guard let window = window, !ignoresVisibilityChanges else { return }
         context?.telemetry.isWindowOpen =
             window.isVisible
             && !window.isMiniaturized
@@ -274,10 +279,11 @@ struct SettingsRootView: View {
         // pane, and there is no way to tell it not to. Darkness is a sidebar
         // layout's setting first and a classic one's second.
         .background(AppearanceControl.isPitchBlack ? Color.black : Color.clear)
-        // Wide enough for eleven tab labels without truncation. A macOS TabView
-        // clips its labels rather than scrolling them, and "Grap…" next to
-        // "Batt…" is worse than a window that takes more of the screen.
-        .frame(minWidth: 880, minHeight: 420, idealHeight: 520)
+        // Wide enough for twelve tab labels without truncation. A macOS
+        // TabView clips its labels rather than scrolling them, and "Grap…"
+        // next to "Batt…" is worse than a window that takes more of the
+        // screen.
+        .frame(minWidth: 960, minHeight: 420, idealHeight: 520)
     }
 }
 

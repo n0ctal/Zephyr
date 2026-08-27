@@ -320,7 +320,7 @@ func runNetworkTest() {
 func runDiagnosticsTest() {
     if let drive = DriveHealth.read() {
         print("drive: \(drive.model), wear \(drive.percentageUsed) %, "
-              + "written \(drive.bytesWritten / 1_099_511_627_776) TB, "
+              + "written \(drive.bytesWritten / 1_000_000_000_000) TB, "
               + "\(drive.powerOnHours) h, \(drive.unsafeShutdowns) unsafe shutdowns, "
               + "\(drive.mediaErrors) media errors, healthy: \(drive.isHealthy)")
     } else {

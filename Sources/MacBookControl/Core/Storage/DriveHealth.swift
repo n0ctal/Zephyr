@@ -145,7 +145,7 @@ enum DriveHealth {
         return Reading(
             model: characteristics?["Product Name"] as? String ?? "SSD",
             serial: characteristics?["Serial Number"] as? String ?? "",
-            capacityBytes: wholeDiskCapacity(),
+            capacityBytes: wholeDiskCapacity(under: device),
             criticalWarning: page[0],
             celsius: kelvin > 0 ? Double(kelvin) - 273.15 : nil,
             percentageUsed: Int(page[5]),
@@ -159,31 +159,36 @@ enum DriveHealth {
             mediaErrors: value(at: 160, bytes: 16))
     }
 
-    /// The drive's size, which lives on the whole-disk media rather than on
-    /// the controller — a search upwards from the NVMe device never finds it.
-    private static func wholeDiskCapacity() -> UInt64 {
-        var iterator: io_iterator_t = 0
-        let matching = IOServiceMatching("IOMedia") as NSMutableDictionary
-        matching["IOPropertyMatch"] = ["Whole": true]
-        guard IOServiceGetMatchingServices(kIOMasterPortDefault,
-                                           matching, &iterator) == KERN_SUCCESS else { return 0 }
-        defer { IOObjectRelease(iterator) }
+    /// The size of the whole-disk media belonging to *this* device.
+    ///
+    /// It lives below the NVMe device rather than on it, so a search upwards
+    /// never finds it — and searching the whole registry for the largest whole
+    /// disk, which is what this did first, printed an attached drive's size
+    /// beside the internal drive's health page.
+    private static func wholeDiskCapacity(under device: io_service_t) -> UInt64 {
+        var children: io_iterator_t = 0
+        guard IORegistryEntryCreateIterator(device, kIOServicePlane,
+                                            IOOptionBits(kIORegistryIterateRecursively),
+                                            &children) == KERN_SUCCESS else { return 0 }
+        defer { IOObjectRelease(children) }
 
-        var largest: UInt64 = 0
-        var media = IOIteratorNext(iterator)
-        while media != 0 {
-            if let size = IORegistryEntryCreateCFProperty(media, "Size" as CFString,
-                                                          kCFAllocatorDefault, 0)?
-                .takeRetainedValue() as? NSNumber {
-                // The largest whole disk is the internal one on every machine
-                // this runs on; an attached drive would be smaller, and if it
-                // were not, its own health page is not what this is reading.
-                largest = max(largest, size.uint64Value)
+        var child = IOIteratorNext(children)
+        while child != 0 {
+            defer {
+                IOObjectRelease(child)
+                child = IOIteratorNext(children)
             }
-            IOObjectRelease(media)
-            media = IOIteratorNext(iterator)
+            guard IOObjectConformsTo(child, "IOMedia") != 0,
+                  let whole = IORegistryEntryCreateCFProperty(child, "Whole" as CFString,
+                                                              kCFAllocatorDefault, 0)?
+                    .takeRetainedValue() as? Bool, whole,
+                  let size = IORegistryEntryCreateCFProperty(child, "Size" as CFString,
+                                                             kCFAllocatorDefault, 0)?
+                    .takeRetainedValue() as? NSNumber
+            else { continue }
+            return size.uint64Value
         }
-        return largest
+        return 0
     }
 
     private static func property(_ service: io_service_t, _ key: String) -> Any? {
