@@ -205,6 +205,8 @@ final class DisplayControl {
     private var disabledDisplay: CGDirectDisplayID?
     /// Where the windows were before a screen was switched off.
     private var arrangementBeforeChange: [WindowArrangement.Placement] = []
+    /// How bright each switched-off panel was, so it comes back as it went.
+    private var brightnessBeforeDisable: [CGDirectDisplayID: Float?] = [:]
 
     /// Switches resolution inside a configuration transaction, so the change
     /// lands in one step rather than as a sequence the window server has to
@@ -348,6 +350,14 @@ final class DisplayControl {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self = self, self.activeDisplayIDs().isEmpty else { return }
             CGRestorePermanentDisplayConfiguration()
+            // And the light back on. A panel switched off here was darkened
+            // as well as disconnected, and a restored arrangement on a black
+            // screen is the same problem wearing a different hat.
+            for display in self.brightnessBeforeDisable.keys {
+                self.setBrightness(self.brightnessBeforeDisable[display].flatMap { $0 } ?? 1,
+                                   on: display)
+            }
+            self.brightnessBeforeDisable.removeAll()
         }
     }
 
@@ -370,23 +380,39 @@ final class DisplayControl {
     /// built-in back on. Three things stand between a person and that:
     ///
     /// - it refuses outright when this is the last display standing;
-    /// - it puts the panel back by itself unless confirmed, like a resolution;
+    /// - the switch stays in the list, so the way back is where the way out
+    ///   was;
     /// - the change is for this session only, so a restart undoes it even if
     ///   everything else has failed — which is precisely the escape the
     ///   reported failure did not have.
+    ///
+    /// There is deliberately no timer putting it back. A resolution or a
+    /// rotation can leave a panel that cannot be read, so those revert unless
+    /// confirmed; a screen switched off while another one is lit cannot strand
+    /// anybody, and a screen that turns itself back on after fifteen seconds
+    /// is not a screen that has been switched off.
     ///
     /// And separately from all three, the watcher further down notices a
     /// machine with no active display at all and asks for the permanent
     /// arrangement back.
     @discardableResult
     func setEnabled(_ enabled: Bool, of display: CGDirectDisplayID,
-                    revertAfter: TimeInterval = 15) -> Bool {
+                    revertAfter: TimeInterval = 0) -> Bool {
         guard enabled || canSafelyDisable(display) else { return false }
         guard let configure = Self.configureDisplayEnabled else { return false }
 
-        // Taken before the screen goes: macOS herds every window onto whatever
-        // is left and puts none of them back afterwards.
-        if !enabled { arrangementBeforeChange = WindowArrangement.capture() }
+        if !enabled {
+            // Taken before the screen goes: macOS herds every window onto
+            // whatever is left and puts none of them back afterwards.
+            arrangementBeforeChange = WindowArrangement.capture()
+            // And the backlight goes out first. Switching a display off
+            // removes it from the arrangement but leaves the panel lit — a
+            // laptop shut this way glows black at you, which is not what
+            // anybody means by off. Brightness has to be written while the
+            // display is still active, so the order matters.
+            brightnessBeforeDisable[display] = brightness(of: display)
+            setBrightness(0, on: display)
+        }
 
         var configuration: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&configuration) == .success,
@@ -394,6 +420,11 @@ final class DisplayControl {
         _ = configure(configuration, display, enabled)
         guard CGCompleteDisplayConfiguration(configuration, .forSession) == .success else {
             return false
+        }
+
+        if enabled, let previous = brightnessBeforeDisable.removeValue(forKey: display) {
+            // Back on, then lit: the same order in reverse.
+            setBrightness(previous ?? 1, on: display)
         }
 
         if enabled, !arrangementBeforeChange.isEmpty {
@@ -416,6 +447,14 @@ final class DisplayControl {
         RunLoop.main.add(timer, forMode: .common)
         revertTimer = timer
         return true
+    }
+
+    /// Puts back every panel this session switched off. Called when the
+    /// feature is switched off and when the app quits.
+    func restoreDisabledDisplays() {
+        for display in brightnessBeforeDisable.keys {
+            setEnabled(true, of: display)
+        }
     }
 
     func isEnabled(_ display: CGDirectDisplayID) -> Bool {

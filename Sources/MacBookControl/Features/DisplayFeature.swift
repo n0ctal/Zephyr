@@ -66,6 +66,9 @@ final class DisplayFeature: Feature {
 
     override func deactivate() {
         stopWatchingScreens()
+        // Anything switched off comes back: a panel left dark by a feature
+        // that is no longer running is a machine that looks broken.
+        control.restoreDisabledDisplays()
         // The extra dimming is ours and goes back. Brightness and resolution
         // stay: those are ordinary system settings the user also changes with
         // the keys and the Displays pane, and silently rewinding them on the
