@@ -15,13 +15,18 @@ enum SleepDiagnostics {
 
     /// Something holding the machine awake, and who is holding it.
     struct Assertion: Identifiable {
+        /// Position in the list as read. A process can hold several
+        /// assertions of the same type with the same name — Safari does,
+        /// one per media element — and nothing else about them differs, so
+        /// this is the only thing that tells the rows apart.
+        let sequence: Int
         let pid: Int
         let process: String
         let kind: String
         let name: String
         let since: Date?
 
-        var id: String { "\(pid)/\(kind)/\(name)" }
+        var id: String { "\(sequence)/\(pid)/\(kind)" }
 
         /// What it actually prevents, in words rather than in Apple's key
         /// names — which are the same words with the letters run together.
@@ -63,6 +68,7 @@ enum SleepDiagnostics {
                 guard let kind = entry[kIOPMAssertionTypeKey] as? String,
                       blocking.contains(kind) else { continue }
                 found.append(Assertion(
+                    sequence: found.count,
                     pid: pidNumber.intValue,
                     process: entry["Process Name"] as? String ?? "pid \(pidNumber)",
                     kind: kind,

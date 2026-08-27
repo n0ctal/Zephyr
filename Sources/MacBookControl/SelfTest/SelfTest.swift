@@ -690,6 +690,10 @@ enum SelfTest {
                "a single media error is not healthy, whatever the drive claims")
         expect(!reading(warning: 0, spare: 5, threshold: 10).isHealthy,
                "nor is spare capacity under its own threshold")
+        expect(reading(warning: 0, spare: 10, threshold: 10).isHealthy,
+               "but exactly at the threshold is not yet past it")
+        expect(reading(warning: 0, spare: 0, threshold: 0).isHealthy,
+               "and a drive that does not track spare blocks is not failing")
         // Bit 1 is the temperature warning, bit 3 the read-only one.
         expectEqual(reading(warning: 0b0000_1010).warnings.count, 2,
                     "each warning bit is reported separately")
@@ -712,7 +716,7 @@ enum SelfTest {
 
     private static func sleepAssertionWording() {
         func effect(_ kind: String) -> String {
-            SleepDiagnostics.Assertion(pid: 1, process: "test", kind: kind,
+            SleepDiagnostics.Assertion(sequence: 0, pid: 1, process: "test", kind: kind,
                                        name: "", since: nil).effect
         }
         expectEqual(effect(kIOPMAssertionTypePreventUserIdleSystemSleep), "keeps the Mac awake",

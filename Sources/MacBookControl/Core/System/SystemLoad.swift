@@ -33,6 +33,12 @@ final class SystemLoad {
     }
 
     private var previousTicks: [[UInt32]] = []
+    /// When those ticks were taken. Load is a rate, and a rate needs to know
+    /// how long ago the other end of it was — with the window shut this is not
+    /// read at all, so the first snapshot after it opens would otherwise be
+    /// the average busy fraction over the whole closed afternoon, presented as
+    /// what the machine is doing right now.
+    private var previousAt: Date?
 
     /// Nominal frequency. macOS on Intel does not publish the instantaneous
     /// clock — `hw.cpufrequency` reports the base and never moves — so the
@@ -58,11 +64,18 @@ final class SystemLoad {
     /// thing in here — and nothing shows it unless the window is open.
     func read(includeGPU: Bool = false) -> Snapshot? {
         guard let ticks = coreTicks() else { return nil }
-        defer { previousTicks = ticks }
+        let elapsed = previousAt.map { Date().timeIntervalSince($0) }
+        defer {
+            previousTicks = ticks
+            previousAt = Date()
+        }
 
         // First call has nothing to subtract from. Reporting zero would be a
         // lie that looks like an idle machine; nil says "not yet".
         guard previousTicks.count == ticks.count else { return nil }
+        // Nor does a gap: this becomes the first call again, and the next tick
+        // two seconds later is a real reading.
+        guard let elapsed = elapsed, elapsed < 20 else { return nil }
 
         var perCore: [Double] = []
         perCore.reserveCapacity(ticks.count)

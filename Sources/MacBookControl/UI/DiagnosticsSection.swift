@@ -60,7 +60,9 @@ struct DiagnosticsSection: View {
             row("Powered on", "\(drive.powerOnHours) hours over \(drive.powerCycles) starts")
             row("Unsafe shutdowns", "\(drive.unsafeShutdowns)")
             row("Media errors", "\(drive.mediaErrors)")
-            row("Temperature", String(format: "%.0f °C", drive.celsius))
+            if let celsius = drive.celsius {
+                row("Temperature", String(format: "%.0f °C", celsius))
+            }
 
             Text("Wear is the drive's own estimate of how much of its rated write endurance is gone. It is not a countdown to failure: drives routinely pass 100 % and keep working, while a single media error on a young one is the reading to worry about.")
                 .font(.caption).foregroundColor(.secondary)

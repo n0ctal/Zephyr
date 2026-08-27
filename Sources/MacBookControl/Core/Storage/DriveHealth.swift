@@ -20,7 +20,10 @@ enum DriveHealth {
         let capacityBytes: UInt64
         /// 0 means nothing is wrong; each bit is a separate warning.
         let criticalWarning: UInt8
-        let celsius: Double
+        /// Nil when the drive does not implement it. Zero kelvin is a
+        /// permitted answer for "no sensor", and reporting it as −273 °C is
+        /// the same mistake the battery reading had.
+        let celsius: Double?
         /// Share of the drive's rated write endurance already spent. Passes
         /// 100 % on a drive that has outlived its rating and keeps counting.
         let percentageUsed: Int
@@ -37,7 +40,11 @@ enum DriveHealth {
         let mediaErrors: UInt64
 
         var isHealthy: Bool {
-            criticalWarning == 0 && mediaErrors == 0 && availableSpare > spareThreshold
+            // At the threshold is not past it — the specification warns when
+            // spare capacity falls *below*. A drive answering 0 and 0, which
+            // is what one that does not track spare blocks answers, is not
+            // failing either.
+            criticalWarning == 0 && mediaErrors == 0 && availableSpare >= spareThreshold
         }
 
         /// What the warning bits mean, in the order the specification lists
@@ -132,6 +139,7 @@ enum DriveHealth {
         }
         // A "data unit" is a thousand 512-byte blocks, by the specification.
         func bytes(at offset: Int) -> UInt64 { value(at: offset, bytes: 16) &* 512_000 }
+        let kelvin = value(at: 1, bytes: 2)
 
         let characteristics = property(device, "Device Characteristics") as? [String: Any]
         return Reading(
@@ -139,7 +147,7 @@ enum DriveHealth {
             serial: characteristics?["Serial Number"] as? String ?? "",
             capacityBytes: wholeDiskCapacity(),
             criticalWarning: page[0],
-            celsius: Double(value(at: 1, bytes: 2)) - 273.15,
+            celsius: kelvin > 0 ? Double(kelvin) - 273.15 : nil,
             percentageUsed: Int(page[5]),
             availableSpare: Int(page[3]),
             spareThreshold: Int(page[4]),

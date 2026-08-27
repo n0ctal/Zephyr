@@ -189,7 +189,10 @@ final class Telemetry: ObservableObject {
                    !wanted.contains(where: { $0.key == cpu.key }) {
                     wanted.append(cpu)
                 }
-                temperatures = wanted
+                // Empty stays nil: a sensor that momentarily declines to
+                // answer must not blank the menu bar, which is what assigning
+                // an empty list would do.
+                temperatures = wanted.isEmpty ? nil : wanted
             }
             let fans = needs.fans ? (self.fanController?.readFans() ?? []) : nil
             let battery = needs.battery ? self.batteryReader.read() : nil
