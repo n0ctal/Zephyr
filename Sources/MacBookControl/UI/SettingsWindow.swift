@@ -19,7 +19,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// normal launches open on whatever the window remembers.
     static var initialTab: String?
 
-    func show(registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState) {
+    /// `alwaysVisible` is for the capture flags only: a window parked off
+    /// every screen is occluded by definition, and reading it as though nobody
+    /// were looking is how a picture of it comes back with half its numbers
+    /// missing. Passed in rather than left as a switch somebody can forget to
+    /// unwind.
+    func show(registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState,
+              alwaysVisible: Bool = false) {
+        ignoresVisibilityChanges = alwaysVisible
         if let window = window {
             telemetry.isWindowOpen = true
             window.makeKeyAndOrderFront(nil)
@@ -61,10 +68,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// For `--dump-real-window` only.
     var windowForTesting: NSWindow? { window }
 
-    /// Also for the capture flags: a window parked off every screen is
-    /// occluded by definition, and downgrading the readings for it is how a
-    /// picture of the window comes back with half its numbers missing.
-    var ignoresVisibilityChanges = false
+    private var ignoresVisibilityChanges = false
 
     // MARK: Whether anybody is looking
     //

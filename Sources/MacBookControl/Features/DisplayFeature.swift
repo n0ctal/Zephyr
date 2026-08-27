@@ -20,8 +20,8 @@ final class DisplayFeature: Feature {
     /// piece of glass. A single slider driving every panel would be a control
     /// that means something different on each screen it reaches.
     @Published var scope: CGDirectDisplayID?
-
     private var refreshTimer: Timer?
+
 
     init() {
         super.init(id: "display",
@@ -39,21 +39,33 @@ final class DisplayFeature: Feature {
             self?.refresh()
             self?.objectWillChange.send()
         }
+        // Kept on the feature rather than on the view: this is what notices
+        // the machine has been left with no display at all, and it has to
+        // notice that with the window shut.
         control.startWatchingConfiguration()
         refresh()
+    }
+
+    /// Re-enumerates the screens while the tab is open. Five seconds is quick
+    /// enough that plugging a monitor in and looking shows it already listed.
+    func startWatchingScreens() {
+        refresh()
         guard refreshTimer == nil else { return }
-        // Displays come and go. Five seconds is quick enough that plugging a
-        // monitor in and opening this tab shows it already listed.
         let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.refresh()
         }
+        timer.tolerance = 1
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
     }
 
-    override func deactivate() {
+    func stopWatchingScreens() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+    }
+
+    override func deactivate() {
+        stopWatchingScreens()
         // The extra dimming is ours and goes back. Brightness and resolution
         // stay: those are ordinary system settings the user also changes with
         // the keys and the Displays pane, and silently rewinding them on the
@@ -156,7 +168,13 @@ private struct DisplayView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .onAppear { feature.refresh() }
+        // Enumerating screens and their modes is not free, and nothing but
+        // this tab looks at the result — so it is asked while the tab is open
+        // and not otherwise. Not through `Polled`, because the reading
+        // publishes straight onto the feature and that has to happen on the
+        // main thread.
+        .onAppear { feature.startWatchingScreens() }
+        .onDisappear { feature.stopWatchingScreens() }
     }
 }
 

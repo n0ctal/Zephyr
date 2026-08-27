@@ -318,8 +318,8 @@ final class AppController: NSObject, NSMenuDelegate {
         // Shown as it looks when the helper is answering, which is the normal
         // case. The warning banner is worth checking too, but it is not what
         // this picture is for: it covers the strip being inspected.
-        settingsWindow.ignoresVisibilityChanges = true
-        settingsWindow.show(registry: registry, telemetry: telemetry, helperState: .working(version: "dev"))
+        settingsWindow.show(registry: registry, telemetry: telemetry,
+                            helperState: .working(version: "dev"), alwaysVisible: true)
         guard let window = settingsWindow.windowForTesting else { return }
         // Only a place. The window sizes itself from the view it holds, and
         // forcing a size here would photograph a window nobody will ever see.

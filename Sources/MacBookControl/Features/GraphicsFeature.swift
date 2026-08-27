@@ -113,7 +113,10 @@ final class GraphicsFeature: Feature {
 private struct GraphicsView: View {
     @ObservedObject var feature: GraphicsFeature
     /// Polled only while this section is on screen — see `Polled`. Five
-    /// seconds because processes take and drop the card as windows open.
+    /// seconds because processes take and drop the card as windows open, and
+    /// the card they are rendering on changes with them: one poll answers
+    /// both, rather than a timer for one and a single reading on appear for
+    /// the other.
     @StateObject private var holders = Polled(every: 5) {
         AcceleratorClients.discreteHolders()
     }
@@ -159,6 +162,7 @@ private struct GraphicsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { feature.refresh() }
+        .onReceive(holders.$value) { _ in feature.refresh() }
         .polling(holders)
     }
 }

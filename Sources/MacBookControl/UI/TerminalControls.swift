@@ -84,6 +84,29 @@ struct BracketToggleStyle: ToggleStyle {
     }
 }
 
+/// The heading over a block of settings or readings: small, spaced out, in the
+/// accent, with a rule under it in the terminal theme.
+///
+/// Written once because it was written four times — in the feature blocks, in
+/// the diagnostics section and twice in the prototype — and a heading that
+/// differs by two points of tracking between sections is the kind of thing
+/// nobody sees and everybody feels.
+struct SectionHeading: View {
+    let text: String
+    @Environment(\.terminalStyling) private var terminal
+    @Environment(\.terminalPalette) private var palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text)
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(terminal ? 2.2 : 1.4)
+                .foregroundColor(terminal ? palette.accent : .secondary)
+            if terminal { Rectangle().fill(palette.rule).frame(height: 1) }
+        }
+    }
+}
+
 /// A button written the way a terminal writes one: in brackets, with no
 /// bezel. The rounded grey pill is the last system shape left in the theme —
 /// and there are enough buttons in the Input section for it to read as two

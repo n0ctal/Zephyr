@@ -43,11 +43,9 @@ struct DiagnosticsSection: View {
     @ViewBuilder private var driveBlock: some View {
         heading("DRIVE")
         if let drive = drive.value {
-            Text(drive.isHealthy
-                 ? "The drive reports itself healthy."
-                 : "The drive is reporting a problem.")
-                .font(.subheadline)
-                .foregroundColor(drive.isHealthy ? .secondary : .orange)
+            note(drive.isHealthy ? "The drive reports itself healthy."
+                                 : "The drive is reporting a problem.",
+                 warning: !drive.isHealthy)
             ForEach(drive.warnings, id: \.self) { warning in
                 Text("· " + warning).font(.caption).foregroundColor(.orange)
             }
@@ -64,12 +62,9 @@ struct DiagnosticsSection: View {
                 row("Temperature", String(format: "%.0f °C", celsius))
             }
 
-            Text("Wear is the drive's own estimate of how much of its rated write endurance is gone. It is not a countdown to failure: drives routinely pass 100 % and keep working, while a single media error on a young one is the reading to worry about.")
-                .font(.caption).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            explainer("Wear is the drive's own estimate of how much of its rated write endurance is gone. It is not a countdown to failure: drives routinely pass 100 % and keep working, while a single media error on a young one is the reading to worry about.")
         } else {
-            Text(drive.hasRead ? "This drive does not publish a health page." : "Reading…")
-                .font(.subheadline).foregroundColor(.secondary)
+            note(drive.hasRead ? "This drive does not publish a health page." : "Reading…")
         }
     }
 
@@ -79,15 +74,12 @@ struct DiagnosticsSection: View {
         heading("HOLDING SLEEP OFF")
         let assertions = sleep.value ?? []
         if assertions.isEmpty {
-            Text(sleep.hasRead ? "Nothing is holding the Mac awake." : "Reading…")
-                .font(.subheadline).foregroundColor(.secondary)
+            note(sleep.hasRead ? "Nothing is holding the Mac awake." : "Reading…")
         } else {
             ForEach(assertions) { assertion in
                 row(assertion.process, held(assertion) + assertion.effect)
             }
-            Text("These are the assertions macOS is honouring right now. An application that leaves one behind is the usual reason a Mac sits awake all night with the lid shut.")
-                .font(.caption).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            explainer("These are the assertions macOS is honouring right now. An application that leaves one behind is the usual reason a Mac sits awake all night with the lid shut.")
         }
     }
 
@@ -113,11 +105,9 @@ struct DiagnosticsSection: View {
             if let shutdown = record.shutdownDescription {
                 row("Last shutdown", shutdown)
             }
-            Text("The wake reason is the hardware's own word for what raised the machine — \"EC.USBC\" is something on a USB-C port, \"OHC1\" a USB controller, \"LID0\" the lid. Only one shutdown code has a published meaning, so the rest are shown as the number the firmware reports.")
-                .font(.caption).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            explainer("The wake reason is the hardware's own word for what raised the machine — \"EC.USBC\" is something on a USB-C port, \"OHC1\" a USB controller, \"LID0\" the lid. Only one shutdown code has a published meaning, so the rest are shown as the number the firmware reports.")
         } else {
-            Text("Reading…").font(.subheadline).foregroundColor(.secondary)
+            note("Reading…")
         }
     }
 
@@ -128,10 +118,9 @@ struct DiagnosticsSection: View {
         let items = startup.value ?? []
         let others = items.filter { !$0.isApple }
         if !startup.hasRead {
-            Text("Reading…").font(.subheadline).foregroundColor(.secondary)
+            note("Reading…")
         } else if others.isEmpty {
-            Text("Nothing outside the system starts by itself.")
-                .font(.subheadline).foregroundColor(.secondary)
+            note("Nothing outside the system starts by itself.")
         } else {
             ForEach(others) { item in
                 row(item.label, (item.program.map { shorten($0) } ?? "—")
@@ -140,9 +129,7 @@ struct DiagnosticsSection: View {
         }
         let apple = items.count - others.count
         if apple > 0 {
-            Text("\(apple) of Apple's own are not listed: they are the bulk of any list like this and none of them are what anyone is looking for. Nothing here is a verdict — most of what starts by itself was installed on purpose and then forgotten.")
-                .font(.caption).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            explainer("\(apple) of Apple's own are not listed: they are the bulk of any list like this and none of them are what anyone is looking for. Nothing here is a verdict — most of what starts by itself was installed on purpose and then forgotten.")
         }
     }
 
@@ -154,15 +141,23 @@ struct DiagnosticsSection: View {
 
     // MARK: Pieces
 
-    @ViewBuilder private func heading(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(text)
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(terminal ? 2.2 : 1.4)
-                .foregroundColor(terminal ? palette.accent : .secondary)
-            if terminal { Rectangle().fill(palette.rule).frame(height: 1) }
-        }
-        .padding(.top, 2)
+    private func heading(_ text: String) -> some View {
+        SectionHeading(text: text).padding(.top, 2)
+    }
+
+    /// A single line about the state of things.
+    private func note(_ text: String, warning: Bool = false) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundColor(warning ? .orange : .secondary)
+    }
+
+    /// A paragraph explaining what a reading means, which is most of what
+    /// makes these numbers worth showing at all.
+    private func explainer(_ text: String) -> some View {
+        Text(text)
+            .font(.caption).foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The same label column every other row in the window uses, so a reading

@@ -437,18 +437,11 @@ struct FeatureBlock: View {
                     // there to be switched.
                     Toggle(isOn: Binding(get: { feature.isEnabled },
                                          set: { feature.setEnabled($0) })) {
-                        Text(feature.title.uppercased())
-                            .font(.system(size: 10, weight: .semibold))
-                            .tracking(2.2)
-                            .foregroundColor(palette.accent)
+                        SectionHeading(text: feature.title.uppercased())
                     }
-                    Rectangle().fill(palette.rule).frame(height: 1)
                 } else {
                     if showsTitle {
-                        Text(feature.title.uppercased())
-                            .font(.system(size: 10, weight: .semibold))
-                            .tracking(1.4)
-                            .foregroundColor(.secondary)
+                        SectionHeading(text: feature.title.uppercased())
                     }
                     Toggle(isOn: Binding(get: { feature.isEnabled },
                                          set: { feature.setEnabled($0) })) {
