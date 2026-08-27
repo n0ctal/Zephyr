@@ -230,22 +230,13 @@ struct SidebarSettingsView: View {
             // The window's own title bar is gone in this layout, so the name
             // has to be put back by hand — and the only place it can go is the
             // strip those three buttons already occupy.
-            Text("Zephyr")
-                .font(font(13, .medium))
-                .foregroundColor(palette.dim)
-                // Against the far side of the sidebar, one button-margin in.
-                // Beside the buttons it was one more gap to argue about; at
-                // the other end there is only one, and it is the same 20
-                // points the buttons are inset by on their side.
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, 20)
-                // Centred on the window buttons, which the system centres in
-                // the titlebar — and the titlebar is this tall because of the
-                // unified toolbar the window carries. No padding under it:
-                // the titlebar already leaves as much room below the buttons
-                // as it does above them, and adding more made the gap beneath
-                // them visibly larger than the one over them.
-                .frame(height: Self.titlebarHeight)
+            // Room for the three window buttons and nothing else. The name
+            // used to sit here and was a constant argument about whether it
+            // lined up with the section title opposite: two labels of
+            // different sizes and colours on one line look wrong even when
+            // their baselines agree exactly. It says its piece at the foot of
+            // Settings now, where it has nothing to line up with.
+            Color.clear.frame(height: Self.titlebarHeight)
 
             ForEach(SettingsSection.allCases) { section in
                 row(section)
@@ -271,25 +262,16 @@ struct SidebarSettingsView: View {
     /// the size AppKit gives that style, and the buttons are centred in it.
     private static let titlebarHeight: CGFloat = 52
 
-    /// Where the section's name has to start for its baseline to be the same
-    /// as the window name's, over in the sidebar.
+    /// Where the section's name starts: centred in the same band the window
+    /// buttons are centred in, so it sits level with them.
     ///
-    /// Computed from the two fonts rather than nudged by eye: the sidebar name
-    /// is centred in the titlebar band and the section name is a different
-    /// size, so the inset that makes them sit on one line is a subtraction of
-    /// ascents and changes with either font. Guessing it is what made this the
-    /// third round of moving titles up and down.
+    /// Computed from the font rather than nudged by eye, which is what made
+    /// this the third round of moving a title up and down.
     private var titleTopInset: CGFloat {
-        let weight = NSFont.Weight.medium
-        let name: NSFont = layout.monospaced
-            ? .monospacedSystemFont(ofSize: 13, weight: weight)
-            : .systemFont(ofSize: 13, weight: weight)
         let title: NSFont = layout.monospaced
-            ? .monospacedSystemFont(ofSize: 19, weight: weight)
-            : .systemFont(ofSize: 19, weight: weight)
-        let nameLine = name.ascender - name.descender
-        let nameBaseline = (Self.titlebarHeight - nameLine) / 2 + name.ascender
-        return max(0, nameBaseline - title.ascender)
+            ? .monospacedSystemFont(ofSize: 19, weight: .medium)
+            : .systemFont(ofSize: 19, weight: .medium)
+        return max(0, (Self.titlebarHeight - (title.ascender - title.descender)) / 2)
     }
 
     private func row(_ item: SettingsSection) -> some View {
@@ -538,6 +520,16 @@ struct AppSettingsSection: View {
             Text("Fans, graphics, Turbo Boost, the charge ceiling and the power limits all write to hardware, which needs root. Everything else works without it.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+            // The version comes from the bundle, not from a constant here: a
+            // number written twice is a number that will disagree with itself
+            // one release from now.
+            Text("Zephyr by n0ctal · v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 4)
         }
         .id(revision)
     }
