@@ -75,10 +75,14 @@ final class SettingsWindowController {
     /// dark sidebar is a band of another application's colour across the top
     /// of this one. The classic layout keeps its title bar, because the row of
     /// tabs would otherwise start underneath those same buttons.
-    /// The one size the sidebar layouts open at. Wide enough for the widest
-    /// row there is (Graphics); as tall as the window was when it could still
-    /// be dragged, which is the height that was being asked for.
-    static let fixedContentSize = NSSize(width: 960, height: 520)
+    /// The one size the sidebar layouts open at.
+    ///
+    /// Wide enough for the widest row there is, which is Graphics. Tall enough
+    /// for the Display section exactly — 470 points is what that section
+    /// measures, and it is the height the window was showing in the build this
+    /// was compared against. Graphics is shorter and leaves a little room
+    /// under it; everything taller scrolls.
+    static let fixedContentSize = NSSize(width: 960, height: 470)
 
     private func applyChrome(to window: NSWindow) {
         // Not resizable in the sidebar layouts, and set back to the one size
@@ -151,10 +155,8 @@ struct SettingsRootView: View {
                     // Input, which is the one that scrolls. A window that
                     // resized itself to each section was the other way to
                     // avoid a scrollbar and it looked like a fault.
-                    // 520 is the height the window was dragged to back when
-                    // it could be dragged — the size that was being asked for
-                    // by "one size, like it was". Display and Graphics fit
-                    // inside it; the taller sections scroll.
+                    // The one size, kept next to the window's own copy of it
+                    // in `fixedContentSize`.
                     //
                     // A minimum rather than an exact height: with the title
                     // bar hidden the window ends up 52 points taller than the
@@ -162,7 +164,7 @@ struct SettingsRootView: View {
                     // height left that difference unpainted along the bottom.
                     // The minimum fixes the size; the flexible top lets the
                     // view fill whatever the window turns out to be.
-                    .frame(minWidth: 960, maxWidth: 960, minHeight: 520, maxHeight: .infinity)
+                    .frame(minWidth: 960, maxWidth: 960, minHeight: 470, maxHeight: .infinity)
             } else {
                 tabs
             }
