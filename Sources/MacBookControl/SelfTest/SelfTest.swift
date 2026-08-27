@@ -725,10 +725,18 @@ enum SelfTest {
             SleepDiagnostics.Assertion(sequence: 0, pid: 1, process: "test", kind: kind,
                                        name: "", since: nil).effect
         }
-        expectEqual(effect(kIOPMAssertionTypePreventUserIdleSystemSleep), "keeps the Mac awake",
+        // Spelled out on purpose: these are the strings the power-management
+        // registry reports, and the SDK constants have been known to resolve
+        // to something else.
+        expectEqual(effect("PreventUserIdleSystemSleep"), "keeps the Mac awake",
                     "the system assertions are described by what they do")
-        expectEqual(effect(kIOPMAssertionTypePreventUserIdleDisplaySleep), "keeps the display on",
+        expectEqual(effect("NoIdleSleepAssertion"), "keeps the Mac awake",
+                    "including the one an Electron application leaves behind")
+        expectEqual(effect("PreventUserIdleDisplaySleep"), "keeps the display on",
                     "and the display ones separately")
+        expectEqual(kIOPMAssertionTypePreventUserIdleSystemSleep as String,
+                    "PreventUserIdleSystemSleep",
+                    "and the SDK constant still agrees with the literal")
         expectEqual(effect("SomethingNewFromApple"), "SomethingNewFromApple",
                     "an assertion type nobody has seen before is shown as itself")
     }

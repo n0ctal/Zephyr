@@ -41,12 +41,17 @@ enum SleepDiagnostics {
     /// active", "network client active" — that hold nothing awake by
     /// themselves, and listing those would bury the one line that answers the
     /// question. Being in this table is what makes an assertion worth showing.
+    /// The names are literals for the same reason `SleepInhibitor` writes
+    /// them out: the `kIOPMAssertionType*` constants arrive in Swift
+    /// inconsistently across SDK versions, and one that resolves differently
+    /// here would quietly drop an assertion from this list rather than fail to
+    /// build. These are the strings the registry actually reports.
     static let effects: [String: String] = [
-        kIOPMAssertionTypePreventUserIdleDisplaySleep: "keeps the display on",
-        kIOPMAssertionTypeNoDisplaySleep: "keeps the display on",
-        kIOPMAssertionTypePreventUserIdleSystemSleep: "keeps the Mac awake",
-        kIOPMAssertionTypePreventSystemSleep: "keeps the Mac awake",
-        kIOPMAssertionTypeNoIdleSleep: "keeps the Mac awake",
+        "PreventUserIdleDisplaySleep": "keeps the display on",
+        "NoDisplaySleepAssertion": "keeps the display on",
+        "PreventUserIdleSystemSleep": "keeps the Mac awake",
+        "PreventSystemSleep": "keeps the Mac awake",
+        "NoIdleSleepAssertion": "keeps the Mac awake",
     ]
 
     static func assertions() -> [Assertion] {
