@@ -128,6 +128,15 @@ if let index = arguments.firstIndex(of: "--dump-real-window"), index + 1 < argum
     }
 }
 
+if arguments.contains("--measure-sections") {
+    let width = arguments.first { $0.hasPrefix("--width=") }
+        .flatMap { Double(String($0.dropFirst("--width=".count))) }.map { CGFloat($0) } ?? 960
+    DispatchQueue.main.async {
+        controller.measureSections(width: width)
+        exit(0)
+    }
+}
+
 if arguments.contains("--preview-design") {
     DispatchQueue.main.async {
         controller.openDesignPreview()

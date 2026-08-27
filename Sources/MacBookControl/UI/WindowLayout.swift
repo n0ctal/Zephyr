@@ -355,7 +355,10 @@ struct SidebarSettingsView: View {
     // MARK: Content
 
     private var content: some View {
-        ScrollView {
+        // No scroll view. Every section is meant to fit the window, and one
+        // that does not is a bug to be found rather than something to hide
+        // behind a scrollbar — `--measure-sections` is what finds it.
+        Group {
             VStack(alignment: .leading, spacing: 18) {
                 Text(section.title)
                     .font(font(19, .medium))
@@ -382,7 +385,7 @@ struct SidebarSettingsView: View {
                 Spacer(minLength: 0)
             }
             .padding(EdgeInsets(top: titleTopInset, leading: 24, bottom: 24, trailing: 24))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

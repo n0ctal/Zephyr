@@ -75,6 +75,14 @@ final class SettingsWindowController {
     /// of this one. The classic layout keeps its title bar, because the row of
     /// tabs would otherwise start underneath those same buttons.
     private func applyChrome(to window: NSWindow) {
+        // Not resizable in the sidebar layouts: nothing scrolls, so the window
+        // is already exactly the size its content needs, and dragging it
+        // smaller could only hide something.
+        if Preferences.windowLayout.usesSidebar {
+            window.styleMask.remove(.resizable)
+        } else {
+            window.styleMask.insert(.resizable)
+        }
         // The window's own fill shows through wherever the content does not
         // reach — around the tab strip in the classic layout, and behind the
         // title bar in the others. Left as the system's grey it would frame a
@@ -131,11 +139,13 @@ struct SettingsRootView: View {
                                     helperState: helperState,
                                     layout: Preferences.windowLayout,
                                     selection: $selection)
-                    // Wide enough for the widest row in the terminal theme —
-                    // Graphics, whose three choices plus a label column need
-                    // every point of it. Narrower and SwiftUI centres what it
-                    // cannot fit, which moves the sidebar.
-                    .frame(minWidth: 940, minHeight: 460, idealHeight: 560)
+                    // One fixed width — wide enough for the widest row there
+                    // is, Graphics — and no height at all, so the window takes
+                    // the height of whichever section is open. With nothing
+                    // scrolling, a fixed height would either clip the tallest
+                    // section or leave the shortest half empty; this is what
+                    // System Settings does with its own panes.
+                    .frame(width: 960)
             } else {
                 tabs
             }

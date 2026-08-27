@@ -332,6 +332,45 @@ final class AppController: NSObject, NSMenuDelegate {
         FileHandle.standardError.write(Data("wrote \(path)\n".utf8))
     }
 
+    /// Prints how tall each section wants to be at a given width.
+    ///
+    /// Worth having as a flag rather than a guess: with the sidebar layouts no
+    /// longer scrolling, a section taller than the window is content nobody
+    /// can reach. This is the measurement that says whether that has happened.
+    func measureSections(width: CGFloat) {
+        let deadline = Date().addingTimeInterval(6)
+        while telemetry.load == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        let remembered = Preferences.windowLayout
+        let rememberedItems = Preferences.menuBarItems
+        defer {
+            Preferences.windowLayout = remembered
+            Preferences.menuBarItems = rememberedItems
+        }
+        Preferences.windowLayout = .terminal
+        // The worst case, not the current one: every menu-bar field switched
+        // on shows every field's options as well, and that is the tallest the
+        // section can ever be.
+        Preferences.menuBarItems = MenuBarComposer.Item.allCases
+        for section in SettingsSection.allCases {
+            // The sidebar view itself, not the window's root: the root pins an
+            // ideal height, and a view asked how tall it would like to be will
+            // answer with whatever it has been told to be.
+            let view = SidebarSettingsView(registry: registry, telemetry: telemetry,
+                                           helperState: .working(version: "dev"),
+                                           layout: .terminal,
+                                           selection: .constant(section.rawValue))
+            let hosting = NSHostingView(rootView: view)
+            hosting.appearance = NSAppearance(named: .darkAqua)
+            hosting.frame = NSRect(x: 0, y: 0, width: width, height: 100)
+            hosting.layoutSubtreeIfNeeded()
+            let height = hosting.fittingSize.height
+            print(String(format: "%-14@ %6.0f pt", section.title as NSString, height))
+        }
+        SettingsWindowController.initialTab = nil
+    }
+
     /// The 2.0 prototype, behind `--preview-design`. Deliberately unreachable
     /// from the menu: it is something to look at, not something shipped.
     func openDesignPreview() {
