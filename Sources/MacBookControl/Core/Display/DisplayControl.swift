@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -24,6 +25,24 @@ final class DisplayControl {
         let height: Int
         let pixelWidth: Int
         let brightness: Float?
+    }
+
+    /// What the monitor calls itself, which is what the Displays pane shows.
+    ///
+    /// An external display was listed as "Display 2028535915" — the number
+    /// CoreGraphics happens to have given it this session — while every other
+    /// application on the machine called it AG274FG8R4+. The name is on the
+    /// screen object; it just has to be asked for.
+    static func name(of id: CGDirectDisplayID, builtIn: Bool) -> String {
+        if let localised = NSScreen.screens.first(where: {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+                .uint32Value == id
+        })?.localizedName, !localised.isEmpty {
+            return localised
+        }
+        // A display that has just been plugged in can be active before its
+        // screen object exists, and a number is better than nothing.
+        return builtIn ? "Built-in display" : "Display \(id)"
     }
 
     struct Mode: Identifiable, Hashable {
@@ -77,7 +96,7 @@ final class DisplayControl {
             let builtIn = CGDisplayIsBuiltin(id) != 0
             return Screen(
                 id: id,
-                name: builtIn ? "Built-in display" : "Display \(id)",
+                name: Self.name(of: id, builtIn: builtIn),
                 isBuiltIn: builtIn,
                 width: mode?.width ?? 0,
                 height: mode?.height ?? 0,
