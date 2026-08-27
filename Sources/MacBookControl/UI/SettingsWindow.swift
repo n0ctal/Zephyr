@@ -35,14 +35,15 @@ final class SettingsWindowController {
         // either crops the tall ones or leaves the short ones half empty.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
-        // Wide enough for the eleven tab labels the classic layout carries.
-        // Below this the strip truncates them, and "Grap…" beside "Batt…" is
-        // worse than a window that takes more of the screen.
-        window.setContentSize(NSSize(width: 960, height: 720))
+        window.setContentSize(Self.fixedContentSize)
         window.center()
-        // Remembers whatever size it is dragged to, so a preference about the
-        // window is stated once rather than every launch.
-        window.setFrameAutosaveName("ZephyrSettings")
+        // Only the classic layout remembers a dragged size, because only it
+        // can be dragged. The sidebar layouts are one fixed size, and a
+        // remembered frame from before that decision was what kept them
+        // opening at whatever height they happened to be last.
+        if !Preferences.windowLayout.usesSidebar {
+            window.setFrameAutosaveName("ZephyrSettings")
+        }
         applyChrome(to: window)
         // Applied again here: setting it during launch can be overwritten
         // before the first window exists.
@@ -74,12 +75,18 @@ final class SettingsWindowController {
     /// dark sidebar is a band of another application's colour across the top
     /// of this one. The classic layout keeps its title bar, because the row of
     /// tabs would otherwise start underneath those same buttons.
+    /// The one size the sidebar layouts open at. Wide enough for the widest
+    /// row there is (Graphics); as tall as the window was when it could still
+    /// be dragged, which is the height that was being asked for.
+    static let fixedContentSize = NSSize(width: 960, height: 520)
+
     private func applyChrome(to window: NSWindow) {
-        // Not resizable in the sidebar layouts: nothing scrolls, so the window
-        // is already exactly the size its content needs, and dragging it
-        // smaller could only hide something.
+        // Not resizable in the sidebar layouts, and set back to the one size
+        // every time the layout changes — the classic layout may have been
+        // dragged to something else in the meantime.
         if Preferences.windowLayout.usesSidebar {
             window.styleMask.remove(.resizable)
+            window.setContentSize(Self.fixedContentSize)
         } else {
             window.styleMask.insert(.resizable)
         }
@@ -144,13 +151,18 @@ struct SettingsRootView: View {
                     // Input, which is the one that scrolls. A window that
                     // resized itself to each section was the other way to
                     // avoid a scrollbar and it looked like a fault.
+                    // 520 is the height the window was dragged to back when
+                    // it could be dragged — the size that was being asked for
+                    // by "one size, like it was". Display and Graphics fit
+                    // inside it; the taller sections scroll.
+                    //
                     // A minimum rather than an exact height: with the title
                     // bar hidden the window ends up 52 points taller than the
-                    // content it was given, and a view pinned to exactly 720
-                    // left that difference unpainted along the bottom edge.
+                    // content it was given, and a view pinned to an exact
+                    // height left that difference unpainted along the bottom.
                     // The minimum fixes the size; the flexible top lets the
                     // view fill whatever the window turns out to be.
-                    .frame(minWidth: 960, maxWidth: 960, minHeight: 720, maxHeight: .infinity)
+                    .frame(minWidth: 960, maxWidth: 960, minHeight: 520, maxHeight: .infinity)
             } else {
                 tabs
             }
