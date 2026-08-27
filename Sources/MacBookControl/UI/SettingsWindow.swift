@@ -61,10 +61,29 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// For `--dump-real-window` only.
     var windowForTesting: NSWindow? { window }
 
-    /// The window is kept rather than released, so this is the only signal
-    /// that nobody is looking any more.
+    // MARK: Whether anybody is looking
+    //
+    // Closing is not the only way to stop looking: the window can be
+    // minimised, hidden with the application, or simply buried under
+    // something else. Any of those left telemetry reading all forty-eight
+    // sensors and walking the accelerator's registry every two seconds for a
+    // window nobody could see — which is the state this whole arrangement
+    // exists to avoid.
+
     func windowWillClose(_ notification: Notification) {
         context?.telemetry.isWindowOpen = false
+    }
+
+    func windowDidMiniaturize(_ notification: Notification) { updateVisibility() }
+    func windowDidDeminiaturize(_ notification: Notification) { updateVisibility() }
+    func windowDidChangeOcclusionState(_ notification: Notification) { updateVisibility() }
+
+    private func updateVisibility() {
+        guard let window = window else { return }
+        context?.telemetry.isWindowOpen =
+            window.isVisible
+            && !window.isMiniaturized
+            && window.occlusionState.contains(.visible)
     }
 
     private func makeRoot() -> AnyView {

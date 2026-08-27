@@ -378,6 +378,9 @@ final class AppController: NSObject, NSMenuDelegate {
     /// The 2.0 prototype, behind `--preview-design`. Deliberately unreachable
     /// from the menu: it is something to look at, not something shipped.
     func openDesignPreview() {
+        // The prototype shows live readings like everything else, and
+        // telemetry only reads what something is displaying.
+        waitForReadings(upTo: 6)
         let hosting = NSHostingController(
             rootView: TerminalDesignView(registry: registry, telemetry: telemetry))
         let window = NSWindow(contentViewController: hosting)
