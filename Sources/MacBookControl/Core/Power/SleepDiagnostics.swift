@@ -14,7 +14,7 @@ import IOKit.pwr_mgt
 enum SleepDiagnostics {
 
     /// Something holding the machine awake, and who is holding it.
-    struct Assertion: Identifiable {
+    struct Assertion: Identifiable, Equatable {
         /// Position in the list as read. A process can hold several
         /// assertions of the same type with the same name — Safari does,
         /// one per media element — and nothing else about them differs, so
@@ -30,30 +30,23 @@ enum SleepDiagnostics {
 
         /// What it actually prevents, in words rather than in Apple's key
         /// names — which are the same words with the letters run together.
-        var effect: String {
-            switch kind {
-            case kIOPMAssertionTypePreventUserIdleDisplaySleep: return "keeps the display on"
-            case kIOPMAssertionTypePreventUserIdleSystemSleep: return "keeps the Mac awake"
-            case kIOPMAssertionTypePreventSystemSleep: return "keeps the Mac awake"
-            case kIOPMAssertionTypeNoIdleSleep: return "keeps the Mac awake"
-            case kIOPMAssertionTypeNoDisplaySleep: return "keeps the display on"
-            default: return kind
-            }
-        }
+        var effect: String { SleepDiagnostics.effects[kind] ?? kind }
     }
 
-    /// Only the assertions that actually stop something from sleeping.
+    /// The assertions that actually stop something from sleeping, and what
+    /// each one stops.
     ///
-    /// The registry also carries a dozen bookkeeping assertions — "user is
+    /// One table rather than a list and a switch that have to agree: the
+    /// registry also carries a dozen bookkeeping assertions — "user is
     /// active", "network client active" — that hold nothing awake by
-    /// themselves. Listing them would bury the one line that answers the
-    /// question.
-    private static let blocking: Set<String> = [
-        kIOPMAssertionTypePreventUserIdleDisplaySleep,
-        kIOPMAssertionTypePreventUserIdleSystemSleep,
-        kIOPMAssertionTypePreventSystemSleep,
-        kIOPMAssertionTypeNoIdleSleep,
-        kIOPMAssertionTypeNoDisplaySleep,
+    /// themselves, and listing those would bury the one line that answers the
+    /// question. Being in this table is what makes an assertion worth showing.
+    static let effects: [String: String] = [
+        kIOPMAssertionTypePreventUserIdleDisplaySleep: "keeps the display on",
+        kIOPMAssertionTypeNoDisplaySleep: "keeps the display on",
+        kIOPMAssertionTypePreventUserIdleSystemSleep: "keeps the Mac awake",
+        kIOPMAssertionTypePreventSystemSleep: "keeps the Mac awake",
+        kIOPMAssertionTypeNoIdleSleep: "keeps the Mac awake",
     ]
 
     static func assertions() -> [Assertion] {
@@ -66,7 +59,7 @@ enum SleepDiagnostics {
         for (pidNumber, entries) in byProcess {
             for entry in entries {
                 guard let kind = entry[kIOPMAssertionTypeKey] as? String,
-                      blocking.contains(kind) else { continue }
+                      effects[kind] != nil else { continue }
                 found.append(Assertion(
                     sequence: found.count,
                     pid: pidNumber.intValue,
@@ -86,7 +79,7 @@ enum SleepDiagnostics {
 
     // MARK: The power record
 
-    struct PowerRecord {
+    struct PowerRecord: Equatable {
         /// What woke the machine last — "EC.USBC", "OHC1", the lid, a key.
         let wakeReason: String?
         /// Whether that was a full wake or one of the maintenance wakes that

@@ -333,15 +333,6 @@ struct TerminalDesignView: View {
         switch section {
         case .thermals:
             return []   // drawn live, with working controls
-        case .diagnostics:
-            // Added to the shipping app long after this prototype stopped
-            // being the thing anyone looks at; sketched, not drawn.
-            return [
-                .heading("DRIVE"),
-                .pair("Wear", "7 % of its rated endurance used"),
-                .heading("HOLDING SLEEP OFF"),
-                .pair("Safari", "12 min · keeps the display on"),
-            ]
         case .graphics:
             return [
                 .heading("GRAPHICS"),
@@ -416,6 +407,12 @@ struct TerminalDesignView: View {
                 .pair("4", "CPU speed"),
                 .pair("5", "Memory"),
             ]
+        default:
+            // Sections added to the shipping app after this prototype stopped
+            // being the thing anyone looks at. Sketching sample data for each
+            // of them is a tax on every future section for a picture nobody
+            // opens; an empty pane says the same thing.
+            return []
         }
     }
 

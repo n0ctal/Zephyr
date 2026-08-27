@@ -25,10 +25,6 @@ enum AcceleratorClients {
     /// are the answer to "what is keeping the card awake" and the other
     /// thirty-four are noise that would make the reading useless.
     static func discreteHolders() -> [Holder] {
-        holders { $0.contains("AMD") || $0.contains("NVDA") || $0.contains("GeForce") }
-    }
-
-    private static func holders(matching accelerator: (String) -> Bool) -> [Holder] {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMasterPortDefault,
                                            IOServiceMatching("IOAccelerator"),
@@ -38,7 +34,9 @@ enum AcceleratorClients {
         var found: [Int: String] = [:]
         var service = IOIteratorNext(iterator)
         while service != 0 {
-            if accelerator(name(of: service)) {
+            let accelerator = className(of: service, useRegistryName: true)
+            if accelerator.contains("AMD") || accelerator.contains("NVDA")
+                || accelerator.contains("GeForce") {
                 collectClients(of: service, into: &found)
             }
             IOObjectRelease(service)
@@ -83,15 +81,15 @@ enum AcceleratorClients {
         className.contains("CommandQueue") || className.contains("Context")
     }
 
-    private static func className(of object: io_object_t) -> String {
+    /// The object's class, or its name in the registry — which for an
+    /// accelerator is the vendor's own string and for a client is the kind of
+    /// client it is.
+    private static func className(of object: io_object_t,
+                                  useRegistryName: Bool = false) -> String {
         var buffer = [CChar](repeating: 0, count: 128)
-        guard IOObjectGetClass(object, &buffer) == KERN_SUCCESS else { return "" }
-        return String(cString: buffer)
-    }
-
-    private static func name(of service: io_service_t) -> String {
-        var buffer = [CChar](repeating: 0, count: 128)
-        guard IORegistryEntryGetName(service, &buffer) == KERN_SUCCESS else { return "" }
-        return String(cString: buffer)
+        let result = useRegistryName
+            ? IORegistryEntryGetName(object, &buffer)
+            : IOObjectGetClass(object, &buffer)
+        return result == KERN_SUCCESS ? String(cString: buffer) : ""
     }
 }

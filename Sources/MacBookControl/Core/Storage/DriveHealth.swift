@@ -14,7 +14,7 @@ import IOKit
 /// trips a minute to watch a number that moves once a month.
 enum DriveHealth {
 
-    struct Reading {
+    struct Reading: Equatable {
         let model: String
         let serial: String
         let capacityBytes: UInt64
@@ -74,13 +74,13 @@ enum DriveHealth {
 
         var device = IOIteratorNext(iterator)
         while device != 0 {
-            if let page = smartPage(of: device) {
-                let reading = compose(page: page, device: device)
+            defer {
                 IOObjectRelease(device)
-                return reading
+                device = IOIteratorNext(iterator)
             }
-            IOObjectRelease(device)
-            device = IOIteratorNext(iterator)
+            if let page = smartPage(of: device) {
+                return compose(page: page, device: device)
+            }
         }
         return nil
     }

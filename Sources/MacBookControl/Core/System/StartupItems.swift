@@ -29,7 +29,12 @@ enum StartupItems {
         static func < (lhs: Item, rhs: Item) -> Bool {
             lhs.label.localizedCaseInsensitiveCompare(rhs.label) == .orderedAscending
         }
-        static func == (lhs: Item, rhs: Item) -> Bool { lhs.path == rhs.path }
+        /// Every field, not just the path: a poll that finds the same file
+        /// pointing somewhere new has found a change.
+        static func == (lhs: Item, rhs: Item) -> Bool {
+            lhs.path == rhs.path && lhs.label == rhs.label
+                && lhs.program == rhs.program && lhs.scope == rhs.scope
+        }
     }
 
     enum Scope: String, CaseIterable {

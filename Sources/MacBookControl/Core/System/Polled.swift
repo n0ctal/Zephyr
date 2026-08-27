@@ -14,7 +14,14 @@ import SwiftUI
 /// view appears and stops when it goes away, and each read happens off the
 /// main thread — with a closed section, or a closed window, the cost is
 /// exactly nothing.
-final class Polled<Value>: ObservableObject {
+/// One queue for every polled reading in the app. They are serialised by each
+/// object's own in-flight guard, and a queue each made them indistinguishable
+/// from one another in a profiler.
+enum PolledQueue {
+    static let shared = DispatchQueue(label: "com.n0ctal.zephyr.polled", qos: .utility)
+}
+
+final class Polled<Value: Equatable>: ObservableObject {
     @Published private(set) var value: Value?
     /// Whether a read has finished at all. "Not looked yet" and "looked and
     /// there is nothing" are different answers, and showing the second while
@@ -24,10 +31,11 @@ final class Polled<Value>: ObservableObject {
 
     private let interval: TimeInterval
     private let read: () -> Value?
-    private let queue = DispatchQueue(label: "com.n0ctal.zephyr.polled", qos: .utility)
+    
     private var timer: Timer?
     private var watchers = 0
     private var isReading = false
+    private var lastReadAt: Date?
 
     init(every interval: TimeInterval, read: @escaping () -> Value?) {
         self.interval = interval
@@ -39,11 +47,21 @@ final class Polled<Value>: ObservableObject {
     /// a timer the first appearance still wants.
     func begin() {
         watchers += 1
-        guard timer == nil else { return }
-        refresh()
+        guard watchers == 1 else { return }
+        // Only if the last reading has actually gone stale. Switching between
+        // sections tears these down and builds them again, and re-reading a
+        // drive's health page — or every launchd plist on the machine —
+        // because somebody clicked Diagnostics twice is work for nothing.
+        if lastReadAt.map({ Date().timeIntervalSince($0) >= interval }) ?? true {
+            refresh()
+        }
         let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.refresh()
         }
+        // These fire at 5, 30 and 300 seconds and none of them needs to be
+        // punctual. A tolerance lets the kernel wake once for several of them,
+        // which on a laptop is the difference that matters.
+        timer.tolerance = interval * 0.2
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -60,7 +78,7 @@ final class Polled<Value>: ObservableObject {
         // harmless when the thing being read moves this rarely.
         guard !isReading else { return }
         isReading = true
-        queue.async { [weak self] in
+        PolledQueue.shared.async { [weak self] in
             guard let self = self else { return }
             let fresh = self.read()
             // Handed back through the run loop rather than the main dispatch
@@ -68,8 +86,13 @@ final class Polled<Value>: ObservableObject {
             // delivered while a menu is tracking or a slider is being dragged,
             // which is exactly when a reading is most likely to be watched.
             RunLoop.main.perform(inModes: [.common]) {
-                if let fresh = fresh { self.value = fresh }
-                self.hasRead = true
+                // Assigned only when it differs: `@Published` announces a
+                // change on every assignment, and a section of forty formatted
+                // rows redrawing five times a minute to show the same numbers
+                // is the cost of not checking.
+                if let fresh = fresh, fresh != self.value { self.value = fresh }
+                if !self.hasRead { self.hasRead = true }
+                self.lastReadAt = Date()
                 self.isReading = false
             }
         }
