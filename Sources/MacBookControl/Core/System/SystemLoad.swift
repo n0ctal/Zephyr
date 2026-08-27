@@ -100,34 +100,21 @@ final class SystemLoad {
     /// dictionary does not contain one on this hardware, and a number that is
     /// not there cannot be shown honestly.
     private func gpuUtilisation() -> Double? {
-        var iterator: io_iterator_t = 0
-        // kIOMainPortDefault is macOS 12; the deprecated spelling is what
-        // works on the oldest system this still supports, and they are the
-        // same port.
-        let port: mach_port_t = kIOMasterPortDefault
-        guard IOServiceGetMatchingServices(port,
-                                           IOServiceMatching("IOAccelerator"),
-                                           &iterator) == KERN_SUCCESS else { return nil }
-        defer { IOObjectRelease(iterator) }
-
         var best: Double?
-        var service = IOIteratorNext(iterator)
-        while service != 0 {
-            defer {
-                IOObjectRelease(service)
-                service = IOIteratorNext(iterator)
-            }
-            var raw: Unmanaged<CFMutableDictionary>?
-            guard IORegistryEntryCreateCFProperties(service, &raw, kCFAllocatorDefault, 0) == KERN_SUCCESS,
-                  let props = raw?.takeRetainedValue() as? [String: Any],
-                  let stats = props["PerformanceStatistics"] as? [String: Any],
-                  let used = stats["Device Utilization %"] as? Int else { continue }
+        Registry.forEachService(matching: "IOAccelerator") { accelerator in
+            // One property rather than the whole dictionary: copying every
+            // key an accelerator publishes to read one integer out of it was
+            // the most expensive thing in this reading.
+            guard let stats: [String: Any] = Registry.property(accelerator, statisticsKey),
+                  let used = stats["Device Utilization %"] as? Int else { return }
             // The busiest accelerator wins: with the discrete card awake both
             // answer, and the one doing the work is the interesting one.
             best = max(best ?? 0, Double(used) / 100)
         }
         return best
     }
+
+    private let statisticsKey = "PerformanceStatistics" as CFString
 
     static func diskUsage() -> Disk? {
         guard let attributes = try? FileManager.default.attributesOfFileSystem(forPath: "/"),

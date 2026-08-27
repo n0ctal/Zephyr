@@ -100,12 +100,11 @@ enum SleepDiagnostics {
     }
 
     static func powerRecord() -> PowerRecord {
-        let rootDomain = IOServiceGetMatchingService(kIOMasterPortDefault,
+        let rootDomain = IOServiceGetMatchingService(Registry.port,
                                                      IOServiceMatching("IOPMrootDomain"))
         defer { if rootDomain != 0 { IOObjectRelease(rootDomain) } }
 
-        let smc = IOServiceGetMatchingService(kIOMasterPortDefault,
-                                              IOServiceMatching("AppleSMC"))
+        let smc = IOServiceGetMatchingService(Registry.port, IOServiceMatching("AppleSMC"))
         defer { if smc != 0 { IOObjectRelease(smc) } }
 
         return PowerRecord(
@@ -116,10 +115,7 @@ enum SleepDiagnostics {
     }
 
     private static func string(_ service: io_service_t, _ key: String) -> String? {
-        guard service != 0 else { return nil }
-        return IORegistryEntryCreateCFProperty(service, key as CFString,
-                                               kCFAllocatorDefault, 0)?
-            .takeRetainedValue() as? String
+        service == 0 ? nil : Registry.property(service, key as CFString)
     }
 
     private static func nonEmpty(_ value: String?) -> String? {

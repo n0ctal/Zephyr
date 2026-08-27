@@ -126,6 +126,34 @@ enum DriveHealth {
         return result == KERN_SUCCESS ? page : nil
     }
 
+    /// Model, serial and capacity, read once.
+    ///
+    /// None of them can change while the process is running, and finding the
+    /// capacity means a recursive walk of everything below the drive — on APFS
+    /// that is the container, every volume and every mounted snapshot. Doing
+    /// that again every five minutes to re-learn a number that was printed on
+    /// the box is work for nothing.
+    private struct Identity {
+        let model: String
+        let serial: String
+        let capacityBytes: UInt64
+    }
+    private static var identity: Identity?
+
+    private static func identity(of device: io_service_t) -> Identity {
+        if let identity = identity { return identity }
+        let characteristics: [String: Any]? = Registry.inherited(device, characteristicsKey)
+        let fresh = Identity(model: characteristics?["Product Name"] as? String ?? "SSD",
+                             serial: characteristics?["Serial Number"] as? String ?? "",
+                             capacityBytes: wholeDiskCapacity(under: device))
+        identity = fresh
+        return fresh
+    }
+
+    private static let characteristicsKey = "Device Characteristics" as CFString
+    private static let wholeKey = "Whole" as CFString
+    private static let sizeKey = "Size" as CFString
+
     private static func compose(page: [UInt8], device: io_service_t) -> Reading {
         func value(at offset: Int, bytes: Int) -> UInt64 {
             // Little-endian, and never more than the low eight bytes: the
@@ -141,11 +169,11 @@ enum DriveHealth {
         func bytes(at offset: Int) -> UInt64 { value(at: offset, bytes: 16) &* 512_000 }
         let kelvin = value(at: 1, bytes: 2)
 
-        let characteristics = property(device, "Device Characteristics") as? [String: Any]
+        let identity = identity(of: device)
         return Reading(
-            model: characteristics?["Product Name"] as? String ?? "SSD",
-            serial: characteristics?["Serial Number"] as? String ?? "",
-            capacityBytes: wholeDiskCapacity(under: device),
+            model: identity.model,
+            serial: identity.serial,
+            capacityBytes: identity.capacityBytes,
             criticalWarning: page[0],
             celsius: kelvin > 0 ? Double(kelvin) - 273.15 : nil,
             percentageUsed: Int(page[5]),
@@ -166,36 +194,15 @@ enum DriveHealth {
     /// disk, which is what this did first, printed an attached drive's size
     /// beside the internal drive's health page.
     private static func wholeDiskCapacity(under device: io_service_t) -> UInt64 {
-        var children: io_iterator_t = 0
-        guard IORegistryEntryCreateIterator(device, kIOServicePlane,
-                                            IOOptionBits(kIORegistryIterateRecursively),
-                                            &children) == KERN_SUCCESS else { return 0 }
-        defer { IOObjectRelease(children) }
-
-        var child = IOIteratorNext(children)
-        while child != 0 {
-            defer {
-                IOObjectRelease(child)
-                child = IOIteratorNext(children)
-            }
-            guard IOObjectConformsTo(child, "IOMedia") != 0,
-                  let whole = IORegistryEntryCreateCFProperty(child, "Whole" as CFString,
-                                                              kCFAllocatorDefault, 0)?
-                    .takeRetainedValue() as? Bool, whole,
-                  let size = IORegistryEntryCreateCFProperty(child, "Size" as CFString,
-                                                             kCFAllocatorDefault, 0)?
-                    .takeRetainedValue() as? NSNumber
-            else { continue }
-            return size.uint64Value
+        var capacity: UInt64 = 0
+        Registry.forEachDescendant(of: device) { entry in
+            guard capacity == 0,
+                  IOObjectConformsTo(entry, "IOMedia") != 0,
+                  let whole: Bool = Registry.property(entry, wholeKey), whole,
+                  let size: NSNumber = Registry.property(entry, sizeKey) else { return }
+            capacity = size.uint64Value
         }
-        return 0
-    }
-
-    private static func property(_ service: io_service_t, _ key: String) -> Any? {
-        IORegistryEntrySearchCFProperty(service, kIOServicePlane, key as CFString,
-                                        kCFAllocatorDefault,
-                                        IOOptionBits(kIORegistryIterateRecursively
-                                                     | kIORegistryIterateParents))
+        return capacity
     }
 
     // MARK: The plug-in's identifiers

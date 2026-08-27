@@ -194,7 +194,12 @@ final class Telemetry: ObservableObject {
                 if needs.oneSensor, let one = self.sensors?.temperature(forKey: sensorKey) {
                     wanted.append(one)
                 }
-                if needs.cpuSensor, let cpu = self.sensors?.temperature(forKey: ""),
+                // Skipped when the menu bar's sensor *is* the CPU one, which
+                // is what an empty key means — otherwise the same SMC key was
+                // read twice a tick and the second answer thrown away.
+                let alreadyHaveCPU = needs.oneSensor && sensorKey.isEmpty
+                if needs.cpuSensor, !alreadyHaveCPU,
+                   let cpu = self.sensors?.cpuTemperature(),
                    !wanted.contains(where: { $0.key == cpu.key }) {
                     wanted.append(cpu)
                 }

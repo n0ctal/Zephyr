@@ -25,46 +25,33 @@ enum AcceleratorClients {
     /// are the answer to "what is keeping the card awake" and the other
     /// thirty-four are noise that would make the reading useless.
     static func discreteHolders() -> [Holder] {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMasterPortDefault,
-                                           IOServiceMatching("IOAccelerator"),
-                                           &iterator) == KERN_SUCCESS else { return [] }
-        defer { IOObjectRelease(iterator) }
-
         var found: [Int: String] = [:]
-        var service = IOIteratorNext(iterator)
-        while service != 0 {
-            let accelerator = className(of: service, useRegistryName: true)
-            if accelerator.contains("AMD") || accelerator.contains("NVDA")
-                || accelerator.contains("GeForce") {
-                collectClients(of: service, into: &found)
-            }
-            IOObjectRelease(service)
-            service = IOIteratorNext(iterator)
+        Registry.forEachService(matching: "IOAccelerator") { accelerator in
+            guard isDiscrete(Registry.name(of: accelerator)) else { return }
+            collectClients(of: accelerator, into: &found)
         }
         return found.map { Holder(pid: $0.key, name: $0.value) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    private static func collectClients(of service: io_service_t, into found: inout [Int: String]) {
-        var children: io_iterator_t = 0
-        guard IORegistryEntryGetChildIterator(service, kIOServicePlane, &children) == KERN_SUCCESS
-        else { return }
-        defer { IOObjectRelease(children) }
+    /// Which accelerator is the discrete one, by the vendor's own name.
+    static func isDiscrete(_ acceleratorName: String) -> Bool {
+        acceleratorName.contains("AMD") || acceleratorName.contains("NVDA")
+            || acceleratorName.contains("GeForce")
+    }
 
-        var child = IOIteratorNext(children)
-        while child != 0 {
-            if isWorkClient(className(of: child)),
-               let creator = IORegistryEntryCreateCFProperty(child, "IOUserClientCreator" as CFString,
-                                                             kCFAllocatorDefault, 0)?
-                .takeRetainedValue() as? String,
-               let holder = parse(creator) {
-                found[holder.pid] = holder.name
-            }
-            IOObjectRelease(child)
-            child = IOIteratorNext(children)
+    private static func collectClients(of service: io_service_t, into found: inout [Int: String]) {
+        Registry.forEachChild(of: service) { child in
+            guard isWorkClient(Registry.className(of: child)),
+                  let creator: String = Registry.property(child, creatorKey),
+                  let holder = parse(creator) else { return }
+            found[holder.pid] = holder.name
         }
     }
+
+    /// Bridged once rather than per child: this is asked of every client of
+    /// every accelerator, and there are dozens.
+    private static let creatorKey = "IOUserClientCreator" as CFString
 
     /// The registry writes this as `pid 159, WindowServer`.
     private static func parse(_ creator: String) -> Holder? {
@@ -81,15 +68,4 @@ enum AcceleratorClients {
         className.contains("CommandQueue") || className.contains("Context")
     }
 
-    /// The object's class, or its name in the registry — which for an
-    /// accelerator is the vendor's own string and for a client is the kind of
-    /// client it is.
-    private static func className(of object: io_object_t,
-                                  useRegistryName: Bool = false) -> String {
-        var buffer = [CChar](repeating: 0, count: 128)
-        let result = useRegistryName
-            ? IORegistryEntryGetName(object, &buffer)
-            : IOObjectGetClass(object, &buffer)
-        return result == KERN_SUCCESS ? String(cString: buffer) : ""
-    }
 }
