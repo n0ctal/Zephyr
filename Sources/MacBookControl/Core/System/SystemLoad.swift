@@ -53,7 +53,10 @@ final class SystemLoad {
         return value
     }()
 
-    func read() -> Snapshot? {
+    /// `includeGPU` is off by default because finding the accelerator's busy
+    /// fraction means walking the I/O registry, which is the most expensive
+    /// thing in here — and nothing shows it unless the window is open.
+    func read(includeGPU: Bool = false) -> Snapshot? {
         guard let ticks = coreTicks() else { return nil }
         defer { previousTicks = ticks }
 
@@ -73,7 +76,8 @@ final class SystemLoad {
         let total = perCore.isEmpty ? 0 : perCore.reduce(0, +) / Double(perCore.count)
         return Snapshot(perCore: perCore, total: total,
                         memoryUsed: memoryUsed(), memoryTotal: Self.memoryTotal,
-                        gpuFraction: gpuUtilisation(), disk: Self.diskUsage())
+                        gpuFraction: includeGPU ? gpuUtilisation() : nil,
+                        disk: Self.diskUsage())
     }
 
     /// Busy fraction from the graphics accelerator.

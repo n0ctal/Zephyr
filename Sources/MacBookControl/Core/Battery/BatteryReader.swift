@@ -23,6 +23,14 @@ final class BatteryReader {
             isPluggedIn: props["ExternalConnected"] as? Bool ?? false,
             healthPercent: health(props),
             cycleCount: props["CycleCount"] as? Int,
+            fullChargeCapacity: (props["AppleRawMaxCapacity"] as? Int)
+                ?? (props["MaxCapacity"] as? Int),
+            designCapacity: props["DesignCapacity"] as? Int,
+            // Hundredths of a degree Celsius already — this machine reports
+            // 3065 for a battery at 30.65 °C. Subtracting 273.15 as if it were
+            // kelvin produced −243 °C, which is the temperature of a battery
+            // nobody has ever owned.
+            celsius: (props["Temperature"] as? Int).map { Double($0) / 100 },
             power: power(batteryWatts: batteryWatts(props)),
             minutesRemaining: minutesRemaining(props)
         )

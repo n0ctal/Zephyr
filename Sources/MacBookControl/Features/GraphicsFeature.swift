@@ -112,6 +112,11 @@ final class GraphicsFeature: Feature {
 
 private struct GraphicsView: View {
     @ObservedObject var feature: GraphicsFeature
+    /// Polled only while this section is on screen — see `Polled`. Five
+    /// seconds because processes take and drop the card as windows open.
+    @StateObject private var holders = Polled(every: 5) {
+        AcceleratorClients.discreteHolders()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -137,10 +142,23 @@ private struct GraphicsView: View {
                     .font(.caption).foregroundColor(.orange)
             }
 
+            // Naming the culprit, which the line above could only ever hint
+            // at. Every client of an accelerator records the process that
+            // opened it, so this is the same answer gfxCardStatus gives.
+            if let holding = holders.value, !holding.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Running work on the discrete card").font(.subheadline)
+                    Text(holding.map(\.name).joined(separator: ", "))
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Text("Zephyr re-asserts this every few seconds instead of setting it once, because macOS hands the discrete GPU to whatever asks. It still cannot pull the GPU out from under a running renderer — quit the app holding it and the choice takes hold.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { feature.refresh() }
+        .polling(holders)
     }
 }

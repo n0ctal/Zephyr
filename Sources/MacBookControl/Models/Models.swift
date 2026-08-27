@@ -144,12 +144,42 @@ struct BatteryStatus {
     /// Full-charge capacity as a share of the design capacity, when readable.
     let healthPercent: Int?
     let cycleCount: Int?
+    /// The two capacities behind `healthPercent`, in mAh — what the battery
+    /// holds now and what it was built to hold. A percentage says how far it
+    /// has fallen; these say how much charge is actually left to work with,
+    /// which is the number coconutBattery is opened for.
+    let fullChargeCapacity: Int?
+    let designCapacity: Int?
+    /// Battery temperature. A cell that runs warm ages faster than one that
+    /// does not, and this is the only place on the machine that reports it.
+    let celsius: Double?
     let power: PowerDraw?
     /// Minutes until empty, when the system is willing to estimate. It answers
     /// 65535 — "do not know" — whenever the machine is on the charger or the
     /// reading has not settled, and that is reported as nil rather than as a
     /// wildly wrong number.
     let minutesRemaining: Int?
+
+    /// Written out rather than left to the memberwise one so that the three
+    /// descriptive fields can default to nil. They are read from the same
+    /// registry entry as the rest and are absent on some machines — and every
+    /// fixture that builds a battery to test the drawing would otherwise have
+    /// to name them.
+    init(percent: Int, isCharging: Bool, isPluggedIn: Bool,
+         healthPercent: Int?, cycleCount: Int?,
+         fullChargeCapacity: Int? = nil, designCapacity: Int? = nil, celsius: Double? = nil,
+         power: PowerDraw?, minutesRemaining: Int?) {
+        self.percent = percent
+        self.isCharging = isCharging
+        self.isPluggedIn = isPluggedIn
+        self.healthPercent = healthPercent
+        self.cycleCount = cycleCount
+        self.fullChargeCapacity = fullChargeCapacity
+        self.designCapacity = designCapacity
+        self.celsius = celsius
+        self.power = power
+        self.minutesRemaining = minutesRemaining
+    }
 
     var stateLabel: String {
         if isCharging { return "charging" }

@@ -129,7 +129,7 @@ extension LayoutPalette {
 /// Pointer, and a list that says so is quicker to search than one that makes
 /// you remember which tab the fan curve was under.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case thermals, graphics, batterySleep, display, input, menuBar, settings
+    case thermals, graphics, batterySleep, display, input, diagnostics, menuBar, settings
 
     var id: String { rawValue }
 
@@ -140,6 +140,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .batterySleep: return "Battery & Sleep"
         case .display: return "Display"
         case .input: return "Input"
+        case .diagnostics: return "Diagnostics"
         case .menuBar: return "Menu Bar"
         // Last, and about the app rather than the machine — which is why it
         // sits apart from the seven that touch hardware.
@@ -157,6 +158,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .batterySleep: return ["battery", "awake"]
         case .display: return ["display"]
         case .input: return ["keyboard", "pointer"]
+        // Nothing to switch: this section only reads.
+        case .diagnostics: return []
         case .menuBar: return []
         // Rules that apply settings by themselves belong with the settings.
         case .settings: return ["profiles"]
@@ -348,6 +351,8 @@ struct SidebarSettingsView: View {
                     .foregroundColor(palette.text)
 
                 switch section {
+                case .diagnostics:
+                    DiagnosticsSection()
                 case .menuBar:
                     MenuBarTab(telemetry: telemetry)
                 case .settings:

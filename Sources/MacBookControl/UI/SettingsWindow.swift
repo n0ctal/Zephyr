@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// The window is the whole interface. The menu-bar menu deliberately stays at
 /// four items, so anything that needs a control needs a tab here.
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var hosting: NSHostingController<AnyView>?
     private var context: (registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState)?
@@ -21,11 +21,15 @@ final class SettingsWindowController {
 
     func show(registry: FeatureRegistry, telemetry: Telemetry, helperState: HelperState) {
         if let window = window {
+            telemetry.isWindowOpen = true
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
         context = (registry, telemetry, helperState)
+        // Everything on screen wants every reading; nothing on screen wants
+        // almost none of them. Telemetry reads accordingly.
+        telemetry.isWindowOpen = true
         let hosting = NSHostingController(rootView: makeRoot())
         self.hosting = hosting
         SettingsWindowController.layoutDidChange = { [weak self] in self?.rebuild() }
@@ -44,6 +48,7 @@ final class SettingsWindowController {
         if !Preferences.windowLayout.usesSidebar {
             window.setFrameAutosaveName("ZephyrSettings")
         }
+        window.delegate = self
         applyChrome(to: window)
         // Applied again here: setting it during launch can be overwritten
         // before the first window exists.
@@ -55,6 +60,12 @@ final class SettingsWindowController {
 
     /// For `--dump-real-window` only.
     var windowForTesting: NSWindow? { window }
+
+    /// The window is kept rather than released, so this is the only signal
+    /// that nobody is looking any more.
+    func windowWillClose(_ notification: Notification) {
+        context?.telemetry.isWindowOpen = false
+    }
 
     private func makeRoot() -> AnyView {
         guard let context = context else { return AnyView(EmptyView()) }
@@ -219,6 +230,13 @@ struct SettingsRootView: View {
             // stretched the TabView until the row of tabs was pushed off the
             // top of the window, and the only way back was to guess that the
             // window needed resizing.
+            ScrollView {
+                DiagnosticsSection()
+                    .padding(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+                .tabItem { Text("Diagnostics") }
+                .tag("diagnostics")
             ScrollView { MenuBarTab(telemetry: telemetry) }
                 .tabItem { Text("Menu Bar") }
                 .tag("menubar")

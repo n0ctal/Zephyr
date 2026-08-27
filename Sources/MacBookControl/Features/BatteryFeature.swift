@@ -81,6 +81,16 @@ private struct BatteryView: View {
                         Text("Health \(health) % of design capacity, \(cycles) cycles")
                             .font(.subheadline).foregroundColor(.secondary)
                     }
+                    // The two capacities behind that percentage, and the
+                    // temperature the cell is sitting at. A share says how far
+                    // the battery has fallen; the milliamp-hours say how much
+                    // charge is actually left to work with, and heat is what
+                    // decides how quickly the first number falls.
+                    if let full = battery.fullChargeCapacity, let design = battery.designCapacity {
+                        Text("\(full) mAh of \(design) mAh when new"
+                             + (battery.celsius.map { String(format: " · %.0f °C", $0) } ?? ""))
+                            .font(.subheadline).foregroundColor(.secondary)
+                    }
                     if let draw = battery.power, let watts = draw.batteryWatts, abs(watts) >= 0.1 {
                         Text(String(format: watts > 0 ? "Charging at %.1f W" : "Drawing %.1f W from the battery", abs(watts)))
                             .font(.subheadline).foregroundColor(.secondary)

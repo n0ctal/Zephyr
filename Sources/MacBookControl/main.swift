@@ -33,6 +33,11 @@ if arguments.contains("--test-network") {
     exit(0)
 }
 
+if arguments.contains("--test-diagnostics") {
+    runDiagnosticsTest()
+    exit(0)
+}
+
 if arguments.contains("--test-gpu") {
     runGPUTest()
     exit(0)
@@ -307,6 +312,34 @@ func runNetworkTest() {
     }
 }
 
+/// Proves the read-only diagnostics against the real machine.
+///
+/// Each of these is a registry read with no privileges behind it, so the only
+/// way any of them can fail is a machine that does not publish the data — and
+/// that is exactly what this says.
+func runDiagnosticsTest() {
+    if let drive = DriveHealth.read() {
+        print("drive: \(drive.model), wear \(drive.percentageUsed) %, "
+              + "written \(drive.bytesWritten / 1_099_511_627_776) TB, "
+              + "\(drive.powerOnHours) h, \(drive.unsafeShutdowns) unsafe shutdowns, "
+              + "\(drive.mediaErrors) media errors, healthy: \(drive.isHealthy)")
+    } else {
+        print("drive: no health page")
+    }
+    let assertions = SleepDiagnostics.assertions()
+    print("sleep: \(assertions.count) blocking assertion(s)")
+    for assertion in assertions.prefix(5) {
+        print("   \(assertion.process) — \(assertion.effect) — \(assertion.name)")
+    }
+    let record = SleepDiagnostics.powerRecord()
+    print("wake: \(record.wakeReason ?? "—") / \(record.wakeType ?? "—")")
+    print("slept because: \(record.sleepReason ?? "—")")
+    print("last shutdown: \(record.shutdownDescription ?? "—")")
+    let holders = AcceleratorClients.discreteHolders()
+    print("discrete card held by \(holders.count): "
+          + holders.prefix(6).map(\.name).joined(separator: ", "))
+}
+
 func runGPUTest() {
     let gpu = GPUController()
     print("Dual-GPU: \(gpu.isDualGPU)")
@@ -511,7 +544,8 @@ func runIconDump() {
     for (name, percent, charging, plugged, role) in cases {
         MenuBarComposer.forcedFillRole = role
         let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
-                                   healthPercent: 82, cycleCount: 393, power: nil, minutesRemaining: nil)
+                                   healthPercent: 82, cycleCount: 393,
+                                   power: nil, minutesRemaining: nil)
         for withNumber in [false, true] {
             guard let image = MenuBarComposer.batteryImage(status, showingPercentage: withNumber,
                                                           darkMenuBar: false),
@@ -536,7 +570,8 @@ func runIconDump() {
         let (name, percent, charging, plugged, role) = entry
         MenuBarComposer.forcedFillRole = role
         let status = BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: plugged,
-                                   healthPercent: 82, cycleCount: 393, power: nil, minutesRemaining: nil)
+                                   healthPercent: 82, cycleCount: 393,
+                                   power: nil, minutesRemaining: nil)
         let y = sheetSize.height - CGFloat(index + 1) * rowHeight
         (name as NSString).draw(at: NSPoint(x: 8, y: y + 6), withAttributes: [
             .font: NSFont.systemFont(ofSize: 11),

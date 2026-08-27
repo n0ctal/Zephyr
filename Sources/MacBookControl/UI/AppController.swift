@@ -99,6 +99,22 @@ final class AppController: NSObject, NSMenuDelegate {
         }
     }
 
+    /// Waits until the readings a picture needs actually exist.
+    ///
+    /// Load is a rate and needs two samples; rendering before the second one
+    /// lands shows dashes where the numbers will be, which is a picture of the
+    /// render's timing rather than of the design. And since telemetry only
+    /// reads what something is displaying, this has to say that something is —
+    /// otherwise the load reading never arrives at all and the wait becomes a
+    /// silent eight-second pause.
+    private func waitForReadings(upTo seconds: TimeInterval) {
+        telemetry.isWindowOpen = true
+        let deadline = Date().addingTimeInterval(seconds)
+        while telemetry.load == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+    }
+
     // MARK: Status title
 
     private func updateStatusTitle() {
@@ -168,14 +184,7 @@ final class AppController: NSObject, NSMenuDelegate {
     /// by hand, which kept catching whatever else was on the screen. An
     /// offscreen render is exact and involves nobody's desktop.
     func dumpDesignPreview(to path: String) {
-        // Load is a rate and needs two samples; rendering before the second one
-        // lands shows dashes where the numbers will be, which is a picture of
-        // the render's timing rather than of the design.
-        // Wait for the rate to exist rather than for a guessed interval.
-        let deadline = Date().addingTimeInterval(8)
-        while telemetry.load == nil && Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        }
+        waitForReadings(upTo: 8)
         // One file per style, each showing three sections whose content differs
         // as much as the app allows — a language that holds on Thermals may
         // fall apart on Profiles, and that is exactly what needs seeing.
@@ -228,10 +237,7 @@ final class AppController: NSObject, NSMenuDelegate {
     /// means guessing where the window landed, cropping by hand, and catching
     /// whatever else happened to be open. This involves nobody's desktop.
     func dumpWindowLayouts(to path: String, dark: Bool, pitch: Bool = false) {
-        let deadline = Date().addingTimeInterval(8)
-        while telemetry.load == nil && Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        }
+        waitForReadings(upTo: 8)
         let base = URL(fileURLWithPath: path).deletingPathExtension().path
         let remembered = Preferences.windowLayout
         defer { Preferences.windowLayout = remembered }
@@ -301,10 +307,7 @@ final class AppController: NSObject, NSMenuDelegate {
     /// is in the picture.
     func dumpRealWindow(to path: String, layout: WindowLayout, strip: CGFloat = 170) {
         Preferences.windowLayout = layout
-        let deadline = Date().addingTimeInterval(6)
-        while telemetry.load == nil && Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        }
+        waitForReadings(upTo: 6)
         // Shown as it looks when the helper is answering, which is the normal
         // case. The warning banner is worth checking too, but it is not what
         // this picture is for: it covers the strip being inspected.
@@ -313,10 +316,15 @@ final class AppController: NSObject, NSMenuDelegate {
         // Only a place. The window sizes itself from the view it holds, and
         // forcing a size here would photograph a window nobody will ever see.
         window.setFrameOrigin(NSPoint(x: -9000, y: -9000))
-        // Two turns of the run loop: the first lays the window out, the second
-        // lets SwiftUI finish its own pass. Without them the picture is of a
-        // half-built window.
-        RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+        // Draw once before waiting. A window parked off every screen is never
+        // asked to display itself, and SwiftUI holds `onAppear` until it is —
+        // so the readings attached to a section's appearance never started and
+        // every capture came back saying "Reading…".
+        window.displayIfNeeded()
+        window.contentView?.display()
+        // Then long enough for SwiftUI's own pass and for the readings taken
+        // off the main thread to come back.
+        RunLoop.current.run(until: Date().addingTimeInterval(3.5))
         // Only the top of the window. A SwiftUI hosting controller reports a
         // preferred size and the window obligingly grows to it, so the frame
         // view here is thousands of points tall — and the part worth looking
@@ -337,10 +345,7 @@ final class AppController: NSObject, NSMenuDelegate {
     /// longer scrolling, a section taller than the window is content nobody
     /// can reach. This is the measurement that says whether that has happened.
     func measureSections(width: CGFloat) {
-        let deadline = Date().addingTimeInterval(6)
-        while telemetry.load == nil && Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        }
+        waitForReadings(upTo: 6)
         let remembered = Preferences.windowLayout
         let rememberedItems = Preferences.menuBarItems
         defer {

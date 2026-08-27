@@ -333,6 +333,15 @@ struct TerminalDesignView: View {
         switch section {
         case .thermals:
             return []   // drawn live, with working controls
+        case .diagnostics:
+            // Added to the shipping app long after this prototype stopped
+            // being the thing anyone looks at; sketched, not drawn.
+            return [
+                .heading("DRIVE"),
+                .pair("Wear", "7 % of its rated endurance used"),
+                .heading("HOLDING SLEEP OFF"),
+                .pair("Safari", "12 min · keeps the display on"),
+            ]
         case .graphics:
             return [
                 .heading("GRAPHICS"),

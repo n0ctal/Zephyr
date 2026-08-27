@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import IOKit.pwr_mgt
 import Foundation
 
 /// Regression checks that run without Xcode.
@@ -50,6 +51,10 @@ enum SelfTest {
         statusAlignment()
         terminalSliderMath()
         fanPercentages()
+        telemetryNeeds()
+        driveWarnings()
+        acceleratorClientKinds()
+        sleepAssertionWording()
 
         if failures.isEmpty {
             print("self-test: \(checks) checks passed")
@@ -557,6 +562,8 @@ enum SelfTest {
                     "every feature the app builds has a section to live in")
         expect(SettingsSection(rawValue: "profiles") == nil,
                "Profiles is no longer a section of its own")
+        expect(SettingsSection.diagnostics.featureIDs.isEmpty,
+               "Diagnostics owns no feature: it only reads")
         expect(SettingsSection.allCases.last == .settings,
                "Settings comes last, after Menu Bar")
         expect(!WindowLayout.classic.usesSidebar, "the classic layout keeps its tabs")
@@ -623,6 +630,97 @@ enum SelfTest {
         // A fan reporting the same minimum and maximum must not divide by zero.
         expectEqual(CoolingFeature.targetRPM(percent: 60, min: 2000, max: 2000), 2000,
                     "a fan with no range at all still answers its one speed")
+    }
+
+    // MARK: What is worth reading
+
+    private static func telemetryNeeds() {
+        // With the window closed, the cost of a tick is decided here.
+        let temperatureOnly = Telemetry.Needs.of(menuBar: [.temperature], profilesEnabled: false)
+        expect(temperatureOnly.oneSensor, "a temperature in the menu bar wants one sensor")
+        expect(!temperatureOnly.sensorSweep,
+               "and not the sweep of all forty-eight, which is the whole point")
+        expect(!temperatureOnly.load && !temperatureOnly.network && !temperatureOnly.gpu,
+               "nothing else is read for it")
+
+        let nothing = Telemetry.Needs.of(menuBar: [], profilesEnabled: false)
+        expect(!nothing.oneSensor && !nothing.fans && !nothing.battery
+               && !nothing.load && !nothing.network,
+               "an empty menu bar reads nothing but the thermal state")
+
+        // Profiles decide on charge, power source and temperature, so they
+        // have to keep coming even when nothing displays them.
+        let profiles = Telemetry.Needs.of(menuBar: [], profilesEnabled: true)
+        expect(profiles.battery && profiles.cpuSensor, "profiles keep their own inputs alive")
+        expect(!profiles.sensorSweep, "but still not the whole sweep")
+        // The distinction that stops a rule about the CPU being decided by
+        // whatever sensor the status item happens to show.
+        let both = Telemetry.Needs.of(menuBar: [.temperature], profilesEnabled: true)
+        expect(both.oneSensor && both.cpuSensor,
+               "with both, the menu bar's sensor and the CPU's are read separately")
+
+        expect(Telemetry.Needs.everything.sensorSweep && Telemetry.Needs.everything.gpu,
+               "an open window reads everything, including the expensive ones")
+
+        let power = Telemetry.Needs.of(menuBar: [.power], profilesEnabled: false)
+        expect(power.battery, "watts come from the battery reading")
+        let throttle = Telemetry.Needs.of(menuBar: [.throttle], profilesEnabled: false)
+        expect(!throttle.sensorSweep && !throttle.load,
+               "the throttle mark needs no sensors: the thermal state is read every tick anyway")
+        let memory = Telemetry.Needs.of(menuBar: [.memory], profilesEnabled: false)
+        expect(memory.load && !memory.gpu,
+               "memory comes from the load snapshot, which need not include the GPU")
+    }
+
+    // MARK: Drive health
+
+    private static func driveWarnings() {
+        func reading(warning: UInt8, spare: Int = 100, threshold: Int = 10,
+                     media: UInt64 = 0) -> DriveHealth.Reading {
+            DriveHealth.Reading(model: "test", serial: "", capacityBytes: 0,
+                                criticalWarning: warning, celsius: 34,
+                                percentageUsed: 7, availableSpare: spare,
+                                spareThreshold: threshold, bytesWritten: 0, bytesRead: 0,
+                                powerOnHours: 0, powerCycles: 0, unsafeShutdowns: 0,
+                                mediaErrors: media)
+        }
+        expect(reading(warning: 0).isHealthy, "no warning bits and no errors is a healthy drive")
+        expect(reading(warning: 0).warnings.isEmpty, "and it has nothing to say")
+        expect(!reading(warning: 0, media: 1).isHealthy,
+               "a single media error is not healthy, whatever the drive claims")
+        expect(!reading(warning: 0, spare: 5, threshold: 10).isHealthy,
+               "nor is spare capacity under its own threshold")
+        // Bit 1 is the temperature warning, bit 3 the read-only one.
+        expectEqual(reading(warning: 0b0000_1010).warnings.count, 2,
+                    "each warning bit is reported separately")
+        expect(reading(warning: 0b0000_0010).warnings.first?.contains("temperature") == true,
+               "and the bits are decoded in the order the specification lists them")
+    }
+
+    private static func acceleratorClientKinds() {
+        // The distinction the whole reading rests on: a command queue is work,
+        // a device handle is only an introduction.
+        expect(AcceleratorClients.isWorkClient("AMDRadeonX6000_AMDAccelCommandQueue"),
+               "a command queue is work being submitted")
+        expect(AcceleratorClients.isWorkClient("AMDRadeonX6000_AMDAccel2DContext"),
+               "and so is a context")
+        expect(!AcceleratorClients.isWorkClient("AMDRadeonX6000_AMDAccelDevice"),
+               "a device handle is not: everything that ever listed the GPUs has one")
+        expect(!AcceleratorClients.isWorkClient("AMDRadeonX6000_AMDAccelSharedUserClient"),
+               "nor is a shared user client")
+    }
+
+    private static func sleepAssertionWording() {
+        func effect(_ kind: String) -> String {
+            SleepDiagnostics.Assertion(pid: 1, process: "test", kind: kind,
+                                       name: "", since: nil).effect
+        }
+        expectEqual(effect(kIOPMAssertionTypePreventUserIdleSystemSleep), "keeps the Mac awake",
+                    "the system assertions are described by what they do")
+        expectEqual(effect(kIOPMAssertionTypePreventUserIdleDisplaySleep), "keeps the display on",
+                    "and the display ones separately")
+        expectEqual(effect("SomethingNewFromApple"), "SomethingNewFromApple",
+                    "an assertion type nobody has seen before is shown as itself")
     }
 
     // MARK: Fan curve
