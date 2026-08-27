@@ -13,6 +13,15 @@ import SwiftUI
 struct PowerFlowView: View {
     let draw: PowerDraw
     let isPluggedIn: Bool
+    @Environment(\.terminalStyling) private var terminal
+    @Environment(\.terminalPalette) private var palette
+
+    /// Rounded boxes and a mustard fill are the system's shapes, and in a
+    /// window where every other frame is a one-point rule they read as a
+    /// picture pasted in from somewhere else. Square corners and the theme's
+    /// own green in the terminal layout; unchanged everywhere else.
+    private var corner: CGFloat { terminal ? 0 : 10 }
+    private var bandCorner: CGFloat { terminal ? 0 : 4 }
 
     private var systemWatts: Double { max(0, draw.systemWatts ?? 0) }
     private var batteryWatts: Double { draw.batteryWatts ?? 0 }
@@ -46,7 +55,7 @@ struct PowerFlowView: View {
                 .font(.system(.caption, design: .monospaced))
         }
         .frame(width: 62, height: 96)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.12)))
+        .background(nodeBackground)
     }
 
     private var machineNode: some View {
@@ -56,7 +65,15 @@ struct PowerFlowView: View {
                 .font(.system(.caption, design: .monospaced))
         }
         .frame(width: 62, height: 96)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.12)))
+        .background(nodeBackground)
+    }
+
+    @ViewBuilder private var nodeBackground: some View {
+        if terminal {
+            Rectangle().stroke(palette.rule, lineWidth: 1)
+        } else {
+            RoundedRectangle(cornerRadius: corner).fill(Color.secondary.opacity(0.12))
+        }
     }
 
     // MARK: Bands
@@ -73,22 +90,24 @@ struct PowerFlowView: View {
             if isCharging && toBattery > 1 {
                 band(height: toBattery, width: size.width,
                      label: String(format: "%.2f W", batteryWatts))
-                    .foregroundColor(.orange.opacity(0.45))
+                    .foregroundColor(terminal ? palette.accent.opacity(0.30)
+                                              : .orange.opacity(0.45))
             }
             band(height: toMachine, width: size.width,
                  label: String(format: "%.2f W", systemWatts))
-                .foregroundColor(.yellow.opacity(0.45))
+                .foregroundColor(terminal ? palette.accent.opacity(0.55)
+                                          : .yellow.opacity(0.45))
                 .offset(y: isCharging ? toBattery : 0)
         }
     }
 
     private func band(height: CGFloat, width: CGFloat, label: String) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: bandCorner)
                 .frame(width: width, height: max(2, height))
             Text(label)
                 .font(.system(.caption, design: .monospaced))
-                .foregroundColor(.primary)
+                .foregroundColor(terminal ? palette.ground : .primary)
         }
         .frame(width: width, height: max(2, height), alignment: .center)
     }
