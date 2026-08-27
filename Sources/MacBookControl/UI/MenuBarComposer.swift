@@ -148,6 +148,27 @@ enum MenuBarComposer {
             }
         }
 
+        /// What this field costs to keep up to date.
+        ///
+        /// Here rather than in the telemetry: an exhaustive switch over this
+        /// enum means adding a field forces somebody to answer what it reads,
+        /// and the answer belongs beside the code that draws it.
+        var telemetryNeeds: Telemetry.Needs {
+            var needs = Telemetry.Needs()
+            switch self {
+            case .temperature: needs.oneSensor = true
+            case .fan: needs.fans = true
+            case .battery, .power: needs.battery = true
+            // The thermal reading is taken every tick regardless, because the
+            // session's throttle history is documented to cover the time
+            // nobody was looking.
+            case .cpuSpeed, .throttle: break
+            case .cpuLoad, .memory: needs.load = true
+            case .network: needs.network = true
+            }
+            return needs
+        }
+
         /// The settings list in menu-bar order: what is shown, in the order it
         /// is shown, then everything that is not.
         ///

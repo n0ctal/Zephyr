@@ -53,16 +53,26 @@ class Feature: ObservableObject, Identifiable {
 
     // MARK: Enable plumbing
 
+    /// Set by whoever owns telemetry, so that switching a feature on or off
+    /// re-asks what is worth reading.
+    static var needsDidChange: () -> Void = {}
+
     func setEnabled(_ enabled: Bool) {
         guard enabled != isEnabled else { return }
         guard !enabled || isSupported else { return }
         isEnabled = enabled
         Preferences.setFeatureEnabled(id, enabled)
         enabled ? activate() : deactivate()
+        Feature.needsDidChange()
     }
 
     /// Applies the stored choice at launch. Split from `init` so every feature
     /// exists before any of them touches the hardware.
+    /// What this feature needs read while it is enabled, whether or not
+    /// anything is displaying it. Most features need nothing: they write to
+    /// the machine rather than watch it.
+    var telemetryNeeds: Telemetry.Needs { Telemetry.Needs() }
+
     func applyStoredState() {
         guard isEnabled else { return }
         guard isSupported else {

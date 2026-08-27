@@ -75,7 +75,10 @@ enum Preferences {
     /// sensor names nobody has memorised.
     static var temperatureSensorKey: String {
         get { d.string(forKey: "menubar.sensor") ?? "" }
-        set { d.set(newValue, forKey: "menubar.sensor") }
+        set {
+            d.set(newValue, forKey: "menubar.sensor")
+            Feature.needsDidChange()
+        }
     }
 
     /// Signed watts: plus while charging, minus while the battery carries the
@@ -113,6 +116,8 @@ enum Preferences {
         set {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
             d.set(data, forKey: "menubar.items")
+            // What the status item shows decides what is worth reading.
+            Feature.needsDidChange()
         }
     }
 

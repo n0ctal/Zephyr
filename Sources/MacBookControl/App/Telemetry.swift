@@ -70,8 +70,12 @@ final class Telemetry: ObservableObject {
     /// sensor sweep: forty-eight keys on this machine, read one at a time.
     /// With the window closed and a temperature in the menu bar, exactly one
     /// of those forty-eight is wanted.
-    struct Needs {
-        var sensorSweep = false
+    struct Needs: Equatable {
+        /// Everything, because a window is open and shows all of it — the
+        /// sweep of every sensor for the pickers, and the accelerator's busy
+        /// fraction for the corner readout. Those two are only ever wanted
+        /// together, which is why they are one flag and not two.
+        var full = false
         /// The one sensor the menu bar is set to show.
         var oneSensor = false
         /// The CPU sensor specifically, whatever the menu bar is set to.
@@ -79,47 +83,57 @@ final class Telemetry: ObservableObject {
         var fans = false
         var battery = false
         var load = false
-        var gpu = false
         var network = false
 
-        static let everything = Needs(sensorSweep: true, oneSensor: true, cpuSensor: true,
-                                      fans: true, battery: true, load: true,
-                                      gpu: true, network: true)
+        static let everything = Needs(full: true, oneSensor: true, cpuSensor: true,
+                                      fans: true, battery: true, load: true, network: true)
 
-        /// What the menu bar alone asks for, plus what the profile engine
-        /// needs to decide anything. Pure, so it can be checked.
-        static func of(menuBar items: [MenuBarComposer.Item], profilesEnabled: Bool) -> Needs {
-            var needs = Needs()
-            for item in items {
-                switch item {
-                case .temperature: needs.oneSensor = true
-                case .fan: needs.fans = true
-                case .battery, .power: needs.battery = true
-                // The thermal reading is taken every tick regardless, so
-                // these two ask for nothing.
-                case .cpuSpeed, .throttle: break
-                case .cpuLoad, .memory: needs.load = true
-                case .network: needs.network = true
-                }
-            }
-            if profilesEnabled {
-                // The engine matches on charge, on the power source and on CPU
-                // temperature, so those have to keep coming whether or not
-                // anything is displaying them. The CPU sensor by name, not
-                // whichever one the menu bar happens to show: a rule about the
-                // CPU being hot must not be decided by an ambient sensor
-                // because that is what the status item is set to.
-                needs.battery = true
-                needs.cpuSensor = true
-            }
-            return needs
+        func union(_ other: Needs) -> Needs {
+            Needs(full: full || other.full,
+                  oneSensor: oneSensor || other.oneSensor,
+                  cpuSensor: cpuSensor || other.cpuSensor,
+                  fans: fans || other.fans,
+                  battery: battery || other.battery,
+                  load: load || other.load,
+                  network: network || other.network)
+        }
+
+        /// What the menu bar alone asks for. Pure, so it can be checked.
+        static func of(menuBar items: [MenuBarComposer.Item]) -> Needs {
+            items.reduce(Needs()) { $0.union($1.telemetryNeeds) }
         }
     }
 
+    /// What the enabled features need whether or not anything is displaying
+    /// it — set by whoever builds the registry, since telemetry has no
+    /// business knowing which features exist.
+    var featureNeeds: () -> Needs = { Needs() }
+
+    /// Cached: with the window shut this is asked every two seconds for the
+    /// life of the process, and `Preferences.menuBarItems` allocates a decoder
+    /// and parses JSON out of user defaults every time it is read.
+    private var cachedNeeds: Needs?
+    private var cachedSensorKey: String?
+
+    /// Called when anything that decides what is worth reading has changed.
+    func invalidateNeeds() {
+        cachedNeeds = nil
+        cachedSensorKey = nil
+    }
+
     private var currentNeeds: Needs {
-        isWindowOpen ? .everything
-                     : .of(menuBar: Preferences.menuBarItems,
-                           profilesEnabled: Preferences.featureEnabled("profiles"))
+        if isWindowOpen { return .everything }
+        if let cached = cachedNeeds { return cached }
+        let needs = Needs.of(menuBar: Preferences.menuBarItems).union(featureNeeds())
+        cachedNeeds = needs
+        return needs
+    }
+
+    private var currentSensorKey: String {
+        if let cached = cachedSensorKey { return cached }
+        let key = Preferences.temperatureSensorKey
+        cachedSensorKey = key
+        return key
     }
 
     init() {
@@ -177,14 +191,14 @@ final class Telemetry: ObservableObject {
         }
         isReading = true
         let needs = currentNeeds
-        let sensorKey = Preferences.temperatureSensorKey
+        let sensorKey = currentSensorKey
         queue.async { [weak self] in
             guard let self = self else { return }
 
             // Each of these is nil when nothing needs it, and a nil result
             // leaves the last reading in place rather than blanking it.
             var temperatures: [TemperatureReading]?
-            if needs.sensorSweep {
+            if needs.full {
                 temperatures = self.sensors?.readTemperatures() ?? []
             } else if needs.oneSensor || needs.cpuSensor {
                 // Both, when they are different keys — two reads out of
@@ -210,7 +224,7 @@ final class Telemetry: ObservableObject {
             }
             let fans = needs.fans ? (self.fanController?.readFans() ?? []) : nil
             let battery = needs.battery ? self.batteryReader.read() : nil
-            let load = needs.load ? self.systemLoad.read(includeGPU: needs.gpu) : nil
+            let load = needs.load ? self.systemLoad.read(includeGPU: needs.full) : nil
             let network = needs.network ? self.throughput.read() : nil
             // Never skipped. It is one dictionary from the power-management
             // framework, and the session's throttle history is documented to

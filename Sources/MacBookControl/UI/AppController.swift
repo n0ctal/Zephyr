@@ -41,6 +41,13 @@ final class AppController: NSObject, NSMenuDelegate {
         // The engine drives the other features, so it cannot be built
         // alongside them — it needs the finished registry.
         profiles.attach(registry: registry, telemetry: telemetry)
+        // And telemetry asks the registry what to keep reading while the
+        // window is shut, rather than knowing which features exist.
+        telemetry.featureNeeds = { [weak registry] in
+            registry?.features.filter(\.isEnabled)
+                .reduce(Telemetry.Needs()) { $0.union($1.telemetryNeeds) } ?? Telemetry.Needs()
+        }
+        Feature.needsDidChange = { [weak telemetry] in telemetry?.invalidateNeeds() }
         if ProcessInfo.processInfo.arguments.contains("--time-phases") {
             FileHandle.standardError.write(Data(String(
                 format: "  %6.0f ms  building all features\n",

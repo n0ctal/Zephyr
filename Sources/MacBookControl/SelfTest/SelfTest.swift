@@ -636,40 +636,46 @@ enum SelfTest {
 
     private static func telemetryNeeds() {
         // With the window closed, the cost of a tick is decided here.
-        let temperatureOnly = Telemetry.Needs.of(menuBar: [.temperature], profilesEnabled: false)
+        let temperatureOnly = Telemetry.Needs.of(menuBar: [.temperature])
         expect(temperatureOnly.oneSensor, "a temperature in the menu bar wants one sensor")
-        expect(!temperatureOnly.sensorSweep,
+        expect(!temperatureOnly.full,
                "and not the sweep of all forty-eight, which is the whole point")
-        expect(!temperatureOnly.load && !temperatureOnly.network && !temperatureOnly.gpu,
+        expect(!temperatureOnly.load && !temperatureOnly.network,
                "nothing else is read for it")
 
-        let nothing = Telemetry.Needs.of(menuBar: [], profilesEnabled: false)
+        let nothing = Telemetry.Needs.of(menuBar: [])
         expect(!nothing.oneSensor && !nothing.fans && !nothing.battery
                && !nothing.load && !nothing.network,
                "an empty menu bar reads nothing but the thermal state")
 
-        // Profiles decide on charge, power source and temperature, so they
-        // have to keep coming even when nothing displays them.
-        let profiles = Telemetry.Needs.of(menuBar: [], profilesEnabled: true)
-        expect(profiles.battery && profiles.cpuSensor, "profiles keep their own inputs alive")
-        expect(!profiles.sensorSweep, "but still not the whole sweep")
-        // The distinction that stops a rule about the CPU being decided by
-        // whatever sensor the status item happens to show.
-        let both = Telemetry.Needs.of(menuBar: [.temperature], profilesEnabled: true)
-        expect(both.oneSensor && both.cpuSensor,
-               "with both, the menu bar's sensor and the CPU's are read separately")
-
-        expect(Telemetry.Needs.everything.sensorSweep && Telemetry.Needs.everything.gpu,
+        expect(Telemetry.Needs.everything.full,
                "an open window reads everything, including the expensive ones")
 
-        let power = Telemetry.Needs.of(menuBar: [.power], profilesEnabled: false)
+        let power = Telemetry.Needs.of(menuBar: [.power])
         expect(power.battery, "watts come from the battery reading")
-        let throttle = Telemetry.Needs.of(menuBar: [.throttle], profilesEnabled: false)
-        expect(!throttle.sensorSweep && !throttle.load,
+        let throttle = Telemetry.Needs.of(menuBar: [.throttle])
+        expect(!throttle.full && !throttle.load,
                "the throttle mark needs no sensors: the thermal state is read every tick anyway")
-        let memory = Telemetry.Needs.of(menuBar: [.memory], profilesEnabled: false)
-        expect(memory.load && !memory.gpu,
+        let memory = Telemetry.Needs.of(menuBar: [.memory])
+        expect(memory.load && !memory.full,
                "memory comes from the load snapshot, which need not include the GPU")
+
+        // A rule decides on the CPU sensor by name, never on whichever one the
+        // status item happens to be showing.
+        expect(Condition.cpuHotterThan(80).telemetryNeeds.cpuSensor,
+               "a temperature rule keeps the CPU sensor alive")
+        expect(!Condition.cpuHotterThan(80).telemetryNeeds.oneSensor,
+               "and not the menu bar's sensor, whatever that is set to")
+        expect(Condition.batteryBelow(20).telemetryNeeds.battery,
+               "a charge rule keeps the battery reading alive")
+        expect(!Condition.onExternalPower(true).telemetryNeeds.battery,
+               "the power source is not a reading, so it asks for nothing")
+
+        // The union is what actually decides a tick.
+        let both = Telemetry.Needs.of(menuBar: [.temperature])
+            .union(Condition.cpuHotterThan(80).telemetryNeeds)
+        expect(both.oneSensor && both.cpuSensor,
+               "with both, the menu bar's sensor and the CPU's are asked for separately")
     }
 
     // MARK: Drive health

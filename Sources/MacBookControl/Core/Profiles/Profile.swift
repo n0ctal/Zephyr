@@ -32,6 +32,28 @@ enum Condition: Codable, Equatable, Hashable {
     case timeBetween(startMinutes: Int, endMinutes: Int)
     case cpuHotterThan(Double)
 
+    /// What deciding this condition costs. An exhaustive switch on purpose:
+    /// adding a condition that samples something new must not compile until
+    /// somebody has said what it samples, or the rule silently evaluates
+    /// against a reading that stopped arriving when the window closed.
+    var telemetryNeeds: Telemetry.Needs {
+        var needs = Telemetry.Needs()
+        switch self {
+        case .onExternalPower, .appRunning, .wifiNetwork, .timeBetween:
+            break   // none of these come from a reading
+        case .externalDisplayAttached:
+            break   // counted from CoreGraphics, not from telemetry
+        case .batteryBelow:
+            needs.battery = true
+        case .cpuHotterThan:
+            // The CPU sensor by name, not whichever one the menu bar happens
+            // to show: a rule about the CPU being hot must not be decided by
+            // an ambient sensor because that is what the status item is set to.
+            needs.cpuSensor = true
+        }
+        return needs
+    }
+
     var label: String {
         switch self {
         case .onExternalPower(let on): return on ? "On mains power" : "On battery"

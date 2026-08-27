@@ -2,6 +2,14 @@ import SwiftUI
 
 /// User-written rules: what to set, and when.
 final class ProfilesFeature: Feature {
+    /// The union of what every rule needs to be decided. A profile the user
+    /// has switched off asks for nothing.
+    override var telemetryNeeds: Telemetry.Needs {
+        profiles.filter(\.isEnabled)
+            .flatMap(\.conditions)
+            .reduce(Telemetry.Needs()) { $0.union($1.telemetryNeeds) }
+    }
+
     @Published var profiles: [Profile] {
         didSet {
             Preferences.profiles = profiles
@@ -9,6 +17,9 @@ final class ProfilesFeature: Feature {
             // may have, so an edit re-applies rather than waiting for the next
             // context change to notice.
             engine?.reapply()
+            // A rule that now samples something new changes what telemetry
+            // has to keep reading.
+            Feature.needsDidChange()
             evaluate()
         }
     }
