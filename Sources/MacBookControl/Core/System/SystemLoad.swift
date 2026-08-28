@@ -26,6 +26,11 @@ final class SystemLoad {
         /// nothing while it is asleep, which is the usual state and not a
         /// failure — so this follows whichever accelerator is answering.
         let gpuFraction: Double?
+        /// Which card that fraction belongs to. A dual-GPU Mac has two
+        /// accelerators and two temperature sensors, and reporting one card's
+        /// heat while the other is doing the work is the sort of number that
+        /// looks fine and means nothing.
+        let gpuIsDiscrete: Bool?
         let disk: Disk?
         var memoryFraction: Double {
             memoryTotal > 0 ? Double(memoryUsed) / Double(memoryTotal) : 0
@@ -87,9 +92,11 @@ final class SystemLoad {
             perCore.append(span > 0 ? busy / span : 0)
         }
         let total = perCore.isEmpty ? 0 : perCore.reduce(0, +) / Double(perCore.count)
+        let busiest = includeGPU ? gpuUtilisation() : nil
         return Snapshot(perCore: perCore, total: total,
                         memoryUsed: memoryUsed(), memoryTotal: Self.memoryTotal,
-                        gpuFraction: includeGPU ? gpuUtilisation() : nil,
+                        gpuFraction: includeGPU ? busiest?.fraction : nil,
+                        gpuIsDiscrete: includeGPU ? busiest?.isDiscrete : nil,
                         disk: Self.diskUsage())
     }
 
@@ -99,20 +106,34 @@ final class SystemLoad {
     /// public API. The frequency is deliberately not read from here — the
     /// dictionary does not contain one on this hardware, and a number that is
     /// not there cannot be shown honestly.
-    private func gpuUtilisation() -> Double? {
-        var best: Double?
+    /// The busiest accelerator, and whether it is the discrete card.
+    ///
+    /// Both come out of the one walk. Asking separately which card is in use
+    /// would mean a second pass over the registry for something this one
+    /// already had in its hand — or worse, creating a Metal device, which can
+    /// wake the very card the question was about.
+    private func gpuUtilisation() -> (fraction: Double, isDiscrete: Bool)? {
+        var best: (fraction: Double, isDiscrete: Bool)?
         Registry.forEachService(matching: "IOAccelerator") { accelerator in
             // One property rather than the whole dictionary: copying every
             // key an accelerator publishes to read one integer out of it was
             // the most expensive thing in this reading.
             guard let stats: [String: Any] = Registry.property(accelerator, statisticsKey),
                   let used = stats["Device Utilization %"] as? Int else { return }
+            let fraction = Double(used) / 100
+            guard fraction >= (best?.fraction ?? -1) else { return }
             // The busiest accelerator wins: with the discrete card awake both
             // answer, and the one doing the work is the interesting one.
-            best = max(best ?? 0, Double(used) / 100)
+            // The service name carries the vendor —
+            // "AMDRadeonX6000_AMDNavi14GraphicsAccelerator" against
+            // "IntelAccelerator" — so the `model` property, which needs a
+            // search up the parents and comes back as Data on this machine,
+            // is not worth asking for.
+            best = (fraction, AcceleratorClients.isDiscrete(Registry.name(of: accelerator) ?? ""))
         }
         return best
     }
+
 
     private let statisticsKey = "PerformanceStatistics" as CFString
 

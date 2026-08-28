@@ -609,7 +609,12 @@ enum StatusReadout {
 
         // GPU has no frequency here: the accelerator does not publish one on
         // this hardware, and a dash is more honest than a number from elsewhere.
-        let gpuTemp = telemetry.temperatures.first { $0.key == "TG0P" }
+        // The card that is doing the work, not always the discrete one. With
+        // the discrete card asleep its board sensor still reports a plausible
+        // number — it tracks the machine's general heat — so showing it would
+        // be a reading that looks right and describes nothing.
+        let gpuKey = telemetry.load?.gpuIsDiscrete == false ? "TCGC" : "TG0P"
+        let gpuTemp = telemetry.temperatures.first { $0.key == gpuKey }
             .map { String(format: "%.0f°C", $0.celsius) } ?? "—"
         let gpuLoad = telemetry.load?.gpuFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
         lines.append(pad("GPU", 5) + right(gpuTemp, 7) + right(gpuLoad, 7) + right("—", 10))
