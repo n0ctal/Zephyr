@@ -71,7 +71,25 @@ final class AppController: NSObject, NSMenuDelegate {
         return Date()
     }
 
+    /// The menu bar redraws on its own schedule, separate from the window's.
+    ///
+    /// Rebuilt rather than reconfigured because a Timer's interval cannot be
+    /// changed after it is scheduled.
+    func startStatusTimer() {
+        refreshTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: Preferences.menuBarPollSeconds,
+                                         repeats: true) { [weak self] _ in
+            self?.updateStatusTitle()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+    }
+
     private func configure() {
+        SettingsWindowController.pollingDidChange = { [weak self] in
+            self?.telemetry.retune()
+            self?.startStatusTimer()
+        }
         var t = Date()
         Preferences.migrateLegacyKeys()
         AppearanceControl.apply()
@@ -92,9 +110,7 @@ final class AppController: NSObject, NSMenuDelegate {
 
         updateStatusTitle()
         t = phase("updateStatusTitle", t)
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: Telemetry.interval, repeats: true) { [weak self] _ in
-            self?.updateStatusTitle()
-        }
+        startStatusTimer()
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main

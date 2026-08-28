@@ -50,7 +50,28 @@ final class Telemetry: ObservableObject {
 
     /// Seconds between reads. Also the unit `ThermalStats` integrates over, so
     /// changing it here keeps the "held back for" figure honest.
+    /// The default, and the floor the pickers offer.
     static let interval: TimeInterval = 2
+
+    /// How often to actually read.
+    ///
+    /// One timer serves both the window and the menu bar, running at whichever
+    /// of the two wants readings sooner. Reading twice on two schedules would
+    /// cost two sensor sweeps to produce the same numbers, so what the second
+    /// setting really buys is this: with the window shut, the rate drops to
+    /// the menu bar's, which is the case worth saving.
+    var interval: TimeInterval {
+        isWindowOpen
+            ? Swift.min(Preferences.windowPollSeconds, Preferences.menuBarPollSeconds)
+            : Preferences.menuBarPollSeconds
+    }
+
+    /// Restarts the timer when the interval it was started with is stale.
+    func retune() {
+        guard timer != nil, timer?.timeInterval != interval else { return }
+        stop()
+        start()
+    }
 
     /// True while the settings window is on screen.
     ///
@@ -59,7 +80,11 @@ final class Telemetry: ObservableObject {
     /// can be left unread until somebody looks.
     var isWindowOpen = false {
         didSet {
-            guard isWindowOpen, isWindowOpen != oldValue else { return }
+            guard isWindowOpen != oldValue else { return }
+            // The two states read at different rates, so the timer has to be
+            // rebuilt rather than left running at whatever it started with.
+            retune()
+            guard isWindowOpen else { return }
             refresh()   // fill the window immediately rather than in two seconds
         }
     }
@@ -149,7 +174,7 @@ final class Telemetry: ObservableObject {
         // asks "does this machine have fans" at startup gets told no — then
         // never asks again, because a tab observes its feature and not this.
         readNow()
-        let timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.refresh()
         }
         // Keep ticking while a menu is open or a slider is being dragged —
@@ -179,7 +204,7 @@ final class Telemetry: ObservableObject {
         network = throughput.read()
         let status = thermalMonitor.read()
         thermal = status
-        stats.record(status, interval: Int(Self.interval))
+        stats.record(status, interval: Int(interval))
     }
 
     private func refresh() {
@@ -248,7 +273,7 @@ final class Telemetry: ObservableObject {
                 // blank the field for one tick every time the lid opens.
                 if let network = network { self.network = network }
                 self.thermal = status
-                self.stats.record(status, interval: Int(Self.interval))
+                self.stats.record(status, interval: Int(self.interval))
                 self.isReading = false
                 if self.needsAnotherRead {
                     self.needsAnotherRead = false

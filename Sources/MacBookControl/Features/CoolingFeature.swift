@@ -38,10 +38,20 @@ final class CoolingFeature: Feature {
     @Published var curveMax: Double { didSet { Preferences.curveMaxTemp = curveMax; reapplyCurve() } }
     @Published var manualRPM: [Int: Int] { didSet { Preferences.manualFanRPM = manualRPM } }
 
+    /// Which unit the fixed speeds are written in.
+    ///
+    /// A share is the honest way to drive both fans with one control, since
+    /// two fans with different ranges are not doing the same work at the same
+    /// revolution count. Revolutions are the honest way to drive one fan on
+    /// purpose — and the number every other fan utility shows, which is reason
+    /// enough to offer it rather than insist.
+    @Published var speedInRPM: Bool { didSet { Preferences.fanSpeedInRPM = speedInRPM } }
+
     init(helper: HelperClient, telemetry: Telemetry) {
         self.helper = helper
         self.telemetry = telemetry
         self.mode = Preferences.coolingMode
+        self.speedInRPM = Preferences.fanSpeedInRPM
 
         self.curveMin = Preferences.curveMinTemp
         self.curveMax = Preferences.curveMaxTemp
@@ -188,7 +198,11 @@ private struct CoolingView: View {
             }
 
             if feature.mode == "manual" {
-                allFans
+                SegmentedChoice(label: "Set speeds in",
+                                selection: Binding(get: { feature.speedInRPM ? 1 : 0 },
+                                                   set: { feature.speedInRPM = $0 == 1 }),
+                                options: [("Percent", 0), ("RPM", 1)])
+                if feature.speedInRPM { perFan } else { allFans }
             }
 
             // Only where there is no sidebar to carry it. In the sidebar
@@ -201,7 +215,26 @@ private struct CoolingView: View {
         }
     }
 
-    /// Both fans at once, in percent. The rows underneath stay in revolutions,
+    /// One row per fan, in revolutions, each against its own range — which is
+    /// the point of choosing this unit: the ranges differ, so a number that
+    /// means one thing on one fan means another on the next.
+    private var perFan: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(telemetry.fans, id: \.index) { fan in
+                IntField(title: telemetry.fans.count > 1 ? "Fan \(fan.index + 1)" : "Fan",
+                         range: fan.minRPM...max(fan.minRPM + 1, fan.maxRPM),
+                         suffix: "rpm",
+                         value: Binding(
+                             get: { feature.manualRPM[fan.index] ?? fan.actualRPM },
+                             set: { feature.setManual(fan: fan.index, rpm: $0) }))
+            }
+            Text("Each fan runs between the minimum and maximum its own firmware reports, and those differ. The firmware refuses anything below the minimum, so the slowest setting here is the slowest the fan can legally turn rather than a stop.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Both fans at once, in percent. The alternative above stays in revolutions,
     /// because a fan's own minimum and maximum are the only numbers that make
     /// a revolution count mean anything — and those differ per fan, which is
     /// exactly why the control that drives both of them at once is a share.

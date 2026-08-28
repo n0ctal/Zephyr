@@ -488,6 +488,25 @@ struct AppSettingsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider()
+            Text("Reading the machine").font(.headline)
+            ValueField(title: "In this window, every", range: 0.5...10, step: 0.5,
+                       suffix: "s",
+                       value: Binding(get: { Preferences.windowPollSeconds },
+                                      set: { Preferences.windowPollSeconds = $0
+                                             SettingsWindowController.pollingDidChange() }))
+            ValueField(title: "In the menu bar, every", range: 1...60, step: 1,
+                       suffix: "s",
+                       value: Binding(get: { Preferences.menuBarPollSeconds },
+                                      set: { Preferences.menuBarPollSeconds = $0
+                                             SettingsWindowController.pollingDidChange() }))
+            Text("One sweep serves both, taken at whichever rate wants it sooner — reading the same sensors twice on two schedules would cost twice as much to learn the same numbers. What the second setting buys is the case worth saving: with this window shut, the machine is read at the menu bar's rate and no faster.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("A sweep of this machine's sensors takes about 45 ms. Half a second between them is comfortable; it is offered because a fan curve being tuned is worth watching closely, not because anything here needs it.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
             SegmentedChoice(label: "Appearance",
                             selection: Binding(
                                 get: { Preferences.appearance },

@@ -281,6 +281,27 @@ enum Preferences {
         }
     }
 
+    /// Whether fixed fan speeds are expressed as a share of each fan's range
+    /// or in revolutions.
+    static var fanSpeedInRPM: Bool {
+        get { d.bool(forKey: "cooling.speedInRPM") }
+        set { d.set(newValue, forKey: "cooling.speedInRPM") }
+    }
+
+    /// How often the sensors are read while the window is open, in seconds.
+    static var windowPollSeconds: Double {
+        get { d.object(forKey: "poll.window") as? Double ?? 2 }
+        set { d.set(newValue, forKey: "poll.window") }
+    }
+
+    /// How often the menu bar is redrawn, in seconds. Separate because the two
+    /// are looked at in different ways: a window is read, a menu bar is
+    /// glanced at, and a glance does not need a number a second.
+    static var menuBarPollSeconds: Double {
+        get { d.object(forKey: "poll.menuBar") as? Double ?? 2 }
+        set { d.set(newValue, forKey: "poll.menuBar") }
+    }
+
     // MARK: Cooling
 
     /// Which sensor each fan's curve follows. Empty means whatever looks like

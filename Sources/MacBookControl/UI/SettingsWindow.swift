@@ -15,6 +15,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// layouts are different view hierarchies, not two states of one.
     static var layoutDidChange: () -> Void = {}
 
+    /// Both timers are rebuilt from the new setting. A Timer's interval cannot
+    /// be changed once it is scheduled, so a changed number that nothing acts
+    /// on is a setting that appears to do nothing until the next launch.
+    static var pollingDidChange: () -> Void = {}
+
     /// Which tab to open on. Only set by the `--open-settings=<id>` dev flag;
     /// normal launches open on whatever the window remembers.
     static var initialTab: String?
