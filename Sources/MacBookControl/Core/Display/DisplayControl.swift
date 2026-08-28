@@ -443,6 +443,32 @@ final class DisplayControl {
         return CGCompleteDisplayConfiguration(configuration, .permanently) == .success
     }
 
+    /// The squares to draw for an arrangement: everything occupied, plus one
+    /// free place on each side to move outward into.
+    ///
+    /// Pure, and separate from the view, because the edge case is the one that
+    /// matters and it is not visible by looking: twelve screens in a single
+    /// row is a real arrangement on a Mac Pro, and an earlier version of this
+    /// quietly clipped the ring off it — leaving the far screen against the
+    /// edge of the grid with nowhere to go.
+    static func gridSpan(cells: [Cell], screenCount: Int)
+        -> (rows: ClosedRange<Int>, columns: ClosedRange<Int>) {
+        guard !cells.isEmpty else { return (0...2, 0...2) }
+        // Room for every screen in a line, and the ring around it. Anything
+        // beyond that cannot be reached by moving one screen at a time.
+        let reach = max(3, screenCount + 2)
+
+        func widen(_ values: [Int]) -> ClosedRange<Int> {
+            let low = values.min()!, high = values.max()!
+            let occupied = high - low + 1
+            // The occupied squares are never trimmed — only the ring is, and
+            // only when there is no room left for it.
+            guard occupied + 2 <= reach else { return low...high }
+            return (low - 1)...(high + 1)
+        }
+        return (widen(cells.map(\.row)), widen(cells.map(\.column)))
+    }
+
     /// The screen carrying the menu bar.
     func mainDisplay() -> CGDirectDisplayID? {
         screens().first { CGDisplayBounds($0.id).origin == .zero }?.id

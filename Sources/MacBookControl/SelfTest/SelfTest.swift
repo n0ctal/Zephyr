@@ -52,6 +52,7 @@ enum SelfTest {
         terminalSliderMath()
         fanPercentages()
         telemetryNeeds()
+        arrangementGrid()
         driveWarnings()
         acceleratorClientKinds()
         sleepAssertionWording()
@@ -687,6 +688,42 @@ enum SelfTest {
             .union(Condition.cpuHotterThan(80).telemetryNeeds)
         expect(both.oneSensor && both.cpuSensor,
                "with both, the menu bar's sensor and the CPU's are asked for separately")
+    }
+
+    // MARK: The arrangement grid
+
+    private static func arrangementGrid() {
+        typealias Cell = DisplayControl.Cell
+        // Two screens side by side: the pair, plus a ring.
+        let pair = DisplayControl.gridSpan(cells: [Cell(row: 0, column: 0),
+                                                   Cell(row: 0, column: 1)],
+                                           screenCount: 2)
+        expectEqual(pair.columns, -1...2, "two in a row get a free square on each side")
+        expectEqual(pair.rows, -1...1, "and one above and below")
+
+        // The case that was wrong: every screen a Mac Pro can drive, in one
+        // line. The occupied squares must all be there, and so must the ring.
+        let twelve = (0..<12).map { Cell(row: 0, column: $0) }
+        let wide = DisplayControl.gridSpan(cells: twelve, screenCount: 12)
+        expect(wide.columns.contains(0) && wide.columns.contains(11),
+               "twelve in a row are all on the grid")
+        expectEqual(wide.columns, -1...12, "with somewhere to move at each end")
+
+        // The same, stacked.
+        let tall = DisplayControl.gridSpan(cells: (0..<12).map { Cell(row: $0, column: 0) },
+                                           screenCount: 12)
+        expectEqual(tall.rows, -1...12, "and the same standing up")
+
+        // A screen dragged far out: the ring is what gets trimmed, never a
+        // screen's own square.
+        let scattered = DisplayControl.gridSpan(cells: [Cell(row: 0, column: 0),
+                                                        Cell(row: 0, column: 9)],
+                                                screenCount: 2)
+        expect(scattered.columns.contains(0) && scattered.columns.contains(9),
+               "both screens stay on the grid however far apart they are")
+
+        expectEqual(DisplayControl.gridSpan(cells: [], screenCount: 0).columns, 0...2,
+                    "with nothing placed there is still a grid to place onto")
     }
 
     // MARK: Drive health

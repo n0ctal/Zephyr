@@ -275,44 +275,36 @@ private struct ArrangementGrid: View {
     @Environment(\.terminalStyling) private var terminal
     @Environment(\.terminalPalette) private var palette
 
-    /// The occupied rectangle, widened by one square on every side.
-    ///
     /// The limit is the number of screens rather than a number written here.
     /// macOS publishes no maximum of its own — it is whatever the graphics
     /// hardware can drive, which on Intel Macs runs from two on an Air to
     /// twelve on a Mac Pro with four cards in it — so a grid that assumed a
     /// laptop would be wrong on the machine that needs it most.
     private var span: (rows: ClosedRange<Int>, columns: ClosedRange<Int>) {
-        let cells = feature.cells.values
-        guard !cells.isEmpty else { return (0...2, 0...2) }
-        let rows = cells.map(\.row), columns = cells.map(\.column)
-        // However far apart the screens are, plus a ring — but never more
-        // squares along an axis than there are screens to put in them, since
-        // beyond that the extra places cannot be reached by moving one screen
-        // at a time anyway.
-        let reach = max(3, feature.screens.count + 1)
-        func widen(_ values: [Int]) -> ClosedRange<Int> {
-            let low = values.min()! - 1, high = values.max()! + 1
-            guard high - low + 1 > reach else { return low...high }
-            return low...(low + reach - 1)
-        }
-        return (widen(rows), widen(columns))
+        DisplayControl.gridSpan(cells: Array(feature.cells.values),
+                                screenCount: feature.screens.count)
     }
 
-    /// The squares shrink as the grid grows, so a wide one still fits the
-    /// window rather than pushing it wider.
+    /// The squares shrink as the grid widens, but only so far: past this they
+    /// stop holding a name, and a grid too wide for the window scrolls
+    /// sideways instead — twelve screens in a row is a real arrangement and it
+    /// should not be shown as twelve illegible slivers.
     private var cellWidth: CGFloat {
-        max(38, min(104, 560 / CGFloat(max(3, span.columns.count))))
+        max(56, min(104, 560 / CGFloat(max(3, span.columns.count))))
     }
     private var nameLength: Int { max(3, Int(cellWidth / 8)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Arrangement").font(.headline)
-            ForEach(Array(span.rows), id: \.self) { row in
-                HStack(spacing: 6) {
-                    ForEach(Array(span.columns), id: \.self) { column in
-                        cell(DisplayControl.Cell(row: row, column: column))
+            ScrollView(.horizontal, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(span.rows), id: \.self) { row in
+                        HStack(spacing: 6) {
+                            ForEach(Array(span.columns), id: \.self) { column in
+                                cell(DisplayControl.Cell(row: row, column: column))
+                            }
+                        }
                     }
                 }
             }
