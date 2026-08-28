@@ -38,6 +38,7 @@ enum SelfTest {
         keyMappingWireFormat()
         modifierKeyRules()
         perAppScrollRules()
+        effectiveFrequency()
         scrollSmoothing()
         sliderTickBudget()
         fanCurve()
@@ -242,6 +243,46 @@ enum SelfTest {
                "an application can opt out of the glide")
         expect(ScrollInterceptor.resolve(options, forApp: "y").smooth,
                "while everything else keeps it")
+    }
+
+    private static func effectiveFrequency() {
+        typealias Counters = CPUFrequency.Counters
+        let base: UInt64 = 2_300_000_000
+        // Running at the base clock: as many active cycles as reference ones.
+        expectEqual(CPUFrequency.hertz(from: Counters(aperf: 0, mperf: 0),
+                                       to: Counters(aperf: 1000, mperf: 1000),
+                                       base: base),
+                    Double(base), "equal counters mean the base clock")
+        // Turbo: more active cycles than reference ones.
+        let boosted = CPUFrequency.hertz(from: Counters(aperf: 0, mperf: 0),
+                                         to: Counters(aperf: 2000, mperf: 1000),
+                                         base: base)
+        expectEqual(boosted, Double(base) * 2, "twice the reference is twice the clock")
+        // Idle: fewer.
+        expectEqual(CPUFrequency.hertz(from: Counters(aperf: 0, mperf: 0),
+                                       to: Counters(aperf: 500, mperf: 1000),
+                                       base: base),
+                    Double(base) / 2, "half the reference is half the clock")
+        // A counter that went backwards means it was reset — a deep sleep
+        // state, or a wrap — and inventing a frequency from it would put a
+        // wild number on screen at exactly the moment the machine woke up.
+        expect(CPUFrequency.hertz(from: Counters(aperf: 5000, mperf: 5000),
+                                  to: Counters(aperf: 10, mperf: 5001),
+                                  base: base) == nil,
+               "a counter that went backwards is discarded, not turned into a number")
+        expect(CPUFrequency.hertz(from: Counters(aperf: 0, mperf: 1000),
+                                  to: Counters(aperf: 100, mperf: 1000),
+                                  base: base) == nil,
+               "no reference cycles is no interval, not an infinite clock")
+        // Nothing on Intel triples its base clock; that is a reset, not turbo.
+        expect(CPUFrequency.hertz(from: Counters(aperf: 0, mperf: 0),
+                                  to: Counters(aperf: 9000, mperf: 1000),
+                                  base: base) == nil,
+               "an impossible ratio is rejected rather than displayed")
+        expect(CPUFrequency.hertz(from: Counters(aperf: 0, mperf: 0),
+                                  to: Counters(aperf: 1000, mperf: 1000),
+                                  base: 0) == nil,
+               "and without a base frequency there is nothing to scale by")
     }
 
     private static func perAppScrollRules() {

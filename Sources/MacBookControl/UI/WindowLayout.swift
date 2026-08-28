@@ -578,8 +578,13 @@ enum StatusReadout {
         // the ceiling being permitted, not the speed being run.
         let cpuTemp = telemetry.cpuTemperature.map { String(format: "%.0f°C", $0.celsius) } ?? "—"
         let cpuLoad = telemetry.load.map { "\(Int(($0.total * 100).rounded()))%" } ?? "—"
+        // The measured clock when the kext that exposes the counters is
+        // loaded; otherwise the base multiplied by the firmware's speed limit,
+        // which is the ceiling being allowed rather than the speed reached.
         var cpuGHz = "—"
-        if let limit = telemetry.thermal?.speedLimitPercent, SystemLoad.nominalHz > 0 {
+        if let measured = telemetry.load?.cpuHertz {
+            cpuGHz = String(format: "%.1f GHz", measured / 1e9)
+        } else if let limit = telemetry.thermal?.speedLimitPercent, SystemLoad.nominalHz > 0 {
             cpuGHz = String(format: "%.1f GHz", Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100)
         }
         // Every line is exactly `width` characters, so the block has the same

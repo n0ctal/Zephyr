@@ -320,6 +320,12 @@ enum MenuBarComposer {
             case .off: return []
             case .percent: return text("\(limit)%")
             case .frequency:
+                // The measured clock where it can be had; otherwise the base
+                // against the firmware's cap, which is a ceiling rather than a
+                // speed.
+                if let measured = telemetry.load?.cpuHertz {
+                    return text(String(format: "%.1f GHz", measured / 1e9))
+                }
                 guard SystemLoad.nominalHz > 0 else { return [] }
                 let ghz = Double(SystemLoad.nominalHz) / 1e9 * Double(limit) / 100
                 return text(String(format: "%.1f GHz", ghz))

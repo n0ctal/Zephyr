@@ -31,6 +31,10 @@ final class SystemLoad {
         /// heat while the other is doing the work is the sort of number that
         /// looks fine and means nothing.
         let gpuIsDiscrete: Bool?
+        /// The clock the CPU actually averaged since the previous reading, in
+        /// hertz. nil when the power kext is not loaded, which is when the
+        /// estimate from the speed limit is shown instead.
+        let cpuHertz: Double?
         let disk: Disk?
         var memoryFraction: Double {
             memoryTotal > 0 ? Double(memoryUsed) / Double(memoryTotal) : 0
@@ -97,6 +101,7 @@ final class SystemLoad {
                         memoryUsed: memoryUsed(), memoryTotal: Self.memoryTotal,
                         gpuFraction: includeGPU ? busiest?.fraction : nil,
                         gpuIsDiscrete: includeGPU ? busiest?.isDiscrete : nil,
+                        cpuHertz: effectiveHertz(),
                         disk: Self.diskUsage())
     }
 
@@ -112,6 +117,25 @@ final class SystemLoad {
     /// would mean a second pass over the registry for something this one
     /// already had in its hand — or worse, creating a Metal device, which can
     /// wake the very card the question was about.
+    private var previousCounters: CPUFrequency.Counters?
+
+    /// The clock averaged since the last reading.
+    ///
+    /// A rate needs two samples, and the first one after a quiet spell is
+    /// measured against a counter pair from however long ago that was — which
+    /// would report the average over the whole interval as though it were
+    /// current. The pair is therefore replaced every read, and the first read
+    /// after one is missing returns nothing rather than a stale average.
+    private func effectiveHertz() -> Double? {
+        guard let current = CPUFrequency.counters() else {
+            previousCounters = nil
+            return nil
+        }
+        defer { previousCounters = current }
+        guard let previous = previousCounters else { return nil }
+        return CPUFrequency.hertz(from: previous, to: current, base: Self.nominalHz)
+    }
+
     private func gpuUtilisation() -> (fraction: Double, isDiscrete: Bool)? {
         var best: (fraction: Double, isDiscrete: Bool)?
         Registry.forEachService(matching: "IOAccelerator") { accelerator in

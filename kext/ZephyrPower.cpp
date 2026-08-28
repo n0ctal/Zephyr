@@ -29,14 +29,42 @@
 #include <i386/proc_reg.h>   // rdmsr64 / wrmsr64
 
 #define MSR_RAPL_POWER_UNIT   0x606u
+// The two counters that make an effective frequency. APERF advances with the
+// clock the core is actually running at; MPERF advances at the fixed base
+// rate. Their ratio over an interval, times the base frequency, is what the
+// CPU averaged — which is the honest answer to "how fast is it going", and
+// the only one available: macOS on Intel publishes no current frequency, and
+// the registry carries the P-state ladder without saying which rung is in use.
+#define MSR_IA32_MPERF        0x0E7u
+#define MSR_IA32_APERF        0x0E8u
 #define MSR_PKG_POWER_LIMIT   0x610u
 #define MSR_PKG_POWER_INFO    0x614u
 
 extern "C" {
 
 void mp_rendezvous_no_intrs(void (*action_func)(void *), void *arg);
+int cpu_number(void);
 
 static uint64_t pending_limit = 0;
+
+// Summed across every core, because a single core's ratio is whatever that
+// core happened to be doing — read a parked one under load and the machine
+// looks idle. Sixty-four is more logical processors than any Intel Mac has;
+// the array costs half a kilobyte and removes a bound to get wrong.
+#define ZEPHYR_MAX_CPUS 64
+struct zephyr_perf_counters { uint64_t aperf; uint64_t mperf; };
+static struct zephyr_perf_counters perf_per_cpu[ZEPHYR_MAX_CPUS];
+
+static void read_perf_counters(void *)
+{
+    unsigned int cpu = cpu_number();
+    if (cpu >= ZEPHYR_MAX_CPUS) { return; }
+    // Back to back, on one core, with interrupts off: the pair is only
+    // meaningful read together, and a gap between them is a gap in which the
+    // core changes speed.
+    perf_per_cpu[cpu].aperf = rdmsr64(MSR_IA32_APERF);
+    perf_per_cpu[cpu].mperf = rdmsr64(MSR_IA32_MPERF);
+}
 
 // Package-scope registers only need one write, but the turbo bit next door is
 // per-core and the two are easy to confuse later. Writing everywhere costs a
@@ -97,6 +125,30 @@ static int power_info_sysctl(__unused struct sysctl_oid *oidp, __unused void *ar
     return SYSCTL_OUT(req, &value, sizeof(value));
 }
 
+// The summed counters, in one read.
+//
+// Two sysctls would mean two trips into the kernel with the cores running in
+// between, so the ratio would be built from counters taken at different
+// moments. The deltas are left to userspace: holding the previous sample here
+// would make this a stateful register that answers differently depending on
+// who read it last.
+static int perf_counters_sysctl(__unused struct sysctl_oid *oidp, __unused void *arg1,
+                                __unused int arg2, struct sysctl_req *req)
+{
+    for (int i = 0; i < ZEPHYR_MAX_CPUS; i++) {
+        perf_per_cpu[i].aperf = 0;
+        perf_per_cpu[i].mperf = 0;
+    }
+    mp_rendezvous_no_intrs(read_perf_counters, nullptr);
+
+    struct zephyr_perf_counters total = { 0, 0 };
+    for (int i = 0; i < ZEPHYR_MAX_CPUS; i++) {
+        total.aperf += perf_per_cpu[i].aperf;
+        total.mperf += perf_per_cpu[i].mperf;
+    }
+    return SYSCTL_OUT(req, &total, sizeof(total));
+}
+
 // Readable by anyone, writable only by root. Any local process being able to
 // re-cap the CPU is not privilege escalation, but it is a lever that should
 // not be lying around: the app reaches the write through its existing
@@ -113,16 +165,23 @@ SYSCTL_PROC(_kern, OID_AUTO, zephyr_power_info,
             CTLTYPE_QUAD | CTLFLAG_RD | CTLFLAG_LOCKED | CTLFLAG_ANYBODY,
             nullptr, 0, power_info_sysctl, "Q", "Intel MSR_PKG_POWER_INFO (0x614)");
 
+SYSCTL_PROC(_kern, OID_AUTO, zephyr_perf_counters,
+            CTLTYPE_OPAQUE | CTLFLAG_RD | CTLFLAG_LOCKED | CTLFLAG_ANYBODY,
+            nullptr, 0, perf_counters_sysctl, "S,zephyr_perf_counters",
+            "Summed IA32_APERF and IA32_MPERF across every core");
+
 static kern_return_t power_start(kmod_info_t *, void *)
 {
     sysctl_register_oid(&sysctl__kern_zephyr_power_limit);
     sysctl_register_oid(&sysctl__kern_zephyr_power_unit);
     sysctl_register_oid(&sysctl__kern_zephyr_power_info);
+    sysctl_register_oid(&sysctl__kern_zephyr_perf_counters);
     return KERN_SUCCESS;
 }
 
 static kern_return_t power_stop(kmod_info_t *, void *)
 {
+    sysctl_unregister_oid(&sysctl__kern_zephyr_perf_counters);
     sysctl_unregister_oid(&sysctl__kern_zephyr_power_info);
     sysctl_unregister_oid(&sysctl__kern_zephyr_power_unit);
     sysctl_unregister_oid(&sysctl__kern_zephyr_power_limit);
