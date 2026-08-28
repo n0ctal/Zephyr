@@ -259,24 +259,47 @@ private struct DisplayView: View {
 /// Where the screens sit, as a grid rather than as rectangles to be dragged
 /// until they touch.
 ///
-/// Three by three because this machine drives four external screens and its
-/// own, and nine places is the smallest grid that holds five in any
-/// arrangement anybody actually uses — one above three, three above three, a
-/// column, a row.
+/// The grid is exactly the screens plus one free square in every direction.
+///
+/// A fixed size cannot be right: three screens in a row need three columns,
+/// two on each side of a laptop need five, four stacked above it need five
+/// rows. Sizing it to the number of screens fixes that and introduces its own
+/// silliness — twenty-five squares to hold two.
+///
+/// So it grows and shrinks. Whatever is occupied, plus a ring of empty squares
+/// around it, so there is always somewhere to move outward to and never a
+/// field of squares nobody is using. Push a screen out to the edge and the
+/// grid gains a row; bring them back together and it loses one.
 private struct ArrangementGrid: View {
     @ObservedObject var feature: DisplayFeature
     @Environment(\.terminalStyling) private var terminal
     @Environment(\.terminalPalette) private var palette
 
-    private let rows = 3
-    private let columns = 3
+    /// The occupied rectangle, widened by one square on every side.
+    private var span: (rows: ClosedRange<Int>, columns: ClosedRange<Int>) {
+        let cells = feature.cells.values
+        guard !cells.isEmpty else { return (0...2, 0...2) }
+        let rows = cells.map(\.row), columns = cells.map(\.column)
+        // Capped so a grid cannot run away: five screens spread as far apart
+        // as this machine can drive them still fits inside it.
+        let rowSpan = max(rows.min()! - 1, -3)...min(rows.max()! + 1, 4)
+        let columnSpan = max(columns.min()! - 1, -3)...min(columns.max()! + 1, 4)
+        return (rowSpan, columnSpan)
+    }
+
+    /// The squares shrink as the grid grows, so a wide one still fits the
+    /// window rather than pushing it wider.
+    private var cellWidth: CGFloat {
+        min(104, 560 / CGFloat(max(3, span.columns.count)))
+    }
+    private var nameLength: Int { max(3, Int(cellWidth / 8)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Arrangement").font(.headline)
-            ForEach(0..<rows, id: \.self) { row in
+            ForEach(Array(span.rows), id: \.self) { row in
                 HStack(spacing: 6) {
-                    ForEach(0..<columns, id: \.self) { column in
+                    ForEach(Array(span.columns), id: \.self) { column in
                         cell(DisplayControl.Cell(row: row, column: column))
                     }
                 }
@@ -300,7 +323,7 @@ private struct ArrangementGrid: View {
             .font(.system(size: 11, design: .monospaced))
             .foregroundColor(screen == nil ? palette.dim
                              : (isScoped ? palette.accent : palette.text))
-            .frame(width: 96, height: 34)
+            .frame(width: cellWidth, height: 32)
             .overlay(Rectangle().stroke(isScoped ? palette.accent : palette.rule, lineWidth: 1))
             .contentShape(Rectangle())
             .onTapGesture {
@@ -313,8 +336,10 @@ private struct ArrangementGrid: View {
     /// whose name is a part number.
     private func label(for screen: DisplayControl.Screen?) -> String {
         guard let screen = screen else { return "·" }
-        let short = screen.isBuiltIn ? "Built-in" : String(screen.name.prefix(11))
-        return feature.mainDisplay == screen.id ? "• " + short : short
+        let isMain = feature.mainDisplay == screen.id
+        let room = isMain ? nameLength - 2 : nameLength
+        let short = screen.isBuiltIn ? "Built-in" : screen.name
+        return (isMain ? "• " : "") + String(short.prefix(max(3, room)))
     }
 }
 
