@@ -369,6 +369,85 @@ final class DisplayControl {
         return ids
     }
 
+    // MARK: Where the screens sit
+
+    /// A screen's place on the desk, as a cell rather than as a pixel origin.
+    ///
+    /// The Displays pane asks people to drag rectangles until they touch; the
+    /// arithmetic underneath is only "which is left of which, and which is
+    /// above". A grid says that directly, and it cannot produce the two things
+    /// dragging produces by accident — a gap, or an overlap.
+    struct Cell: Equatable, Hashable {
+        var row: Int
+        var column: Int
+    }
+
+    /// Which cell each screen currently occupies, read back from where they
+    /// actually are: the distinct left edges become columns in order, the
+    /// distinct top edges become rows.
+    func arrangement() -> [CGDirectDisplayID: Cell] {
+        let bounds = screens().reduce(into: [CGDirectDisplayID: CGRect]()) {
+            $0[$1.id] = CGDisplayBounds($1.id)
+        }
+        let columns = Set(bounds.values.map(\.minX)).sorted()
+        let rows = Set(bounds.values.map(\.minY)).sorted()
+        return bounds.compactMapValues { rectangle in
+            guard let column = columns.firstIndex(of: rectangle.minX),
+                  let row = rows.firstIndex(of: rectangle.minY) else { return nil }
+            return Cell(row: row, column: column)
+        }
+    }
+
+    /// Puts the screens where the grid says, with no gaps between them.
+    ///
+    /// A column is as wide as its widest screen and a row as tall as its
+    /// tallest, so screens of different sizes still meet edge to edge — which
+    /// is what macOS requires and what dragging by hand keeps failing to do.
+    /// The main screen — the one with the menu bar — is whichever ends up at
+    /// the origin, so everything is shifted to put `main` there.
+    @discardableResult
+    func arrange(_ cells: [CGDirectDisplayID: Cell], main: CGDirectDisplayID?) -> Bool {
+        guard !cells.isEmpty else { return false }
+        let sizes = cells.keys.reduce(into: [CGDirectDisplayID: CGSize]()) {
+            $0[$1] = CGDisplayBounds($1).size
+        }
+
+        var columnWidths: [Int: CGFloat] = [:]
+        var rowHeights: [Int: CGFloat] = [:]
+        for (id, cell) in cells {
+            let size = sizes[id] ?? .zero
+            columnWidths[cell.column] = max(columnWidths[cell.column] ?? 0, size.width)
+            rowHeights[cell.row] = max(rowHeights[cell.row] ?? 0, size.height)
+        }
+
+        func offset(before index: Int, in extents: [Int: CGFloat]) -> CGFloat {
+            extents.filter { $0.key < index }.values.reduce(0, +)
+        }
+
+        var origins = cells.mapValues { cell in
+            CGPoint(x: offset(before: cell.column, in: columnWidths),
+                    y: offset(before: cell.row, in: rowHeights))
+        }
+        // Shift the whole desk so the main screen sits at the origin, which is
+        // how macOS is told which one carries the menu bar.
+        if let main = main, let anchor = origins[main] {
+            origins = origins.mapValues { CGPoint(x: $0.x - anchor.x, y: $0.y - anchor.y) }
+        }
+
+        var configuration: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&configuration) == .success,
+              let configuration = configuration else { return false }
+        for (id, origin) in origins {
+            CGConfigureDisplayOrigin(configuration, id, Int32(origin.x), Int32(origin.y))
+        }
+        return CGCompleteDisplayConfiguration(configuration, .permanently) == .success
+    }
+
+    /// The screen carrying the menu bar.
+    func mainDisplay() -> CGDirectDisplayID? {
+        screens().first { CGDisplayBounds($0.id).origin == .zero }?.id
+    }
+
     // MARK: Switching a panel off
 
     /// Turns a display off or back on.

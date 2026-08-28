@@ -85,6 +85,8 @@ final class DisplayFeature: Feature {
     func refresh() {
         let screens = control.screens()
         self.screens = screens
+        cells = control.arrangement()
+        mainDisplay = control.mainDisplay()
         // A display that was unplugged cannot stay selected, or the tab shows
         // controls for a screen that is no longer in the room.
         if let scope = scope, !screens.contains(where: { $0.id == scope }) {
@@ -107,6 +109,28 @@ final class DisplayFeature: Feature {
     func setDimming(_ value: Double, on display: CGDirectDisplayID) {
         dimming[display] = value
         control.setExtraDimming(value, on: display)
+    }
+
+    @Published private(set) var cells: [CGDirectDisplayID: DisplayControl.Cell] = [:]
+    @Published private(set) var mainDisplay: CGDirectDisplayID?
+
+    /// Moves the scoped screen to a cell and applies the whole grid.
+    func place(_ display: CGDirectDisplayID, at cell: DisplayControl.Cell) {
+        var wanted = cells
+        // Two screens cannot share a cell: the one that was there swaps into
+        // the place being vacated, which is what dragging one onto another in
+        // the Displays pane does.
+        if let occupant = wanted.first(where: { $0.value == cell && $0.key != display })?.key {
+            wanted[occupant] = wanted[display]
+        }
+        wanted[display] = cell
+        control.arrange(wanted, main: mainDisplay)
+        refresh()
+    }
+
+    func makeMain(_ display: CGDirectDisplayID) {
+        control.arrange(cells, main: display)
+        refresh()
     }
 
     var canSwitchDisplaysOff: Bool { DisplayControl.canSwitchDisplaysOff }
@@ -202,6 +226,11 @@ private struct DisplayView: View {
                 }
             }
 
+            if feature.screens.count > 1 {
+                Divider()
+                ArrangementGrid(feature: feature)
+            }
+
             Divider()
             if let screen = feature.scopedScreen {
                 ScreenControls(feature: feature, screen: screen)
@@ -224,6 +253,68 @@ private struct DisplayView: View {
         // main thread.
         .onAppear { feature.startWatchingScreens() }
         .onDisappear { feature.stopWatchingScreens() }
+    }
+}
+
+/// Where the screens sit, as a grid rather than as rectangles to be dragged
+/// until they touch.
+///
+/// Three by three because this machine drives four external screens and its
+/// own, and nine places is the smallest grid that holds five in any
+/// arrangement anybody actually uses — one above three, three above three, a
+/// column, a row.
+private struct ArrangementGrid: View {
+    @ObservedObject var feature: DisplayFeature
+    @Environment(\.terminalStyling) private var terminal
+    @Environment(\.terminalPalette) private var palette
+
+    private let rows = 3
+    private let columns = 3
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Arrangement").font(.headline)
+            ForEach(0..<rows, id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(0..<columns, id: \.self) { column in
+                        cell(DisplayControl.Cell(row: row, column: column))
+                    }
+                }
+            }
+            Text(feature.scopedScreen.map {
+                "Click a square to put \($0.name) there. The screen already in it swaps places. The one with a dot carries the menu bar."
+            } ?? "Click a square to place the selected screen.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let main = feature.scopedScreen, feature.mainDisplay != main.id {
+                Button("Give \(main.name) the menu bar") { feature.makeMain(main.id) }
+            }
+        }
+    }
+
+    private func cell(_ cell: DisplayControl.Cell) -> some View {
+        let occupant = feature.cells.first { $0.value == cell }?.key
+        let screen = occupant.flatMap { id in feature.screens.first { $0.id == id } }
+        let isScoped = screen?.id == feature.scopedScreen?.id && screen != nil
+        return Text(label(for: screen))
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundColor(screen == nil ? palette.dim
+                             : (isScoped ? palette.accent : palette.text))
+            .frame(width: 96, height: 34)
+            .overlay(Rectangle().stroke(isScoped ? palette.accent : palette.rule, lineWidth: 1))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard let scoped = feature.scopedScreen else { return }
+                feature.place(scoped.id, at: cell)
+            }
+    }
+
+    /// Short enough for a square: the first word, or the model of a monitor
+    /// whose name is a part number.
+    private func label(for screen: DisplayControl.Screen?) -> String {
+        guard let screen = screen else { return "·" }
+        let short = screen.isBuiltIn ? "Built-in" : String(screen.name.prefix(11))
+        return feature.mainDisplay == screen.id ? "• " + short : short
     }
 }
 
