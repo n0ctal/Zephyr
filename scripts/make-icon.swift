@@ -1,10 +1,103 @@
-// Generates AppIcon.icns: a speedometer gauge on a cool blue gradient (the
-// "Zephyr" identity). Run: swift scripts/make-icon.swift <output-dir>
+// Generates AppIcon.iconset: a marshmallow — Zephyr is зефир in Russian, and
+// зефир is marshmallow in English, so the icon is the name.
+//
+// Drawn as geometry rather than traced from a picture, because the shape has
+// to survive 16 points in the Finder sidebar as well as 1024 in the Dock, and
+// a raster of a thin outline does not.
+//
+// Run: swift scripts/make-icon.swift <output-dir>
 import AppKit
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
 let iconsetURL = URL(fileURLWithPath: outDir).appendingPathComponent("AppIcon.iconset")
 try? FileManager.default.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
+
+// Three values in the whole icon, and no fourth.
+let ground = NSColor(srgbRed: 0.043, green: 0.043, blue: 0.051, alpha: 1)
+let body = NSColor(srgbRed: 0.980, green: 0.816, blue: 0.863, alpha: 1)
+let line = NSColor(srgbRed: 0.941, green: 0.443, blue: 0.565, alpha: 1)
+
+/// A half ellipse, from the end of one semi-axis round to the other, bulging
+/// by `reach` along `axis`. Two cubics per half is the standard circle
+/// approximation, and at this size the error is well under a pixel.
+let kappa: CGFloat = 0.5523
+
+/// The marshmallow, built lying along the x axis and rotated into place.
+///
+/// Both ends are the same ellipse; the far one is hidden behind the body, so
+/// only its outer half is drawn.
+///
+/// The sides are straight. Bowing them outward was the first attempt — a
+/// cylinder can read as a medicine capsule, and a bulge is the usual cure —
+/// but it puts a visible kink where the side meets the cap: the cap arc has
+/// to leave horizontally, and a bowed side does not arrive that way. What
+/// keeps this from looking pharmaceutical is being squat, with a cap wide
+/// enough to see into.
+func marshmallow(size: CGFloat) -> (silhouette: NSBezierPath, capEdge: NSBezierPath) {
+    // The generous margin the large sizes want is a luxury at 16 points,
+    // where every pixel spent on emptiness is one the shape does not get.
+    let fill: CGFloat = size < 32 ? 1.14 : 1
+    let halfLength = size * 0.145 * fill  // along the axis
+    let radius = size * 0.195 * fill      // across it
+    let cap = radius * 0.52               // how far a cap ellipse bulges
+
+    let silhouette = NSBezierPath()
+    // Upper side, near end to far end.
+    silhouette.move(to: NSPoint(x: -halfLength, y: radius))
+    silhouette.line(to: NSPoint(x: halfLength, y: radius))
+    // Far cap, outer half.
+    silhouette.curve(to: NSPoint(x: halfLength + cap, y: 0),
+                     controlPoint1: NSPoint(x: halfLength + cap * kappa, y: radius),
+                     controlPoint2: NSPoint(x: halfLength + cap, y: radius * kappa))
+    silhouette.curve(to: NSPoint(x: halfLength, y: -radius),
+                     controlPoint1: NSPoint(x: halfLength + cap, y: -radius * kappa),
+                     controlPoint2: NSPoint(x: halfLength + cap * kappa, y: -radius))
+    // Lower side, back again.
+    silhouette.line(to: NSPoint(x: -halfLength, y: -radius))
+    // Near cap, outer half.
+    silhouette.curve(to: NSPoint(x: -halfLength - cap, y: 0),
+                     controlPoint1: NSPoint(x: -halfLength - cap * kappa, y: -radius),
+                     controlPoint2: NSPoint(x: -halfLength - cap, y: -radius * kappa))
+    silhouette.curve(to: NSPoint(x: -halfLength, y: radius),
+                     controlPoint1: NSPoint(x: -halfLength - cap, y: radius * kappa),
+                     controlPoint2: NSPoint(x: -halfLength - cap * kappa, y: radius))
+    silhouette.close()
+
+    // The near cap's inner half. Drawn on top of the fill, it is the only
+    // thing in the icon that says the shape has volume — there is no shading
+    // anywhere else.
+    let capEdge = NSBezierPath()
+    capEdge.move(to: NSPoint(x: -halfLength, y: radius))
+    capEdge.curve(to: NSPoint(x: -halfLength + cap, y: 0),
+                  controlPoint1: NSPoint(x: -halfLength + cap * kappa, y: radius),
+                  controlPoint2: NSPoint(x: -halfLength + cap, y: radius * kappa))
+    capEdge.curve(to: NSPoint(x: -halfLength, y: -radius),
+                  controlPoint1: NSPoint(x: -halfLength + cap, y: -radius * kappa),
+                  controlPoint2: NSPoint(x: -halfLength + cap * kappa, y: -radius))
+
+    // Lying diagonally, near end to the lower left.
+    let place = NSAffineTransform()
+    place.translateX(by: size / 2, yBy: size / 2)
+    place.rotate(byDegrees: 38)
+    silhouette.transform(using: place as AffineTransform)
+    capEdge.transform(using: place as AffineTransform)
+    return (silhouette, capEdge)
+}
+
+/// Stroke weight as a share of the icon.
+///
+/// Not a constant proportion. The drawing wants a fine line, and a fine line
+/// at 16 points is a third of a pixel — it renders as a grey suggestion and
+/// the outline breaks up. Small sizes get a disproportionately heavy line,
+/// which is what every icon set that survives the Finder sidebar does.
+func strokeWidth(_ size: CGFloat) -> CGFloat {
+    switch size {
+    case ..<24: return size * 0.075
+    case ..<48: return size * 0.050
+    case ..<96: return size * 0.030
+    default: return size * 0.016
+    }
+}
 
 func renderIcon(px: Int) -> Data {
     let size = CGFloat(px)
@@ -14,63 +107,33 @@ func renderIcon(px: Int) -> Data {
         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.current?.imageInterpolation = .high
 
+    // The squircle every macOS icon sits in. Near-black rather than absolute:
+    // a pure black tile has no edge at all against a dark Dock.
     let inset = size * 0.06
-    let bg = NSRect(x: inset, y: inset, width: size - 2 * inset, height: size - 2 * inset)
-    let radius = bg.width * 0.225
-    let bgPath = NSBezierPath(roundedRect: bg, xRadius: radius, yRadius: radius)
-    NSGradient(colors: [
-        NSColor(srgbRed: 0.36, green: 0.80, blue: 0.94, alpha: 1),
-        NSColor(srgbRed: 0.13, green: 0.46, blue: 0.86, alpha: 1),
-    ])!.draw(in: bgPath, angle: -90)
+    let plate = NSRect(x: inset, y: inset, width: size - 2 * inset, height: size - 2 * inset)
+    let plated = NSBezierPath(roundedRect: plate,
+                              xRadius: plate.width * 0.225, yRadius: plate.width * 0.225)
+    ground.setFill()
+    plated.fill()
 
-    NSColor.white.setStroke()
-    NSColor.white.setFill()
+    let (silhouette, capEdge) = marshmallow(size: size)
+    body.setFill()
+    silhouette.fill()
 
-    let cx = size / 2, cy = size * 0.555, R = size * 0.255
-    let a1 = 200.0, a2 = -20.0   // sweep over the top, gap at bottom
-
-    func pt(_ deg: Double, _ rr: CGFloat) -> NSPoint {
-        let r = deg * .pi / 180
-        return NSPoint(x: cx + rr * CGFloat(cos(r)), y: cy + rr * CGFloat(sin(r)))
+    line.setStroke()
+    // Below 32 points the near cap's edge lands within a pixel or two of the
+    // outline and the two lines merge into a thick smudge. The shape reads
+    // better as a clean silhouette there; detail that cannot be resolved is
+    // not detail, it is noise.
+    let strokes = size < 32 ? [silhouette] : [silhouette, capEdge]
+    for path in strokes {
+        path.lineWidth = strokeWidth(size)
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        path.stroke()
     }
-
-    // Arc.
-    let arc = NSBezierPath()
-    var deg = a1
-    var first = true
-    while deg >= a2 {
-        let p = pt(deg, R)
-        if first { arc.move(to: p); first = false } else { arc.line(to: p) }
-        deg -= 3
-    }
-    arc.lineWidth = size * 0.052
-    arc.lineCapStyle = .round
-    arc.lineJoinStyle = .round
-    arc.stroke()
-
-    // Ticks.
-    for i in 0...6 {
-        let t = a1 + (a2 - a1) * Double(i) / 6.0
-        let tick = NSBezierPath()
-        tick.move(to: pt(t, R * 0.78))
-        tick.line(to: pt(t, R * 0.99))
-        tick.lineWidth = size * 0.026
-        tick.lineCapStyle = .round
-        tick.stroke()
-    }
-
-    // Needle (points up-right ~70% of the dial).
-    let needle = NSBezierPath()
-    needle.move(to: NSPoint(x: cx, y: cy))
-    needle.line(to: pt(52, R * 0.84))
-    needle.lineWidth = size * 0.05
-    needle.lineCapStyle = .round
-    needle.stroke()
-
-    // Hub.
-    let hubR = size * 0.06
-    NSBezierPath(ovalIn: NSRect(x: cx - hubR, y: cy - hubR, width: 2 * hubR, height: 2 * hubR)).fill()
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!
