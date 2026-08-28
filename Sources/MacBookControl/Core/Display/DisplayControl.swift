@@ -487,22 +487,36 @@ final class DisplayControl {
     /// row is a real arrangement on a Mac Pro, and an earlier version of this
     /// quietly clipped the ring off it — leaving the far screen against the
     /// edge of the grid with nowhere to go.
-    static func gridSpan(cells: [Cell], screenCount: Int)
+    static func gridSpan(cells: [Cell], moving: Cell?)
         -> (rows: ClosedRange<Int>, columns: ClosedRange<Int>) {
         guard !cells.isEmpty else { return (0...2, 0...2) }
-        // Room for every screen in a line, and the ring around it. Anything
-        // beyond that cannot be reached by moving one screen at a time.
-        let reach = max(3, screenCount + 2)
 
-        func widen(_ values: [Int]) -> ClosedRange<Int> {
-            let low = values.min()!, high = values.max()!
-            let occupied = high - low + 1
-            // The occupied squares are never trimmed — only the ring is, and
-            // only when there is no room left for it.
-            guard occupied + 2 <= reach else { return low...high }
-            return (low - 1)...(high + 1)
+        // The squares worth offering are the ones the moving screen could
+        // actually go to: the neighbours of the screens that are staying put.
+        //
+        // Padding around the whole arrangement instead — the moving screen
+        // included — was the first rule, and it offered a column past the
+        // screen being moved. Two screens side by side came out four columns
+        // wide, and the far column was a place where dropping the screen
+        // would leave a gap between the two. macOS does not keep gaps; the
+        // window server packs the screens back together. So that square was
+        // an invitation to do something that could not happen.
+        let staying = moving.map { held in cells.filter { $0 != held } } ?? cells
+        // One screen, or none named: it is its own anchor, and gets a ring.
+        let anchor = staying.isEmpty ? cells : staying
+
+        func span(_ coordinate: (Cell) -> Int) -> ClosedRange<Int> {
+            let anchored = anchor.map(coordinate)
+            let reachable = (anchored.min()! - 1)...(anchored.max()! + 1)
+            // A screen that has been put far out stays on the grid whatever
+            // the ring says — losing a screen off the edge would be worse
+            // than a wide grid, and the grid scrolls sideways.
+            let placed = cells.map(coordinate)
+            let low = min(reachable.lowerBound, placed.min()!)
+            let high = max(reachable.upperBound, placed.max()!)
+            return low...high
         }
-        return (widen(cells.map(\.row)), widen(cells.map(\.column)))
+        return (span { $0.row }, span { $0.column })
     }
 
     /// The screen carrying the menu bar.

@@ -282,7 +282,7 @@ private struct ArrangementGrid: View {
     /// laptop would be wrong on the machine that needs it most.
     private var span: (rows: ClosedRange<Int>, columns: ClosedRange<Int>) {
         DisplayControl.gridSpan(cells: Array(feature.cells.values),
-                                screenCount: feature.screens.count)
+                                moving: feature.scopedScreen.flatMap { feature.cells[$0.id] })
     }
 
     /// The squares shrink as the grid widens, but only so far: past this they

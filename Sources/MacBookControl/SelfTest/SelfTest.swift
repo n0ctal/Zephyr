@@ -854,35 +854,57 @@ enum SelfTest {
 
     private static func arrangementGrid() {
         typealias Cell = DisplayControl.Cell
-        // Two screens side by side: the pair, plus a ring.
-        let pair = DisplayControl.gridSpan(cells: [Cell(row: 0, column: 0),
-                                                   Cell(row: 0, column: 1)],
-                                           screenCount: 2)
-        expectEqual(pair.columns, -1...2, "two in a row get a free square on each side")
-        expectEqual(pair.rows, -1...1, "and one above and below")
+        func span(_ cells: [Cell], moving: Cell?) -> (rows: ClosedRange<Int>,
+                                                      columns: ClosedRange<Int>) {
+            DisplayControl.gridSpan(cells: cells, moving: moving)
+        }
 
-        // The case that was wrong: every screen a Mac Pro can drive, in one
-        // line. The occupied squares must all be there, and so must the ring.
+        // Two side by side. The grid offers the squares the moving screen can
+        // reach, which is three columns and not four: a fourth would sit past
+        // the screen being moved, and dropping it there would leave a gap the
+        // window server immediately packs away.
+        let pair = [Cell(row: 0, column: 0), Cell(row: 0, column: 1)]
+        let movingRight = span(pair, moving: Cell(row: 0, column: 1))
+        expectEqual(movingRight.columns, -1...1, "two in a row need three columns, not four")
+        expectEqual(movingRight.rows, -1...1, "and one row above and below")
+        // The other screen selected: the same width, the free square on the
+        // other side, because that is where that screen can go.
+        let movingLeft = span(pair, moving: Cell(row: 0, column: 0))
+        expectEqual(movingLeft.columns, 0...2, "the free square follows the screen being moved")
+        expectEqual(movingLeft.columns.count, movingRight.columns.count,
+                    "and the grid does not change size when the selection does")
+
+        // One screen is its own anchor and still gets somewhere to go.
+        expectEqual(span([Cell(row: 0, column: 0)], moving: Cell(row: 0, column: 0)).columns,
+                    -1...1, "a single screen still has a ring around it")
+
+        // Every screen a Mac Pro can drive, in one line. All twelve must be on
+        // the grid, with somewhere to move at the end being moved from.
         let twelve = (0..<12).map { Cell(row: 0, column: $0) }
-        let wide = DisplayControl.gridSpan(cells: twelve, screenCount: 12)
+        let wide = span(twelve, moving: Cell(row: 0, column: 11))
         expect(wide.columns.contains(0) && wide.columns.contains(11),
                "twelve in a row are all on the grid")
-        expectEqual(wide.columns, -1...12, "with somewhere to move at each end")
+        expectEqual(wide.columns, -1...11, "with a square beyond the far end")
+        expectEqual(wide.rows, -1...1, "and a row above and below")
 
         // The same, stacked.
-        let tall = DisplayControl.gridSpan(cells: (0..<12).map { Cell(row: $0, column: 0) },
-                                           screenCount: 12)
-        expectEqual(tall.rows, -1...12, "and the same standing up")
+        let tall = span((0..<12).map { Cell(row: $0, column: 0) },
+                        moving: Cell(row: 11, column: 0))
+        expectEqual(tall.rows, -1...11, "and the same standing up")
 
-        // A screen dragged far out: the ring is what gets trimmed, never a
-        // screen's own square.
-        let scattered = DisplayControl.gridSpan(cells: [Cell(row: 0, column: 0),
-                                                        Cell(row: 0, column: 9)],
-                                                screenCount: 2)
+        // A screen dragged far out: it stays on the grid however far it is,
+        // because losing a screen off the edge is worse than a wide grid.
+        let scattered = span([Cell(row: 0, column: 0), Cell(row: 0, column: 9)],
+                             moving: Cell(row: 0, column: 9))
         expect(scattered.columns.contains(0) && scattered.columns.contains(9),
                "both screens stay on the grid however far apart they are")
 
-        expectEqual(DisplayControl.gridSpan(cells: [], screenCount: 0).columns, 0...2,
+        // Nothing selected falls back to a ring around everything rather than
+        // to an empty grid.
+        expectEqual(span(pair, moving: nil).columns, -1...2,
+                    "with no screen named, the ring goes around them all")
+
+        expectEqual(span([], moving: nil).columns, 0...2,
                     "with nothing placed there is still a grid to place onto")
     }
 

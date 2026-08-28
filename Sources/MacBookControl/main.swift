@@ -409,6 +409,10 @@ func runPointerTest(write: Bool) {
     print("devices: \(devices.count)")
     for device in devices {
         print(String(format: "  %@ — %@ = %d (%.4f)", device.name, device.key, device.value, device.multiplier))
+        // The identity is what every per-device setting is filed under, so it
+        // is the thing to compare when checking that some other view of the
+        // same hardware agrees about which device it is.
+        print("      identity: \(device.identity)")
     }
     print("identity candidates:")
     for key in ["RegistryID", "LocationID", "VendorID", "ProductID", "SerialNumber", "Transport", "DeviceUsagePairs"] {
