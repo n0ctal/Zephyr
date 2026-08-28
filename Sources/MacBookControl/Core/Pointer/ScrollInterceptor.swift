@@ -26,13 +26,17 @@ final class ScrollInterceptor {
         var linesPerNotch = 3
         /// A multiplier on the scroll distance, 1.0 being untouched.
         var scale: Double = 1.0
+        /// Pay a wheel notch out over several frames instead of at once.
+        var smooth = false
+        /// How much of the remaining distance goes out each frame.
+        var smoothFactor: Double = 0.25
         /// Extra mouse buttons, by CGEvent button number.
         var buttons: [Int: ButtonAction] = [:]
         /// Overrides that apply only while a given application is in front.
         var appRules: [AppScrollRule] = []
 
         var wantsAnything: Bool {
-            reverseMouse || reverseTrackpad || linear || scale != 1.0
+            reverseMouse || reverseTrackpad || linear || scale != 1.0 || smooth
                 || buttons.values.contains { $0 != .passThrough }
                 || appRules.contains { $0.changesAnything }
         }
@@ -56,6 +60,7 @@ final class ScrollInterceptor {
         if let linear = rule.linear { resolved.linear = linear }
         if let lines = rule.linesPerNotch { resolved.linesPerNotch = lines }
         if let scale = rule.scale { resolved.scale = scale }
+        if let smooth = rule.smooth { resolved.smooth = smooth }
         return resolved
     }
 
@@ -77,6 +82,11 @@ final class ScrollInterceptor {
     /// the pointer would cost a window-list query per event.
     private var frontmostApp: String?
     private var activation: NSObjectProtocol?
+    private let smoother = ScrollSmoother()
+
+    /// Marks the events the smoother posts, so they are passed through rather
+    /// than reversed and scaled a second time on their way back in.
+    private static let signature: Int64 = 0x5A50_5452   // "ZPTR"
 
     /// Whether the tap is live. False means the events are untouched — either
     /// nothing was asked for, or macOS refused us.
@@ -146,6 +156,7 @@ final class ScrollInterceptor {
         if let activation = activation {
             NSWorkspace.shared.notificationCenter.removeObserver(activation)
         }
+        smoother.cancel()
         activation = nil
         tap = nil
         source = nil
@@ -165,8 +176,20 @@ final class ScrollInterceptor {
         }
         switch type {
         case .scrollWheel:
-            Self.rewrite(event, options: Self.resolve(options, forApp: frontmostApp))
-            return Unmanaged.passUnretained(event)
+            guard event.getIntegerValueField(.eventSourceUserData) != Self.signature else {
+                return Unmanaged.passUnretained(event)
+            }
+            let inForce = Self.resolve(options, forApp: frontmostApp)
+            Self.rewrite(event, options: inForce)
+            // A trackpad is already continuous and has its own tail; smoothing
+            // it would be two decays fighting.
+            let isWheel = event.getIntegerValueField(.scrollWheelEventIsContinuous) == 0
+            guard inForce.smooth, isWheel else { return Unmanaged.passUnretained(event) }
+            smoother.signature = Self.signature
+            smoother.tuning.factor = inForce.smoothFactor
+            smoother.add(x: Self.pixels(event, axis: 2, tuning: smoother.tuning),
+                         y: Self.pixels(event, axis: 1, tuning: smoother.tuning))
+            return nil
 
         case .otherMouseDown, .otherMouseUp:
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
@@ -182,6 +205,20 @@ final class ScrollInterceptor {
         default:
             return Unmanaged.passUnretained(event)
         }
+    }
+
+    /// How far a notch should travel, in pixels.
+    ///
+    /// The point delta is what the event already says in pixels; a wheel that
+    /// only reports lines gets them converted. Reading the point delta first
+    /// keeps a flattened notch and a scaled one honest, since both wrote it.
+    static func pixels(_ event: CGEvent, axis: Int, tuning: ScrollSmoother.Tuning) -> Double {
+        let fields = axis == 1
+            ? (CGEventField.scrollWheelEventPointDeltaAxis1, CGEventField.scrollWheelEventDeltaAxis1)
+            : (CGEventField.scrollWheelEventPointDeltaAxis2, CGEventField.scrollWheelEventDeltaAxis2)
+        let points = event.getIntegerValueField(fields.0)
+        if points != 0 { return Double(points) }
+        return Double(event.getIntegerValueField(fields.1)) * tuning.pixelsPerLine
     }
 
     /// The transformation itself, separated from the tap so it can be checked

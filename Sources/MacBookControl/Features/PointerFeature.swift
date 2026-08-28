@@ -134,6 +134,8 @@ final class PointerFeature: Feature {
         options.linear = mouse.linearScroll
         options.linesPerNotch = mouse.linesPerNotch
         options.scale = mouse.scrollScale
+        options.smooth = mouse.smoothScroll
+        options.smoothFactor = mouse.smoothFactor
         options.buttons = mouse.buttons
         options.appRules = appRules
         return options
@@ -224,6 +226,14 @@ private struct PointerView: View {
             Toggle("Reverse scrolling", isOn: bind(\.reverseScroll))
             ValueField(title: "Scroll speed", range: 0.25...5, step: 0.25, suffix: "×",
                        value: bind(\.scrollScale))
+            Toggle("Smooth the wheel", isOn: bind(\.smoothScroll))
+            if feature.profile.smoothScroll {
+                ValueField(title: "Glide", range: 0.05...1, step: 0.05, suffix: "",
+                           value: bind(\.smoothFactor))
+                Text("A notch is swallowed and paid out over the next few frames as the continuous scroll a trackpad sends, which is why a trackpad is left alone — it already has a tail of its own. Lower values glide for longer.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Toggle("Fixed distance per wheel notch", isOn: bind(\.linearScroll))
             if feature.profile.linearScroll {
                 IntField(title: "Lines per notch", range: 1...10, suffix: "lines",
@@ -347,6 +357,18 @@ private struct PointerView: View {
                                        value: Binding(
                                            get: { feature.appRules[index].scale ?? 1 },
                                            set: { feature.appRules[index].scale = $0 }))
+                        }
+                        Spacer()
+                    }
+                    HStack(spacing: 10) {
+                        overrideToggle(index: index, title: "Smooth",
+                                       isSet: rule.smooth != nil) { on in
+                            feature.appRules[index].smooth = on ? false : nil
+                        }
+                        if rule.smooth != nil {
+                            Toggle("Glide here", isOn: Binding(
+                                get: { feature.appRules[index].smooth ?? false },
+                                set: { feature.appRules[index].smooth = $0 }))
                         }
                         Spacer()
                     }

@@ -19,11 +19,16 @@ struct AppScrollRule: Codable, Equatable, Identifiable {
     var linesPerNotch: Int?
     /// A multiplier on the distance, 1.0 being untouched.
     var scale: Double?
+    /// Whether the wheel glides here. The reason this is per application is
+    /// that smoothing is wrong in a few of them — anything that maps a scroll
+    /// to a zoom step, or draws its own inertia — and being able to say so is
+    /// the difference between using the feature and turning it off.
+    var smooth: Bool?
 
     var id: String { bundleID }
 
     var changesAnything: Bool {
-        reverse != nil || linear != nil || linesPerNotch != nil
+        reverse != nil || linear != nil || linesPerNotch != nil || smooth != nil
             || (scale.map { $0 != 1.0 } ?? false)
     }
 
@@ -32,6 +37,7 @@ struct AppScrollRule: Codable, Equatable, Identifiable {
         var parts: [String] = []
         if let reverse = reverse { parts.append(reverse ? "reversed" : "normal direction") }
         if let scale = scale, scale != 1.0 { parts.append(String(format: "%.2g× speed", scale)) }
+        if let smooth = smooth { parts.append(smooth ? "smoothed" : "not smoothed") }
         if let linear = linear, linear { parts.append("fixed step") }
         if let lines = linesPerNotch, linear == true { parts.append("\(lines) lines") }
         return parts.isEmpty ? "no change" : parts.joined(separator: ", ")

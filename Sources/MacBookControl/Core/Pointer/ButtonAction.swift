@@ -88,6 +88,11 @@ struct PointerProfile: Codable, Equatable {
     var linesPerNotch = 3
     /// A multiplier on the scroll distance, 1.0 being the system's own.
     var scrollScale = 1.0
+    /// Pay a wheel notch out over several frames rather than at once.
+    var smoothScroll = false
+    /// How much of the remaining distance goes out each frame. Lower glides
+    /// for longer.
+    var smoothFactor = 0.25
     var flattenAcceleration = false
     /// 1.0 is the curve the device shipped with; 0 is none at all.
     var accelerationMultiplier = 0.0

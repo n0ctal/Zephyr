@@ -38,6 +38,7 @@ enum SelfTest {
         keyMappingWireFormat()
         modifierKeyRules()
         perAppScrollRules()
+        scrollSmoothing()
         sliderTickBudget()
         fanCurve()
         scrollRewriting()
@@ -200,6 +201,48 @@ enum SelfTest {
     }
 
     // MARK: Keyboard
+
+    private static func scrollSmoothing() {
+        // The glide has to arrive, and in a sensible number of frames. An
+        // exponential decay never reaches zero on its own, so without the
+        // floor in `step` the timer would run until the app quit.
+        let steps = ScrollSmoother.glide(distance: 120, factor: 0.25)
+        expect(!steps.isEmpty, "a notch produces a glide")
+        expect(steps.count < 30, "which ends within half a second at sixty frames")
+        let travelled = steps.reduce(0, +)
+        expect(abs(travelled - 120) < 0.001, "and travels exactly as far as the notch asked")
+        // Direction survives, and so does the arrival.
+        let back = ScrollSmoother.glide(distance: -120, factor: 0.25)
+        expect(back.allSatisfy { $0 <= 0 }, "an upward notch glides upward throughout")
+        expect(abs(back.reduce(0, +) + 120) < 0.001, "and arrives too")
+        // Each step is smaller than the last, which is what makes it a glide
+        // rather than a slice — up to the last one, which is the floor paying
+        // out the whole remainder at once so the timer can stop.
+        let body = steps.dropLast()
+        let decaying = zip(body, body.dropFirst()).allSatisfy { abs($0) >= abs($1) }
+        expect(decaying, "each frame moves less than the one before it")
+        expect((steps.last ?? 0) < 4, "and the last frame is the small remainder")
+        // A distance below a pixel goes out at once rather than never.
+        expectEqual(ScrollSmoother.step(remaining: 0.4, factor: 0.25), 0.4,
+                    "less than a pixel left is paid out in one frame")
+        expectEqual(ScrollSmoother.step(remaining: 0, factor: 0.25), 0, "nothing stays nothing")
+        // A factor of zero would be a glide that never moves; it is clamped.
+        expect(ScrollSmoother.glide(distance: 100, factor: 0).count < 600,
+               "even a nonsensical factor terminates")
+        // Smoothing alone is reason enough to run the tap.
+        var options = ScrollInterceptor.Options()
+        options.smooth = true
+        expect(options.wantsAnything, "smoothing on its own turns the interception on")
+        // And a rule can switch it off for one application, which is the
+        // exclusion list every smoothing tool ends up needing.
+        options.appRules = [AppScrollRule(bundleID: "x", name: "X", reverse: nil,
+                                          linear: nil, linesPerNotch: nil,
+                                          scale: nil, smooth: false)]
+        expect(!ScrollInterceptor.resolve(options, forApp: "x").smooth,
+               "an application can opt out of the glide")
+        expect(ScrollInterceptor.resolve(options, forApp: "y").smooth,
+               "while everything else keeps it")
+    }
 
     private static func perAppScrollRules() {
         var base = ScrollInterceptor.Options()
