@@ -22,9 +22,17 @@ final class PointerFeature: Feature {
     /// nil means the defaults every device follows unless it has its own.
     @Published var scope: String?
     @Published private(set) var isIntercepting = false
+    @Published var appRules: [AppScrollRule] {
+        didSet {
+            Preferences.appScrollRules = appRules
+            guard isEnabled else { return }
+            reapply()
+        }
+    }
 
     init() {
         store = Preferences.pointerStore
+        appRules = Preferences.appScrollRules
         super.init(id: "pointer",
                    title: "Pointer",
                    summary: "Give each mouse and the trackpad their own scroll direction, acceleration and button bindings.")
@@ -125,7 +133,9 @@ final class PointerFeature: Feature {
         options.reverseMouse = mouse.reverseScroll
         options.linear = mouse.linearScroll
         options.linesPerNotch = mouse.linesPerNotch
+        options.scale = mouse.scrollScale
         options.buttons = mouse.buttons
+        options.appRules = appRules
         return options
     }
 
@@ -203,6 +213,8 @@ private struct PointerView: View {
             accelerationSection
             Divider()
             buttonSection
+            Divider()
+            appRulesSection
         }
         .onAppear { feature.refreshDevices() }
     }
@@ -210,6 +222,8 @@ private struct PointerView: View {
     private var scrollSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle("Reverse scrolling", isOn: bind(\.reverseScroll))
+            ValueField(title: "Scroll speed", range: 0.25...5, step: 0.25, suffix: "×",
+                       value: bind(\.scrollScale))
             Toggle("Fixed distance per wheel notch", isOn: bind(\.linearScroll))
             if feature.profile.linearScroll {
                 IntField(title: "Lines per notch", range: 1...10, suffix: "lines",
@@ -271,6 +285,117 @@ private struct PointerView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var appRulesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Per application").font(.headline)
+                Spacer()
+                Menu {
+                    // A menu item is an NSMenuItem and can draw a label and
+                    // nothing else; the window's bracket button style would
+                    // reach these and render a column of "[".
+                    ForEach(addableApps, id: \.bundleID) { app in
+                        Button(app.name) {
+                            feature.appRules.append(
+                                AppScrollRule(bundleID: app.bundleID, name: app.name,
+                                              reverse: nil, linear: nil,
+                                              linesPerNotch: nil, scale: 1.0))
+                        }
+                    }
+                    .buttonStyle(DefaultButtonStyle())
+                } label: {
+                    Text("Add")
+                }
+                .menuStyle(BorderlessButtonMenuStyle())
+                .fixedSize()
+            }
+            if feature.appRules.isEmpty {
+                Text("Scrolling behaves the same everywhere. A rule here changes it only while one application is in front — a page per notch in a reader, a slower wheel in an editor.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Array(feature.appRules.enumerated()), id: \.element.bundleID) { index, rule in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(rule.name).font(.subheadline)
+                        Text(rule.summary).font(.caption).foregroundColor(.secondary)
+                        Spacer()
+                        Button("Remove") { feature.appRules.remove(at: index) }
+                            .buttonStyle(BorderlessButtonStyle())
+                    }
+                    HStack(spacing: 10) {
+                        overrideToggle(index: index, title: "Direction",
+                                       isSet: rule.reverse != nil) { on in
+                            feature.appRules[index].reverse = on ? false : nil
+                        }
+                        if rule.reverse != nil {
+                            Toggle("Reversed", isOn: Binding(
+                                get: { feature.appRules[index].reverse ?? false },
+                                set: { feature.appRules[index].reverse = $0 }))
+                        }
+                        Spacer()
+                    }
+                    HStack(spacing: 10) {
+                        overrideToggle(index: index, title: "Speed",
+                                       isSet: rule.scale != nil) { on in
+                            feature.appRules[index].scale = on ? 1.0 : nil
+                        }
+                        if rule.scale != nil {
+                            ValueField(title: "", range: 0.25...5, step: 0.25, suffix: "×",
+                                       value: Binding(
+                                           get: { feature.appRules[index].scale ?? 1 },
+                                           set: { feature.appRules[index].scale = $0 }))
+                        }
+                        Spacer()
+                    }
+                    HStack(spacing: 10) {
+                        overrideToggle(index: index, title: "Fixed step",
+                                       isSet: rule.linear != nil) { on in
+                            feature.appRules[index].linear = on ? true : nil
+                            feature.appRules[index].linesPerNotch = on ? 3 : nil
+                        }
+                        if feature.appRules[index].linear == true {
+                            IntField(title: "Lines", range: 1...40, suffix: "",
+                                     value: Binding(
+                                         get: { feature.appRules[index].linesPerNotch ?? 3 },
+                                         set: { feature.appRules[index].linesPerNotch = $0 }))
+                        }
+                        Spacer()
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            if !feature.appRules.isEmpty {
+                Text("A rule follows the active application, which is where scrolling goes unless a background window is scrolled without being clicked first. Anything left unticked keeps whatever the device itself is set to.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// The tick that decides whether a rule speaks about a setting at all.
+    /// Without it there is no way to say "leave the direction alone" — every
+    /// rule would carry an opinion about everything.
+    private func overrideToggle(index: Int, title: String, isSet: Bool,
+                                set: @escaping (Bool) -> Void) -> some View {
+        Toggle(title, isOn: Binding(get: { isSet }, set: set))
+            .lineLimit(1)
+            .fixedSize()
+            .frame(width: 160, alignment: .leading)
+    }
+
+    /// Running applications first, since those are the ones being thought
+    /// about, then everything installed that has no rule yet.
+    private var addableApps: [(name: String, bundleID: String)] {
+        let taken = Set(feature.appRules.map(\.bundleID))
+        let running = RunnableApps.running().filter { !taken.contains($0.bundleID) }
+        let runningIDs = Set(running.map(\.bundleID))
+        let rest = RunnableApps.installed().filter {
+            !taken.contains($0.bundleID) && !runningIDs.contains($0.bundleID)
+        }
+        return running + rest
     }
 
     private func bind<T>(_ path: WritableKeyPath<PointerProfile, T>) -> Binding<T> {

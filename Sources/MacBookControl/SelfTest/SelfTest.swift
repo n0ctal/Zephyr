@@ -37,6 +37,7 @@ enum SelfTest {
         powerLimitPacking()
         keyMappingWireFormat()
         modifierKeyRules()
+        perAppScrollRules()
         sliderTickBudget()
         fanCurve()
         scrollRewriting()
@@ -199,6 +200,47 @@ enum SelfTest {
     }
 
     // MARK: Keyboard
+
+    private static func perAppScrollRules() {
+        var base = ScrollInterceptor.Options()
+        base.reverseMouse = true
+        base.scale = 1.0
+        base.appRules = [AppScrollRule(bundleID: "com.apple.Preview", name: "Preview",
+                                       reverse: nil, linear: nil,
+                                       linesPerNotch: nil, scale: 2.0)]
+        // The rule speaks only about speed, so the direction the device is set
+        // to has to survive it. Getting this wrong is invisible until someone
+        // adds a speed rule and finds their scrolling flipped.
+        let inPreview = ScrollInterceptor.resolve(base, forApp: "com.apple.Preview")
+        expectEqual(inPreview.scale, 2.0, "a rule applies while its app is in front")
+        expectEqual(inPreview.reverseMouse, true, "and leaves untouched settings alone")
+        let elsewhere = ScrollInterceptor.resolve(base, forApp: "com.apple.Safari")
+        expectEqual(elsewhere.scale, 1.0, "another app keeps the plain settings")
+        expectEqual(ScrollInterceptor.resolve(base, forApp: nil).scale, 1.0,
+                    "and so does not knowing which app is in front")
+        // A direction rule overrides both kinds of device, since it is about
+        // the application rather than the hardware.
+        base.appRules = [AppScrollRule(bundleID: "x", name: "X", reverse: false,
+                                       linear: nil, linesPerNotch: nil, scale: nil)]
+        let flipped = ScrollInterceptor.resolve(base, forApp: "x")
+        expectEqual(flipped.reverseMouse, false, "a direction rule overrides the device")
+        expectEqual(flipped.reverseTrackpad, false, "for the trackpad too")
+        // The tap has to run for a rule alone, or per-app settings would need
+        // an unrelated global switch turned on first.
+        var only = ScrollInterceptor.Options()
+        only.appRules = [AppScrollRule(bundleID: "x", name: "X", reverse: true,
+                                       linear: nil, linesPerNotch: nil, scale: nil)]
+        expect(only.wantsAnything, "a rule on its own is reason enough to intercept")
+        only.appRules = [AppScrollRule(bundleID: "x", name: "X", reverse: nil,
+                                       linear: nil, linesPerNotch: nil, scale: 1.0)]
+        expect(!only.wantsAnything, "a rule that changes nothing is not")
+        // Scaling a whole-number delta must not round a notch away entirely.
+        expectEqual(ScrollInterceptor.scaled(1, by: 0.25), 1,
+                    "a slowed notch still moves a line rather than none")
+        expectEqual(ScrollInterceptor.scaled(-1, by: 0.25), -1, "in both directions")
+        expectEqual(ScrollInterceptor.scaled(4, by: 0.5), 2, "and scales normally otherwise")
+        expectEqual(ScrollInterceptor.scaled(0, by: 3), 0, "nothing scrolled stays nothing")
+    }
 
     private static func modifierKeyRules() {
         typealias Rule = KeyInterceptor.Rule

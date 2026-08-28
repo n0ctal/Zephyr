@@ -236,6 +236,20 @@ enum Preferences {
         }
     }
 
+    /// Scroll overrides that apply while a given application is in front.
+    static var appScrollRules: [AppScrollRule] {
+        get {
+            guard let data = d.data(forKey: "pointer.appRules"),
+                  let decoded = try? JSONDecoder().decode([AppScrollRule].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "pointer.appRules")
+        }
+    }
+
     // MARK: Cooling
 
     /// Which sensor each fan's curve follows. Empty means whatever looks like

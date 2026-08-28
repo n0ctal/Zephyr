@@ -86,6 +86,8 @@ struct PointerProfile: Codable, Equatable {
     /// A fixed distance per notch instead of the system's acceleration.
     var linearScroll = false
     var linesPerNotch = 3
+    /// A multiplier on the scroll distance, 1.0 being the system's own.
+    var scrollScale = 1.0
     var flattenAcceleration = false
     /// 1.0 is the curve the device shipped with; 0 is none at all.
     var accelerationMultiplier = 0.0

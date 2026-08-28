@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -23,19 +24,59 @@ final class ScrollInterceptor {
         var linear = false
         /// Lines per notch when `linear` is on.
         var linesPerNotch = 3
+        /// A multiplier on the scroll distance, 1.0 being untouched.
+        var scale: Double = 1.0
         /// Extra mouse buttons, by CGEvent button number.
         var buttons: [Int: ButtonAction] = [:]
+        /// Overrides that apply only while a given application is in front.
+        var appRules: [AppScrollRule] = []
 
         var wantsAnything: Bool {
-            reverseMouse || reverseTrackpad || linear
+            reverseMouse || reverseTrackpad || linear || scale != 1.0
                 || buttons.values.contains { $0 != .passThrough }
+                || appRules.contains { $0.changesAnything }
         }
+    }
+
+    /// The settings in force for a given application, or the plain ones when
+    /// no rule claims it.
+    ///
+    /// Pure, and given its own name, because the mistake it guards against is
+    /// a quiet one: a rule that sets only the speed must not also reset the
+    /// direction to the built-in default the user never asked for.
+    static func resolve(_ base: Options, forApp bundleID: String?) -> Options {
+        guard let bundleID = bundleID,
+              let rule = base.appRules.first(where: { $0.bundleID == bundleID })
+        else { return base }
+        var resolved = base
+        if let reverse = rule.reverse {
+            resolved.reverseMouse = reverse
+            resolved.reverseTrackpad = reverse
+        }
+        if let linear = rule.linear { resolved.linear = linear }
+        if let lines = rule.linesPerNotch { resolved.linesPerNotch = lines }
+        if let scale = rule.scale { resolved.scale = scale }
+        return resolved
     }
 
     var options = Options()
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
+
+    /// Which application the events are going to.
+    ///
+    /// Cached from a notification rather than asked per event: reading the
+    /// frontmost application inside the tap would put a cross-process lookup
+    /// on the path of every scroll notch, at a point where taking too long
+    /// gets the tap switched off by the system.
+    ///
+    /// It is the active application, which is where scrolling goes unless a
+    /// background window is scrolled without being clicked first. That case is
+    /// rare enough to name honestly and leave alone; finding the window under
+    /// the pointer would cost a window-list query per event.
+    private var frontmostApp: String?
+    private var activation: NSObjectProtocol?
 
     /// Whether the tap is live. False means the events are untouched — either
     /// nothing was asked for, or macOS refused us.
@@ -82,12 +123,30 @@ final class ScrollInterceptor {
         CGEvent.tapEnable(tap: tap, enable: true)
         self.tap = tap
         self.source = source
+        watchActivation()
         return true
+    }
+
+    private func watchActivation() {
+        guard activation == nil else { return }
+        frontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        activation = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            self?.frontmostApp = app?.bundleIdentifier
+        }
     }
 
     func stop() {
         if let tap = tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let source = source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+        if let activation = activation {
+            NSWorkspace.shared.notificationCenter.removeObserver(activation)
+        }
+        activation = nil
         tap = nil
         source = nil
     }
@@ -106,7 +165,7 @@ final class ScrollInterceptor {
         }
         switch type {
         case .scrollWheel:
-            Self.rewrite(event, options: options)
+            Self.rewrite(event, options: Self.resolve(options, forApp: frontmostApp))
             return Unmanaged.passUnretained(event)
 
         case .otherMouseDown, .otherMouseUp:
@@ -131,6 +190,32 @@ final class ScrollInterceptor {
         let isTrackpad = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
         if isTrackpad ? options.reverseTrackpad : options.reverseMouse { invert(event) }
         if options.linear && !isTrackpad { flatten(event, linesPerNotch: options.linesPerNotch) }
+        if options.scale != 1.0 { rescale(event, by: options.scale) }
+    }
+
+    /// Multiplies the distance travelled, leaving the direction alone.
+    private static func rescale(_ event: CGEvent, by scale: Double) {
+        for (line, point, fixed) in Self.axes {
+            let lineDelta = event.getIntegerValueField(line)
+            let pointDelta = event.getIntegerValueField(point)
+            let fixedDelta = event.getDoubleValueField(fixed)
+            event.setIntegerValueField(line, value: scaled(lineDelta, by: scale))
+            event.setIntegerValueField(point, value: scaled(pointDelta, by: scale))
+            event.setDoubleValueField(fixed, value: fixedDelta * scale)
+        }
+    }
+
+    /// Scaling that cannot round a scroll away.
+    ///
+    /// A line delta is a whole number, so halving a one-line notch gives zero
+    /// and the wheel stops working altogether — which is exactly what someone
+    /// setting a slow speed would report as the feature being broken. A notch
+    /// that happened keeps moving at least one line.
+    static func scaled(_ delta: Int64, by scale: Double) -> Int64 {
+        guard delta != 0 else { return 0 }
+        let scaled = (Double(delta) * scale).rounded()
+        if scaled == 0 { return delta > 0 ? 1 : -1 }
+        return Int64(scaled)
     }
 
     /// Flips both axes. All three representations of the same delta have to

@@ -183,6 +183,9 @@ private struct KeyboardView: View {
             }
 
             Divider()
+            Text("macOS forgets these when a keyboard re-enumerates, so Zephyr writes them again at login. Turn on Launch at login if you rely on a swap.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Divider()
             HStack {
                 Text("With a modifier held").font(.headline)
@@ -218,9 +221,6 @@ private struct KeyboardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("macOS forgets these when a keyboard re-enumerates, so Zephyr writes them again at login. Turn on Launch at login if you rely on a swap.")
-                .font(.caption).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { feature.refresh() }
     }
@@ -274,5 +274,9 @@ private extension KeyboardView {
                            feature.rules[index] = rule
                        }),
                    options: KeyInterceptor.virtualKeys.map { ($0.name, $0.code) })
+            // Without this the choice takes every point the row can spare —
+            // its terminal form ends in a spacer — and the two halves of the
+            // rule drift to opposite ends of the window.
+            .fixedSize()
     }
 }
