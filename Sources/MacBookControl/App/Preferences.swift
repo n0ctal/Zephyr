@@ -206,6 +206,22 @@ enum Preferences {
         set { d.set(newValue, forKey: "window.appearance") }
     }
 
+    /// The menu-bar temperature turns colour at or above this. Zero is off.
+    static var sensorAlertCelsius: Int {
+        get { d.integer(forKey: "menubar.sensorAlert") }
+        set { d.set(newValue, forKey: "menubar.sensorAlert") }
+    }
+
+    /// Above this the charger is held off until the cell cools. Zero is off.
+    ///
+    /// Heat and a high state of charge are the two things that age a lithium
+    /// cell, and they arrive together: a battery charging inside a machine
+    /// that is also working hard gets both at once.
+    static var chargeHeatLimitCelsius: Int {
+        get { d.integer(forKey: "battery.heatLimit") }
+        set { d.set(newValue, forKey: "battery.heatLimit") }
+    }
+
     // MARK: Cooling
 
     /// Which sensor the fan curve follows. Empty means whatever looks like the

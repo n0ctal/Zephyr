@@ -427,6 +427,12 @@ struct MenuBarTab: View {
     @ViewBuilder private func options(for item: MenuBarComposer.Item) -> some View {
         switch item {
         case .temperature:
+            MenuChoice(label: "Turns colour at",
+                       selection: bind({ String(Preferences.sensorAlertCelsius) },
+                                       { Preferences.sensorAlertCelsius = Int($0) ?? 0 }),
+                       options: [("Never", "0")] + [70, 80, 85, 90, 95, 100].map {
+                           ("\($0) °C", String($0))
+                       })
             MenuChoice(label: "Sensor",
                        selection: bind({ Preferences.temperatureSensorKey },
                                        { Preferences.temperatureSensorKey = $0 }),

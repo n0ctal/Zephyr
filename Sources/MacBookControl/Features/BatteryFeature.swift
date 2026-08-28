@@ -10,11 +10,25 @@ final class BatteryFeature: Feature {
     private let telemetry: Telemetry
 
     @Published var limitPercent: Int
+    /// Above this the charger is held off. Zero is off.
+    @Published var heatLimitCelsius: Int {
+        didSet {
+            Preferences.chargeHeatLimitCelsius = heatLimitCelsius
+            if heatLimitCelsius == 0, isPaused { resumeAfterCooling() }
+        }
+    }
+
+    /// True while charging is being held off because the cell is hot.
+    @Published private(set) var isPaused = false
+
+    /// The temperature the pause began at, for the sentence that explains it.
+    @Published private(set) var pausedAt: Double?
 
     init(helper: HelperClient, telemetry: Telemetry) {
         self.helper = helper
         self.telemetry = telemetry
         self.limitPercent = Preferences.chargeLimitPercent
+        self.heatLimitCelsius = Preferences.chargeHeatLimitCelsius
         super.init(id: "battery",
                    title: "Battery",
                    summary: "Stop charging below full. A battery kept near 80 % ages markedly slower than one held at 100 %.")
@@ -27,12 +41,77 @@ final class BatteryFeature: Feature {
 
     override func activate() {
         helper.setChargeLimit(limitPercent)
+        startHeatWatch()
     }
+
+    // MARK: Holding the charger off while the cell is hot
+
+    /// Checked on the same rhythm as everything else, but acted on only at the
+    /// edges: the ceiling is an SMC write, and writing it every two seconds
+    /// because a number has not moved is not something to do to a battery
+    /// controller.
+    private func startHeatWatch() {
+        guard heatWatch == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.checkHeat()
+        }
+        timer.tolerance = 2
+        RunLoop.main.add(timer, forMode: .common)
+        heatWatch = timer
+        checkHeat()
+    }
+
+    /// What to do about the temperature, decided apart from doing it.
+    enum HeatDecision: Equatable { case hold, resume, leaveAlone }
+
+    /// Two degrees of hysteresis on the way down. Without it a cell sitting
+    /// exactly on the limit has the ceiling rewritten every ten seconds, and
+    /// the ceiling is an SMC write.
+    static func heatDecision(celsius: Double?, limit: Int, isPaused: Bool) -> HeatDecision {
+        guard limit > 0 else { return isPaused ? .resume : .leaveAlone }
+        guard let celsius = celsius else { return .leaveAlone }
+        if !isPaused, celsius >= Double(limit) { return .hold }
+        if isPaused, celsius <= Double(limit) - 2 { return .resume }
+        return .leaveAlone
+    }
+
+    private func checkHeat() {
+        guard isEnabled else { return }
+        let celsius = telemetry.battery?.celsius
+        switch Self.heatDecision(celsius: celsius, limit: heatLimitCelsius, isPaused: isPaused) {
+        case .hold:
+            // Held off by dropping the ceiling to where the battery already
+            // is: the firmware then simply stops taking charge, and the
+            // machine keeps running from the adapter as it does at any
+            // ceiling. Nothing discharges.
+            let now = telemetry.battery?.percent ?? limitPercent
+            helper.setChargeLimit(max(BatteryLimit.minimumPercent, min(limitPercent, now)))
+            isPaused = true
+            pausedAt = celsius
+        case .resume:
+            resumeAfterCooling()
+        case .leaveAlone:
+            break
+        }
+    }
+
+    private func resumeAfterCooling() {
+        isPaused = false
+        pausedAt = nil
+        guard isEnabled else { return }
+        helper.setChargeLimit(limitPercent)
+    }
+
+    private var heatWatch: Timer?
 
     /// Back to charging all the way. The firmware keeps whatever it was last
     /// told, so leaving the ceiling in place after the feature is switched off
     /// would strand the battery at 80 % with nothing in the UI to explain it.
     override func deactivate() {
+        heatWatch?.invalidate()
+        heatWatch = nil
+        isPaused = false
+        pausedAt = nil
         helper.setChargeLimit(BatteryLimit.unlimited)
     }
 
@@ -41,6 +120,15 @@ final class BatteryFeature: Feature {
         Preferences.chargeLimitPercent = percent
         guard isEnabled else { return }
         helper.setChargeLimit(percent)
+    }
+
+    /// Battery temperature is the input, so it has to keep arriving whether
+    /// or not anything is displaying it.
+    override var telemetryNeeds: Telemetry.Needs {
+        guard heatLimitCelsius > 0 else { return Telemetry.Needs() }
+        var needs = Telemetry.Needs()
+        needs.battery = true
+        return needs
     }
 
     override func makeView() -> AnyView { AnyView(BatteryView(feature: self, telemetry: telemetry)) }
@@ -62,6 +150,20 @@ private struct BatteryView: View {
                          ))
                 Text("Setting a ceiling below the current charge does not discharge the battery — the machine simply runs off the adapter until the level drifts down on its own.")
                     .font(.caption).foregroundColor(.secondary)
+
+                MenuChoice(label: "Hold the charger off above",
+                           selection: Binding(get: { feature.heatLimitCelsius },
+                                              set: { feature.heatLimitCelsius = $0 }),
+                           options: [("Never", 0)] + [30, 32, 35, 38, 40, 45].map {
+                               ("\($0) °C", $0)
+                           })
+                if feature.isPaused, let at = feature.pausedAt {
+                    Text(String(format: "Charging is held off: the cell reached %.0f °C.", at))
+                        .font(.subheadline).foregroundColor(.orange)
+                }
+                Text("Heat and a high state of charge are the two things that age a lithium cell, and they arrive together — a battery filling inside a machine that is also working hard gets both at once. Above the chosen temperature the ceiling drops to wherever the charge already is, so the firmware stops taking any more; it goes back two degrees below, which stops the setting being rewritten every few seconds by a cell sitting exactly on the line.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Divider()

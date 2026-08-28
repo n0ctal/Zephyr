@@ -206,7 +206,8 @@ enum MenuBarComposer {
 
     /// A piece of the line: either text or a drawing.
     private enum Segment {
-        case text(String)
+        /// A colour of its own, for the one field that has something to say.
+        case text(String, NSColor? = nil)
         case drawing(NSImage)
     }
 
@@ -246,12 +247,18 @@ enum MenuBarComposer {
     private static func render(_ item: Item, telemetry: Telemetry, darkMenuBar: Bool) -> [Segment] {
         let caption = Preferences.menuBarItemIsCaptioned(item) && !item.caption.isEmpty
             ? item.caption + " " : ""
-        func text(_ value: String) -> [Segment] { [.text(caption + value)] }
+        func text(_ value: String) -> [Segment] { [.text(caption + value, nil)] }
 
         switch item {
         case .temperature:
             guard let reading = chosenSensor(telemetry) else { return [] }
-            return text(String(format: "%.0f°", reading.celsius))
+            // The one field that changes colour. A number that has to be
+            // compared against a threshold in your head is a number nobody
+            // checks; a number that turns orange is one you cannot miss.
+            let limit = Preferences.sensorAlertCelsius
+            let tint: NSColor? = limit > 0 && reading.celsius >= Double(limit)
+                ? (darkMenuBar ? .systemOrange : .systemRed) : nil
+            return [.text(caption + String(format: "%.0f°", reading.celsius), tint)]
 
         case .fan:
             guard let fan = telemetry.fans.max(by: { $0.actualRPM < $1.actualRPM }) else { return [] }
@@ -382,7 +389,7 @@ enum MenuBarComposer {
         var widths: [CGFloat] = []
         for segment in segments {
             switch segment {
-            case .text(let value):
+            case .text(let value, _):
                 widths.append((value as NSString).size(withAttributes: attributes).width)
             case .drawing(let image):
                 widths.append(image.size.width)
@@ -395,10 +402,12 @@ enum MenuBarComposer {
         var x: CGFloat = 0
         for (index, segment) in segments.enumerated() {
             switch segment {
-            case .text(let value):
-                let size = (value as NSString).size(withAttributes: attributes)
+            case .text(let value, let tint):
+                var own = attributes
+                if let tint = tint { own[.foregroundColor] = tint }
+                let size = (value as NSString).size(withAttributes: own)
                 (value as NSString).draw(at: NSPoint(x: x, y: (height - size.height) / 2),
-                                         withAttributes: attributes)
+                                         withAttributes: own)
             case .drawing(let image):
                 image.draw(in: NSRect(x: x, y: (height - image.size.height) / 2,
                                       width: image.size.width, height: image.size.height),

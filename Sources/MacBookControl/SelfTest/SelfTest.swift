@@ -52,6 +52,7 @@ enum SelfTest {
         terminalSliderMath()
         fanPercentages()
         telemetryNeeds()
+        batteryHeat()
         arrangementGrid()
         driveWarnings()
         acceleratorClientKinds()
@@ -691,6 +692,32 @@ enum SelfTest {
             .union(Condition.cpuHotterThan(80).telemetryNeeds)
         expect(both.oneSensor && both.cpuSensor,
                "with both, the menu bar's sensor and the CPU's are asked for separately")
+    }
+
+    // MARK: Holding the charger off while the cell is hot
+
+    private static func batteryHeat() {
+        typealias Decision = BatteryFeature.HeatDecision
+        func decide(_ celsius: Double?, _ limit: Int, paused: Bool) -> Decision {
+            BatteryFeature.heatDecision(celsius: celsius, limit: limit, isPaused: paused)
+        }
+        expectEqual(decide(36, 35, paused: false), .hold, "past the limit the charger is held off")
+        expectEqual(decide(35, 35, paused: false), .hold, "and exactly at it, since that is what it says")
+        expectEqual(decide(34, 35, paused: false), .leaveAlone, "below it nothing happens")
+
+        // The hysteresis: cooling to just under the limit is not enough, or
+        // the ceiling is rewritten every ten seconds by a cell sitting on it.
+        expectEqual(decide(34, 35, paused: true), .leaveAlone,
+                    "one degree of cooling does not resume")
+        expectEqual(decide(33, 35, paused: true), .resume,
+                    "two degrees does")
+
+        expectEqual(decide(nil, 35, paused: false), .leaveAlone,
+                    "a battery that reports no temperature is left alone")
+        expectEqual(decide(50, 0, paused: false), .leaveAlone,
+                    "with the guard off, heat is not acted on")
+        expectEqual(decide(50, 0, paused: true), .resume,
+                    "and switching the guard off while it is holding lets go")
     }
 
     // MARK: The arrangement grid
