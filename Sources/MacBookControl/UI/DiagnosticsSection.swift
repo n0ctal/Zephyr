@@ -24,6 +24,9 @@ struct DiagnosticsSection: View {
     /// Five minutes: a login item is installed by an installer, not by the
     /// minute, and the read touches every plist in three directories.
     @StateObject private var startup = Polled(every: 300) { StartupItems.all() }
+    /// Three seconds: a share of a core is a rate, and this is the reading
+    /// people watch while wondering why the fans came on.
+    @StateObject private var busiest = Polled(every: 3) { ProcessLoad.shared.read() }
     @Environment(\.terminalStyling) private var terminal
     @Environment(\.terminalPalette) private var palette
 
@@ -37,12 +40,15 @@ struct DiagnosticsSection: View {
             Divider()
             powerBlock
             Divider()
+            busiestBlock
+            Divider()
             startupBlock
         }
         .polling(drive)
         .polling(sleep)
         .polling(record)
         .polling(startup)
+        .polling(busiest)
     }
 
     // MARK: Sensors
@@ -143,6 +149,30 @@ struct DiagnosticsSection: View {
         } else {
             note("Reading…")
         }
+    }
+
+    // MARK: What is costing something
+
+    @ViewBuilder private var busiestBlock: some View {
+        heading("BUSIEST")
+        if let snapshot = busiest.value {
+            ForEach(snapshot.byCPU) { entry in
+                row(entry.name, String(format: "%.0f %% of a core", entry.cpu))
+            }
+            ForEach(snapshot.byMemory) { entry in
+                row(entry.name, memory(entry.memoryBytes))
+            }
+            explainer("Share of one core, the way Activity Monitor counts it — a process using two cores fully reads 200 %. Memory is the footprint the kernel charges to the process. Another user's processes do not answer and are not listed rather than guessed at.")
+        } else {
+            note(busiest.hasRead ? "Nothing is asking for anything." : "Reading…")
+        }
+    }
+
+    private func memory(_ bytes: UInt64) -> String {
+        let megabytes = Double(bytes) / 1_048_576
+        return megabytes < 1024
+            ? String(format: "%.0f MB", megabytes)
+            : String(format: "%.1f GB", megabytes / 1024)
     }
 
     // MARK: Startup

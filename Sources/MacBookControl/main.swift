@@ -365,6 +365,17 @@ func runDiagnosticsTest() {
     print("wake: \(record.wakeReason ?? "—") / \(record.wakeType ?? "—")")
     print("slept because: \(record.sleepReason ?? "—")")
     print("last shutdown: \(record.shutdownDescription ?? "—")")
+    // A rate needs two samples, so this one is asked twice.
+    _ = ProcessLoad.shared.read()
+    Thread.sleep(forTimeInterval: 1.5)
+    if let busiest = ProcessLoad.shared.read(top: 4) {
+        print("busiest by cpu:    "
+              + busiest.byCPU.map { String(format: "%@ %.0f%%", $0.name, $0.cpu) }
+                  .joined(separator: ", "))
+        print("busiest by memory: "
+              + busiest.byMemory.map { "\($0.name) \($0.memoryBytes / 1_048_576) MB" }
+                  .joined(separator: ", "))
+    }
     let holders = AcceleratorClients.discreteHolders()
     print("discrete card held by \(holders.count): "
           + holders.prefix(6).map(\.name).joined(separator: ", "))
