@@ -250,6 +250,20 @@ enum Preferences {
         }
     }
 
+    /// What font smoothing was before Zephyr first wrote it, so it can be put
+    /// back. nil means untouched; `FontSmoothing.absent` means there was no
+    /// setting at all, which is the usual starting point.
+    static var fontSmoothingOriginal: Int? {
+        get { d.object(forKey: "display.fontSmoothingOriginal") as? Int }
+        set {
+            if let newValue = newValue {
+                d.set(newValue, forKey: "display.fontSmoothingOriginal")
+            } else {
+                d.removeObject(forKey: "display.fontSmoothingOriginal")
+            }
+        }
+    }
+
     // MARK: Cooling
 
     /// Which sensor each fan's curve follows. Empty means whatever looks like

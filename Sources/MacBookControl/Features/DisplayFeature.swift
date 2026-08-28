@@ -22,6 +22,15 @@ final class DisplayFeature: Feature {
     @Published var scope: CGDirectDisplayID?
     private var refreshTimer: Timer?
 
+    /// nil is "leave it to macOS", which is a real choice and not the absence
+    /// of one — it is what the machine ships with.
+    @Published var fontSmoothing: FontSmoothing.Level? {
+        didSet {
+            guard isEnabled else { return }
+            FontSmoothing.set(fontSmoothing)
+        }
+    }
+
 
     init() {
         super.init(id: "display",
@@ -43,6 +52,7 @@ final class DisplayFeature: Feature {
         // the machine has been left with no display at all, and it has to
         // notice that with the window shut.
         control.startWatchingConfiguration()
+        fontSmoothing = FontSmoothing.current
         refresh()
     }
 
@@ -75,6 +85,10 @@ final class DisplayFeature: Feature {
         // way out would be the app overreaching.
         control.clearAllDimming()
         dimming.removeAll()
+        // Font smoothing is a preference rather than hardware, but the promise
+        // an unticked feature makes is the same: nothing of ours left behind.
+        FontSmoothing.restore()
+        fontSmoothing = FontSmoothing.current
     }
 
     /// The display the tab is currently about.
@@ -232,6 +246,8 @@ private struct DisplayView: View {
             }
 
             Divider()
+            smoothingSection
+            Divider()
             if let screen = feature.scopedScreen {
                 ScreenControls(feature: feature, screen: screen)
             } else {
@@ -270,6 +286,33 @@ private struct DisplayView: View {
 /// around it, so there is always somewhere to move outward to and never a
 /// field of squares nobody is using. Push a screen out to the edge and the
 /// grid gains a row; bring them back together and it loses one.
+private extension DisplayView {
+    /// The setting System Settings stopped showing in Big Sur.
+    var smoothingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Text").font(.headline)
+            MenuChoice(label: "Font smoothing",
+                       selection: Binding(
+                           get: { feature.fontSmoothing?.rawValue ?? systemDefault },
+                           set: { raw in
+                               feature.fontSmoothing = raw == systemDefault
+                                   ? nil : FontSmoothing.Level(rawValue: raw)
+                           }),
+                       options: [("Leave it to macOS", systemDefault)]
+                           + FontSmoothing.Level.allCases.map { ($0.label, $0.rawValue) })
+            Text("macOS thickens glyph strokes a little; Big Sur removed the control for it. On this Retina panel the difference is slight, and on an external monitor at ordinary pixel density it is the difference between text that looks faintly blurred and text that looks crisp.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("An application picks the new value up when it next launches, so the change is only everywhere after logging out and back in.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Outside 0...3, so it cannot collide with a level.
+    var systemDefault: Int { -2 }
+}
+
 private struct ArrangementGrid: View {
     @ObservedObject var feature: DisplayFeature
     @Environment(\.terminalStyling) private var terminal
