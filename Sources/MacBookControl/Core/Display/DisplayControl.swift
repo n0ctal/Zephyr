@@ -345,11 +345,47 @@ final class DisplayControl {
     /// The delay is not politeness. Switching a mode passes through a moment
     /// with no active display, and restoring in the middle of that would fight
     /// the change that is already happening.
+    /// A second pair of eyes for exactly the dangerous window.
+    ///
+    /// The rescue below hangs off the window server's reconfiguration
+    /// callback, and everything rests on that callback arriving. It always has
+    /// — but the one case where it matters is the one nobody can rehearse: a
+    /// panel switched off, then the cable pulled, and no screen left to read
+    /// an apology on. So while any screen is off by our hand, this looks for
+    /// itself every few seconds. It stops the moment nothing is switched off.
+    private func startHeadlessWatch() {
+        guard headlessWatch == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            guard !self.brightnessBeforeDisable.isEmpty else {
+                self.headlessWatch?.invalidate()
+                self.headlessWatch = nil
+                return
+            }
+            self.rescueIfHeadless()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        headlessWatch = timer
+    }
+
+    private var headlessWatch: Timer?
+
     private func rescueIfHeadless() {
         guard activeDisplayIDs().isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self = self, self.activeDisplayIDs().isEmpty else { return }
             CGRestorePermanentDisplayConfiguration()
+            // Then switch them back on by name as well. Restoring the
+            // permanent arrangement should be enough; should is not a word to
+            // rely on when the alternative is a machine with no picture.
+            for display in self.brightnessBeforeDisable.keys {
+                _ = Self.configureDisplayEnabled.map { configure in
+                    var configuration: CGDisplayConfigRef?
+                    guard CGBeginDisplayConfiguration(&configuration) == .success else { return }
+                    _ = configure(configuration, display, true)
+                    _ = CGCompleteDisplayConfiguration(configuration, .forSession)
+                }
+            }
             // And the light back on. A panel switched off here was darkened
             // as well as disconnected, and a restored arrangement on a black
             // screen is the same problem wearing a different hat.
@@ -506,6 +542,7 @@ final class DisplayControl {
         guard enabled || canSafelyDisable(display) else { return false }
         guard let configure = Self.configureDisplayEnabled else { return false }
 
+        if !enabled { startHeadlessWatch() }
         if !enabled {
             // Taken before the screen goes: macOS herds every window onto
             // whatever is left and puts none of them back afterwards.
