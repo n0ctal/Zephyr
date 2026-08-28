@@ -36,6 +36,7 @@ enum SelfTest {
         profileEncoding()
         powerLimitPacking()
         keyMappingWireFormat()
+        modifierKeyRules()
         sliderTickBudget()
         fanCurve()
         scrollRewriting()
@@ -198,6 +199,50 @@ enum SelfTest {
     }
 
     // MARK: Keyboard
+
+    private static func modifierKeyRules() {
+        typealias Rule = KeyInterceptor.Rule
+        // ⌃C becomes Escape, giving the modifier back rather than passing it on.
+        let escape = Rule(fromKey: 8, fromModifiers: [.control], toKey: 53, toModifiers: [])
+        let hit = KeyInterceptor.rewrite(rules: [escape], key: 8, held: [.control])
+        expectEqual(hit?.key, 53, "a rule with its modifier held fires")
+        expectEqual(hit?.modifiers, [], "the modifier the rule consumed is not passed on")
+        expect(KeyInterceptor.rewrite(rules: [escape], key: 8, held: []) == nil,
+               "the same key without the modifier is left alone")
+        // Extra modifiers do not block a match, but they do survive it: ⌃⇧C
+        // must still arrive as a shifted Escape.
+        let shifted = KeyInterceptor.rewrite(rules: [escape], key: 8, held: [.control, .shift])
+        expectEqual(shifted?.modifiers, [.shift], "modifiers the rule did not ask for survive")
+        // A rule that adds a modifier gets it even from a bare keypress.
+        let adds = Rule(fromKey: 53, fromModifiers: [], toKey: 48, toModifiers: [.command])
+        expectEqual(KeyInterceptor.rewrite(rules: [adds], key: 53, held: [])?.modifiers,
+                    [.command], "a rule can add a modifier")
+        // Two rules on one key: the one demanding more wins, whatever the order.
+        let broad = Rule(fromKey: 8, fromModifiers: [.control], toKey: 1, toModifiers: [])
+        let narrow = Rule(fromKey: 8, fromModifiers: [.control, .option], toKey: 2, toModifiers: [])
+        expectEqual(KeyInterceptor.rewrite(rules: [broad, narrow], key: 8,
+                                           held: [.control, .option])?.key,
+                    2, "the more specific rule wins")
+        expectEqual(KeyInterceptor.rewrite(rules: [narrow, broad], key: 8,
+                                           held: [.control, .option])?.key,
+                    2, "and wins regardless of the order they were added in")
+        expectEqual(KeyInterceptor.rewrite(rules: [narrow, broad], key: 8,
+                                           held: [.control])?.key,
+                    1, "while the broader one still covers its own case")
+        expect(KeyInterceptor.rewrite(rules: [], key: 8, held: [.control]) == nil,
+               "no rules, no rewriting")
+        // The flags round-trip, or the tap would hand the window server a
+        // keystroke with modifiers it never asked for.
+        expectEqual(KeyInterceptor.Modifiers.of([.maskCommand, .maskShift]),
+                    [.command, .shift], "event flags read back as the modifiers they are")
+        expectEqual(KeyInterceptor.Modifiers([.control, .option]).flags
+                        .contains(.maskAlternate), true, "and convert back again")
+        // Virtual codes, not HID usages: Escape is 53 here and 0x29 in hidutil.
+        expectEqual(KeyInterceptor.virtualKeys.first { $0.name == "Escape" }?.code, 53,
+                    "the rule catalogue speaks virtual key codes")
+        expectEqual(Set(KeyInterceptor.virtualKeys.map(\.code)).count,
+                    KeyInterceptor.virtualKeys.count, "no key code is listed twice")
+    }
 
     private static func keyMappingWireFormat() {
         // The property expects the HID usage with the keyboard page in the

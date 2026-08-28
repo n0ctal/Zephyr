@@ -12,6 +12,25 @@ import SwiftUI
 /// one are two different opinions about where Control belongs.
 final class KeyboardFeature: Feature {
     private let remapper = KeyRemapper()
+    private let interceptor = KeyInterceptor()
+
+    /// Rules that need a modifier held. Separate from `store` because they
+    /// travel by a different road: hidutil for the plain swaps, an event tap
+    /// for anything that has to notice a modifier.
+    @Published var rules: [KeyInterceptor.Rule] {
+        didSet {
+            Preferences.keyRules = rules
+            guard isEnabled else { return }
+            applyRules()
+        }
+    }
+
+    private func applyRules() {
+        interceptor.rules = rules
+        if rules.isEmpty { interceptor.stop() } else { interceptor.start() }
+    }
+
+    var rulesAreRunning: Bool { interceptor.isRunning }
 
     @Published var store: DeviceScopedStore<[KeyRemapper.Mapping]> {
         didSet {
@@ -26,6 +45,7 @@ final class KeyboardFeature: Feature {
 
     init() {
         store = Preferences.keyboardStore
+        rules = Preferences.keyRules
         super.init(id: "keyboard",
                    title: "Keyboard",
                    summary: "Swap keys for other keys, per keyboard. Applied below the window server, so it holds on the login screen and in password fields.")
@@ -44,10 +64,13 @@ final class KeyboardFeature: Feature {
     override func activate() {
         refresh()
         remapper.apply(store)
+        applyRules()
     }
 
     override func deactivate() {
         remapper.clear()
+        interceptor.rules = []
+        interceptor.stop()
     }
 
     func refresh() {
@@ -160,6 +183,41 @@ private struct KeyboardView: View {
             }
 
             Divider()
+            Divider()
+            HStack {
+                Text("With a modifier held").font(.headline)
+                Spacer()
+                Button("Add") {
+                    feature.rules.append(KeyInterceptor.Rule(
+                        fromKey: 53, fromModifiers: [.control],
+                        toKey: 53, toModifiers: []))
+                }
+            }
+            if feature.rules.isEmpty {
+                Text("Nothing here yet. These are the rules hidutil cannot express — it maps one key to another and cannot notice that Control is down.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Array(feature.rules.enumerated()), id: \.offset) { index, _ in
+                HStack(spacing: 8) {
+                    modifierToggles(index: index, target: false)
+                    keyChoice(index: index, target: false)
+                    Text("→")
+                    modifierToggles(index: index, target: true)
+                    keyChoice(index: index, target: true)
+                    Spacer()
+                    Button("Remove") { feature.rules.remove(at: index) }
+                        .buttonStyle(BorderlessButtonStyle())
+                }
+            }
+            if !feature.rules.isEmpty {
+                Text("These go through an event tap rather than hidutil, which buys the modifier and costs two things worth knowing: the rule applies to every keyboard, because an event does not say which one produced it, and it stops the moment Zephyr does — including on the login screen, where nothing of ours is running."
+                     + (feature.rulesAreRunning ? "" : " The tap is not running: Accessibility permission is needed, the same one the Pointer section asks for."))
+                    .font(.caption)
+                    .foregroundColor(feature.rulesAreRunning ? .secondary : .orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Text("macOS forgets these when a keyboard re-enumerates, so Zephyr writes them again at login. Turn on Launch at login if you rely on a swap.")
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -178,5 +236,43 @@ private struct KeyboardView: View {
                            feature.mappings[index] = mapping
                        }),
                    options: KeyRemapper.catalogue.map { ($0.name, $0.usage) })
+    }
+}
+
+private extension KeyboardView {
+    /// Which modifiers a rule needs, or gives.
+    func modifierToggles(index: Int, target: Bool) -> some View {
+        let all: [(String, KeyInterceptor.Modifiers)] =
+            [("⌃", .control), ("⌥", .option), ("⇧", .shift), ("⌘", .command)]
+        return HStack(spacing: 2) {
+            ForEach(all, id: \.0) { symbol, modifier in
+                let held = (target ? feature.rules[index].toModifiers
+                                   : feature.rules[index].fromModifiers).contains(modifier)
+                Text(symbol)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(held ? .accentColor : .secondary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        var rule = feature.rules[index]
+                        var set = target ? rule.toModifiers : rule.fromModifiers
+                        if held { set.remove(modifier) } else { set.insert(modifier) }
+                        if target { rule.toModifiers = set } else { rule.fromModifiers = set }
+                        feature.rules[index] = rule
+                    }
+            }
+        }
+    }
+
+    func keyChoice(index: Int, target: Bool) -> some View {
+        MenuChoice(label: nil,
+                   selection: Binding(
+                       get: { target ? feature.rules[index].toKey : feature.rules[index].fromKey },
+                       set: { key in
+                           var rule = feature.rules[index]
+                           if target { rule.toKey = key } else { rule.fromKey = key }
+                           feature.rules[index] = rule
+                       }),
+                   options: KeyInterceptor.virtualKeys.map { ($0.name, $0.code) })
     }
 }

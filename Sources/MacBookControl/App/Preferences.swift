@@ -222,6 +222,20 @@ enum Preferences {
         set { d.set(newValue, forKey: "battery.heatLimit") }
     }
 
+    /// Rules that need a modifier to be held, which hidutil cannot express.
+    static var keyRules: [KeyInterceptor.Rule] {
+        get {
+            guard let data = d.data(forKey: "keyboard.rules"),
+                  let decoded = try? JSONDecoder().decode([KeyInterceptor.Rule].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "keyboard.rules")
+        }
+    }
+
     // MARK: Cooling
 
     /// Which sensor each fan's curve follows. Empty means whatever looks like
