@@ -95,6 +95,23 @@ private func reportScrollSamples() {
     let scrolls = scrollSamples.filter { $0.type == CGEventType.scrollWheel.rawValue }
     let wheel = scrolls.filter { !$0.isContinuous }
     let pad = scrolls.filter { $0.isContinuous }
+    // What the interceptor would do with the same field: the mapping from
+    // sender to device is the whole basis of per-device settings, so seeing it
+    // resolve here is seeing it resolve there.
+    var senders = Set<Int64>()
+    for sample in scrollSamples { if let s = sample.fields[87] { senders.insert(s) } }
+    if !senders.isEmpty {
+        print("\nsenders seen, and the device each resolves to:")
+        for sender in senders.sorted() {
+            let unsigned = UInt64(bitPattern: sender)
+            _ = PointerSenders.identity(forSender: unsigned)      // starts the lookup
+            Thread.sleep(forTimeInterval: 0.4)                    // it runs off-thread
+            let identity = PointerSenders.identity(forSender: unsigned) ?? "—"
+            print(String(format: "  0x%llX  ->  %@", unsigned,
+                         identity.isEmpty ? "not identifiable" : identity))
+        }
+    }
+
     print("\nSaw \(scrollSamples.count) events: \(wheel.count) wheel scrolls, "
           + "\(pad.count) trackpad scrolls, "
           + "\(scrollSamples.count - scrolls.count) button presses.")

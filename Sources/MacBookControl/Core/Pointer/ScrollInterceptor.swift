@@ -42,6 +42,23 @@ final class ScrollInterceptor {
         }
     }
 
+    /// The settings belonging to whichever device sent this event.
+    ///
+    /// A sender not yet resolved falls back to the shared settings rather than
+    /// waiting: the lookup is a registry walk, and this runs inside an event
+    /// tap that the system switches off if it dawdles. The cost is that a
+    /// newly attached mouse follows the shared settings for its first few
+    /// events, which is a scroll notch or two.
+    private func settings(for event: CGEvent) -> Options {
+        let sender = UInt64(bitPattern: event.getIntegerValueField(PointerSenders.field))
+        guard let identity = PointerSenders.identity(forSender: sender),
+              var own = byDevice[identity] else { return options }
+        // Application rules are about the application, so they are the same
+        // whichever device is scrolling.
+        own.appRules = options.appRules
+        return own
+    }
+
     /// The settings in force for a given application, or the plain ones when
     /// no rule claims it.
     ///
@@ -64,7 +81,13 @@ final class ScrollInterceptor {
         return resolved
     }
 
+    /// What a device gets when it has no settings of its own — and what
+    /// everything got before an event could be traced back to its sender.
     var options = Options()
+
+    /// Settings filed under the same identity the acceleration curves use.
+    /// A device answers to these the moment its sender has been looked up.
+    var byDevice: [String: Options] = [:]
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -179,7 +202,7 @@ final class ScrollInterceptor {
             guard event.getIntegerValueField(.eventSourceUserData) != Self.signature else {
                 return Unmanaged.passUnretained(event)
             }
-            let inForce = Self.resolve(options, forApp: frontmostApp)
+            let inForce = Self.resolve(settings(for: event), forApp: frontmostApp)
             Self.rewrite(event, options: inForce)
             // A trackpad is already continuous and has its own tail; smoothing
             // it would be two decays fighting.
@@ -193,7 +216,8 @@ final class ScrollInterceptor {
 
         case .otherMouseDown, .otherMouseUp:
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
-            guard let action = options.buttons[button], action != .passThrough else {
+            guard let action = settings(for: event).buttons[button],
+                  action != .passThrough else {
                 return Unmanaged.passUnretained(event)
             }
             // Swallowed in both directions. Letting the up through after

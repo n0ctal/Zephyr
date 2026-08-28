@@ -87,7 +87,11 @@ final class PointerFeature: Feature {
     }
 
     func refreshDevices() {
+        let before = Set(devices.map(\.identity))
         devices = acceleration.devices()
+        // Registry entry IDs are reused once a device is gone, so the map from
+        // sender to device is only safe while the set of devices holds still.
+        if before != Set(devices.map(\.identity)) { PointerSenders.forget() }
         var pruned = store
         pruned.prune(keeping: Set(devices.map(\.identity)))
         if pruned != store { store = pruned }
@@ -109,7 +113,9 @@ final class PointerFeature: Feature {
         if !wantsCurve { acceleration.restore() }
 
         interceptor.options = composedOptions()
-        if interceptor.options.wantsAnything {
+        interceptor.byDevice = perDeviceOptions()
+        if interceptor.options.wantsAnything
+            || interceptor.byDevice.values.contains(where: \.wantsAnything) {
             isIntercepting = interceptor.start()
         } else {
             interceptor.stop()
@@ -117,14 +123,34 @@ final class PointerFeature: Feature {
         }
     }
 
-    /// Event-level settings come from the profile of the device kind that sent
-    /// the event, because a CGEvent says whether it came from a continuous
-    /// surface but not which device produced it.
+    /// The fallback: what a device gets before its identity has been looked
+    /// up, and what one whose entry cannot be read gets for good.
     ///
-    /// With one mouse attached this is exact. With two, both currently follow
-    /// the first mouse's scroll and button settings — acceleration is genuinely
-    /// per device, since that is written to each device rather than read off an
-    /// event. Saying so is better than implying a precision that is not there.
+    /// Composed from the device kind, which the event does say — a trackpad
+    /// reports a continuous pixel stream and a notched wheel does not — so
+    /// even the fallback is closer than one shared answer for everything.
+    /// One set of settings per attached device, filed under the identity the
+    /// acceleration curves already use.
+    private func perDeviceOptions() -> [String: ScrollInterceptor.Options] {
+        var byDevice: [String: ScrollInterceptor.Options] = [:]
+        for device in devices {
+            let profile = store[device.identity]
+            var options = ScrollInterceptor.Options()
+            // Both, because the event's own kind decides which is consulted
+            // and this device's answer is the same either way.
+            options.reverseMouse = profile.reverseScroll
+            options.reverseTrackpad = profile.reverseScroll
+            options.linear = profile.linearScroll
+            options.linesPerNotch = profile.linesPerNotch
+            options.scale = profile.scrollScale
+            options.smooth = profile.smoothScroll
+            options.smoothFactor = profile.smoothFactor
+            options.buttons = profile.buttons
+            byDevice[device.identity] = options
+        }
+        return byDevice
+    }
+
     private func composedOptions() -> ScrollInterceptor.Options {
         let trackpad = devices.first { $0.isTrackpad }.map { store[$0.identity] }
         let mouse = devices.first { !$0.isTrackpad }.map { store[$0.identity] } ?? store.defaults
@@ -141,8 +167,8 @@ final class PointerFeature: Feature {
         return options
     }
 
-    /// True when more than one mouse is attached, so the UI can say plainly
-    /// that scroll and buttons are not yet told apart between them.
+    /// True when more than one mouse is attached, which is when it is worth
+    /// saying how the two are told apart.
     var hasMultipleMice: Bool { devices.filter { !$0.isTrackpad }.count > 1 }
 
     // MARK: Editing the selected scope
@@ -243,8 +269,11 @@ private struct PointerView: View {
                 .font(.caption).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if feature.hasMultipleMice {
-                Text("More than one mouse is attached. Acceleration is written to each device separately and is exact; scroll direction and buttons are read off the event, which does not say which mouse sent it, so both currently follow the first mouse's settings.")
-                    .font(.caption).foregroundColor(.orange)
+                Text("More than one mouse is attached, and each follows its own settings here. Every event carries the identity of the service that sent it, so scrolling and buttons are told apart the same way acceleration always was.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("A device just plugged in follows the shared settings for its first scroll or two, while its identity is looked up — the lookup is a search through the IO registry, and doing that inside an event tap is how a tap gets switched off for being slow.")
+                    .font(.caption).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
