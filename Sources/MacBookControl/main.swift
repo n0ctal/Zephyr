@@ -564,6 +564,26 @@ func runTimingTest() {
     let helper = HelperClient()
     time("HelperClient.version (XPC round trip)") { _ = helper.version() }
     time("PowerLimits.current (sysctl)") { _ = PowerLimits.current() }
+
+    // The other half of a tick. Reading the machine is only part of what
+    // happens every two seconds; the menu bar is redrawn as one image, and an
+    // idle cost that is not in this list is a cost nobody will find.
+    print("\nand what the menu bar costs to draw, per tick:")
+    let telemetry = Telemetry()
+    telemetry.start()
+    // Warm: the first draw pays for fonts and colour spaces, which happens
+    // once at launch and would otherwise be reported as the per-tick price.
+    _ = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: true)
+    var total: TimeInterval = 0
+    let runs = 20
+    for _ in 0..<runs {
+        let start = Date()
+        _ = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: true)
+        total += Date().timeIntervalSince(start)
+    }
+    telemetry.stop()
+    print(String(format: "  %6.1f ms  MenuBarComposer.compose (mean of %d)",
+                 total / Double(runs) * 1000, runs))
 }
 
 
