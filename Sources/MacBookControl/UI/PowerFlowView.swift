@@ -89,22 +89,35 @@ struct PowerFlowView: View {
         return ZStack(alignment: .topLeading) {
             if isCharging && toBattery > 1 {
                 band(height: toBattery, width: size.width,
-                     label: String(format: "%.2f W", batteryWatts))
+                     label: String(format: "%.2f W", batteryWatts),
+                     watts: batteryWatts)
                     .foregroundColor(terminal ? palette.accent.opacity(0.30)
                                               : .orange.opacity(0.45))
             }
             band(height: toMachine, width: size.width,
-                 label: String(format: "%.2f W", systemWatts))
+                 label: String(format: "%.2f W", systemWatts),
+                 watts: systemWatts)
                 .foregroundColor(terminal ? palette.accent.opacity(0.55)
                                           : .yellow.opacity(0.45))
                 .offset(y: isCharging ? toBattery : 0)
         }
     }
 
-    private func band(height: CGFloat, width: CGFloat, label: String) -> some View {
+    private func band(height: CGFloat, width: CGFloat, label: String,
+                      watts: Double) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: bandCorner)
                 .frame(width: width, height: max(2, height))
+                .overlay(
+                    FlowStripes(width: width, height: max(2, height),
+                                corner: bandCorner,
+                                // Right for power going into the machine or
+                                // the battery, left when the battery is the
+                                // one supplying it. The direction is the
+                                // whole point of animating this at all.
+                                reversed: !isCharging && !isPluggedIn,
+                                watts: watts)
+                )
             Text(label)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundColor(terminal ? palette.ground : .primary)
@@ -120,5 +133,63 @@ struct PowerFlowView: View {
                 : "The battery is carrying the machine."))
             .font(.caption).foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+
+/// The band moves, because the thing it stands for is moving.
+///
+/// A still bar says how much; a bar with something travelling along it says
+/// which way, and at a glance. The stripes run towards the machine while the
+/// adapter is carrying it and away from it while the battery is, and they run
+/// faster the more power is going through — a laptop drawing eight watts and
+/// one drawing sixty should not look the same.
+private struct FlowStripes: View {
+    let width: CGFloat
+    let height: CGFloat
+    let corner: CGFloat
+    let reversed: Bool
+    let watts: Double
+
+    @State private var phase: CGFloat = 0
+
+    /// One pass in this many seconds. Bounded at both ends: below the floor
+    /// nothing appears to move, above the ceiling it is a strobe rather than a
+    /// reading.
+    private var duration: Double {
+        let clamped = min(max(watts, 1), 90)
+        return 6.0 - 5.0 * (clamped / 90)
+    }
+
+    private let spacing: CGFloat = 26
+
+    var body: some View {
+        GeometryReader { _ in
+            ZStack(alignment: .leading) {
+                ForEach(0..<Int(width / spacing) + 2, id: \.self) { index in
+                    stripe
+                        .offset(x: CGFloat(index) * spacing
+                                   + (reversed ? -phase : phase) - spacing)
+                }
+            }
+            .frame(width: width, height: height, alignment: .leading)
+            .clipShape(RoundedRectangle(cornerRadius: corner))
+            .allowsHitTesting(false)
+        }
+        .onAppear {
+            // Started from zero every time the view appears: a phase left over
+            // from a previous appearance makes the first pass jump.
+            phase = 0
+            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                phase = spacing
+            }
+        }
+    }
+
+    private var stripe: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.13))
+            .frame(width: spacing / 3, height: height * 2)
+            .rotationEffect(.degrees(24))
     }
 }

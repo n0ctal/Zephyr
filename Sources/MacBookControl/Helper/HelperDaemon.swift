@@ -26,11 +26,17 @@ final class HelperService: NSObject, HelperProtocol {
     /// because the firmware reverts manual mode if it is not held.
     private var forcedTargets: [Int: Int] = [:]
     /// Fans following a temperature curve; each tick recomputes their target.
-    private var curveFans: [Int: FanCurve] = [:]
+    /// The curve each fan follows, and the sensor it follows it against.
+    ///
+    /// Per fan rather than one for all of them: on a machine with two fans one
+    /// sits by the CPU and the other by the graphics card, and making them
+    /// both chase the same number is why one of them is always either too loud
+    /// or too late.
+    private var curveFans: [Int: (curve: FanCurve, sensor: String)] = [:]
     /// Which sensor the curves follow. One setting rather than one per fan:
     /// two fans in the same machine cooling to two different opinions of "how
     /// hot is it" is not a configuration anybody wants to reason about.
-    private var curveSensor = ""
+
     /// The hottest-sensor reading, and when it was taken. Finding the hottest
     /// means reading every key, which is a few dozen SMC round trips — worth
     /// doing twice a second for a menu bar, not four times a second inside a
@@ -88,13 +94,10 @@ final class HelperService: NSObject, HelperProtocol {
         queue.async {
             self.forcedTargets.removeValue(forKey: fan)
             guard self.fans != nil else { reply(false); return }
-            self.curveFans[fan] = FanCurve(minTemp: Double(minTemp), maxTemp: Double(maxTemp))
-            if sensor != self.curveSensor {
-                self.curveSensor = sensor
-                self.cachedHottest = nil   // the old cache is about another question
-            }
+            self.curveFans[fan] = (FanCurve(minTemp: Double(minTemp), maxTemp: Double(maxTemp)),
+                                   sensor)
             self.startControlLoopIfNeeded()
-            self.applyCurve(fan: fan, celsius: self.curveTemperature())   // apply immediately
+            self.applyCurve(fan: fan, celsius: self.curveTemperature(sensor))   // apply immediately
             reply(true)
         }
     }
@@ -215,11 +218,13 @@ final class HelperService: NSObject, HelperProtocol {
             // Recompute and apply curve-driven targets. The temperature is
             // read once for all of them: it is one number about one machine,
             // and reading it per fan doubled the SMC traffic to no end.
-            if !self.curveFans.isEmpty {
-                let celsius = self.curveTemperature()
-                for fan in self.curveFans.keys {
-                    self.applyCurve(fan: fan, celsius: celsius)
+            // One reading per distinct sensor, however many fans follow it.
+            var bySensor: [String: Double?] = [:]
+            for (fan, entry) in self.curveFans {
+                if bySensor[entry.sensor] == nil {
+                    bySensor[entry.sensor] = self.curveTemperature(entry.sensor)
                 }
+                self.applyCurve(fan: fan, celsius: bySensor[entry.sensor] ?? nil)
             }
         }
         timer.resume()
@@ -227,7 +232,7 @@ final class HelperService: NSObject, HelperProtocol {
     }
 
     /// Whatever the curve has been told to follow.
-    private func curveTemperature() -> Double? {
+    private func curveTemperature(_ curveSensor: String) -> Double? {
         guard let sensors = sensors else { return nil }
         guard curveSensor == FanCurve.hottestSensorKey else {
             return sensors.temperature(forKey: curveSensor)?.celsius
@@ -242,7 +247,7 @@ final class HelperService: NSObject, HelperProtocol {
 
     /// Drives one curve fan to the target that temperature calls for.
     private func applyCurve(fan: Int, celsius: Double?) {
-        guard let curve = curveFans[fan] else { return }
+        guard let curve = curveFans[fan]?.curve else { return }
         // Losing the sensor used to latch the fan at its last target; hand it
         // back instead, since the firmware still knows the real temperature.
         guard let celsius = celsius, let reading = fans?.readFan(fan) else {

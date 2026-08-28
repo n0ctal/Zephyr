@@ -151,7 +151,7 @@ private struct BatteryView: View {
                 Text("Setting a ceiling below the current charge does not discharge the battery — the machine simply runs off the adapter until the level drifts down on its own.")
                     .font(.caption).foregroundColor(.secondary)
 
-                MenuChoice(label: "Hold the charger off above",
+                MenuChoice(label: "Pause charging above",
                            selection: Binding(get: { feature.heatLimitCelsius },
                                               set: { feature.heatLimitCelsius = $0 }),
                            options: [("Never", 0)] + [30, 32, 35, 38, 40, 45].map {

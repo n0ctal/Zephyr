@@ -224,12 +224,23 @@ enum Preferences {
 
     // MARK: Cooling
 
-    /// Which sensor the fan curve follows. Empty means whatever looks like the
-    /// CPU, which is the right default on a machine whose sensor names nobody
-    /// has memorised.
+    /// Which sensor each fan's curve follows. Empty means whatever looks like
+    /// the CPU, which is the right default on a machine whose sensor names
+    /// nobody has memorised.
+    ///
+    /// Per fan, with the old single setting carried forward as the default for
+    /// every fan that has not been given one of its own.
     static var curveSensorKey: String {
         get { d.string(forKey: "cooling.curveSensor") ?? "" }
         set { d.set(newValue, forKey: "cooling.curveSensor") }
+    }
+
+    static func curveSensorKey(fan: Int) -> String {
+        d.string(forKey: "cooling.curveSensor.\(fan)") ?? curveSensorKey
+    }
+
+    static func setCurveSensorKey(_ key: String, fan: Int) {
+        d.set(key, forKey: "cooling.curveSensor.\(fan)")
     }
 
     /// Manual RPM per fan index, or nil for the curve. Stored as a dictionary

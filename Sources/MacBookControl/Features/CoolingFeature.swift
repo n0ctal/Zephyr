@@ -17,10 +17,22 @@ final class CoolingFeature: Feature {
             if isEnabled { activate() }
         }
     }
-    /// The SMC key the curve follows. Empty is the CPU; `hottestSensorKey`
-    /// is whichever sensor is hottest at the time.
-    @Published var curveSensor: String {
-        didSet { Preferences.curveSensorKey = curveSensor; reapplyCurve() }
+    /// The SMC key each fan's curve follows. Empty is the CPU;
+    /// `hottestSensorKey` is whichever sensor is hottest at the time.
+    ///
+    /// Kept per fan: on this machine one sits by the processor and the other
+    /// by the graphics card, and making both chase the same number is why one
+    /// of them is always either too loud or too late.
+    @Published var curveSensors: [Int: String] = [:]
+
+    func curveSensor(fan: Int) -> String {
+        curveSensors[fan] ?? Preferences.curveSensorKey(fan: fan)
+    }
+
+    func setCurveSensor(_ key: String, fan: Int) {
+        curveSensors[fan] = key
+        Preferences.setCurveSensorKey(key, fan: fan)
+        reapplyCurve()
     }
     @Published var curveMin: Double { didSet { Preferences.curveMinTemp = curveMin; reapplyCurve() } }
     @Published var curveMax: Double { didSet { Preferences.curveMaxTemp = curveMax; reapplyCurve() } }
@@ -30,7 +42,7 @@ final class CoolingFeature: Feature {
         self.helper = helper
         self.telemetry = telemetry
         self.mode = Preferences.coolingMode
-        self.curveSensor = Preferences.curveSensorKey
+
         self.curveMin = Preferences.curveMinTemp
         self.curveMax = Preferences.curveMaxTemp
         self.manualRPM = Preferences.manualFanRPM
@@ -77,7 +89,7 @@ final class CoolingFeature: Feature {
         guard isEnabled, mode == "curve" else { return }
         let curve = FanCurve(minTemp: curveMin, maxTemp: curveMax)
         for fan in telemetry.fans {
-            helper.setFanCurve(fan: fan.index, curve: curve, sensor: curveSensor)
+            helper.setFanCurve(fan: fan.index, curve: curve, sensor: curveSensor(fan: fan.index))
         }
     }
 
@@ -144,21 +156,31 @@ private struct CoolingView: View {
 
             if feature.mode == "curve" {
                 VStack(alignment: .leading, spacing: 6) {
-                    MenuChoice(label: "Follow", selection: $feature.curveSensor,
-                               options: [("Whatever looks like the CPU", ""),
-                                         ("The hottest sensor of the moment",
-                                          FanCurve.hottestSensorKey)]
-                                   + telemetry.temperatures.map {
-                                       ("\($0.label) — \(Int($0.celsius)) °C", $0.key)
-                                   })
+                    // One row per fan, because they do not sit in the same
+                    // place and should not chase the same number.
+                    ForEach(telemetry.fans, id: \.index) { fan in
+                        MenuChoice(label: telemetry.fans.count > 1
+                                          ? "Fan \(fan.index + 1) follows" : "Follow",
+                                   selection: Binding(
+                                       get: { feature.curveSensor(fan: fan.index) },
+                                       set: { feature.setCurveSensor($0, fan: fan.index) }),
+                                   options: [("Whatever looks like the CPU", ""),
+                                             ("The hottest sensor of the moment",
+                                              FanCurve.hottestSensorKey)]
+                                       + telemetry.temperatures.map {
+                                           ("\($0.label) — \(Int($0.celsius)) °C", $0.key)
+                                       })
+                    }
                     ValueField(title: "Start lifting the fans at", range: 40...80, step: 1,
                                suffix: "°C", value: $feature.curveMin)
                     ValueField(title: "Reach full speed at", range: 60...100, step: 1,
                                suffix: "°C", value: $feature.curveMax)
                     Text("The curve interpolates between each fan's own minimum and maximum, so it fits whatever fans this machine has.")
                         .font(.caption).foregroundColor(.secondary)
-                    Text(feature.curveSensor == FanCurve.hottestSensorKey
-                         ? "Reading every sensor and following the highest — the safest choice, and the one that runs the fans most. It costs a few extra readings a second, nothing more."
+                    Text(telemetry.fans.contains {
+                            feature.curveSensor(fan: $0.index) == FanCurve.hottestSensorKey
+                         }
+                         ? "Following the highest of every sensor is the safest choice and the one that runs the fans most. It costs a few extra readings a second, nothing more."
                          : "The temperature is read by the part of Zephyr that runs as root, not handed to it: a control loop that stops when the app stops answering is one that leaves the fans pinned. A sensor that goes missing falls back to the CPU rather than switching the curve off.")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
