@@ -33,6 +33,11 @@ if arguments.contains("--test-network") {
     exit(0)
 }
 
+if arguments.contains("--test-virtual-display") {
+    runVirtualDisplayTest()
+    exit(0)
+}
+
 if arguments.contains("--test-windows") {
     runWindowTest()
     exit(0)

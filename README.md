@@ -87,7 +87,7 @@ app was uninstalled.
 | **Power** | Turbo Boost Switcher, VoltageShift | Turbo Boost off, the Intel package power limit, live wattage |
 | **Graphics** | gfxCardStatus, gSwitch | Pins the integrated or discrete GPU and *holds* it, and names the processes keeping the discrete card awake |
 | **Battery & Sleep** | AlDente | Charge ceiling enforced by the SMC, charging paused above a temperature, wear and cycles, where the watts are going, and what is holding the machine awake |
-| **Display** | BetterDisplay | Brightness, dimming past the panel's own minimum, resolutions the Displays pane hides, the arrangement grid, rotation, mirroring, blanking a panel, and font smoothing |
+| **Display** | BetterDisplay | Brightness, dimming past the panel's own minimum, resolutions the Displays pane hides, the arrangement grid, rotation, mirroring, blanking a panel, virtual screens, and font smoothing |
 | **Input** | Karabiner-Elements, LinearMouse, Mos | Key swaps and modifier rules; per-device scroll direction, speed and buttons; per-application scroll rules; a smoothed wheel |
 | **Awake** | Amphetamine, KeepingYouAwake | Holds the Mac awake, optionally with the display off or through a closed lid |
 | **Diagnostics** | DriveDx, smartmontools | SSD health from the NVMe SMART log, why the machine last woke, slept and shut down, and which processes are loading it |
@@ -149,9 +149,6 @@ unreachable on this hardware. The framebuffer driving the external panel was
 identified by its EDID, and every combination of transaction type and delay
 failed; `IOAVServiceCreate` returns nil and no service class binds on Intel.
 Writing it blind would produce a control that silently does nothing.
-
-**Virtual displays.** BetterDisplay's headline feature needs a driver, not an
-API call. Not started.
 
 ## Verifying it does what it says
 
@@ -275,6 +272,7 @@ real machine before it was written.
 | `--test-scroll [--seconds=N]` | Record every field of real scroll events and compare devices |
 | `--test-network` | Interface counters, wrap handling, tunnel detection |
 | `--test-windows` | Capture and restore window positions through the accessibility API |
+| `--test-virtual-display` | Create a screen with no cable, prove it appears, prove it goes away |
 | `--test-diagnostics` | SSD SMART, sleep assertions, wake and shutdown records, GPU clients |
 | `--test-profiles` | Evaluate every profile condition against the machine now |
 | `--test-timing`, `--time-phases` | Where the startup milliseconds go |

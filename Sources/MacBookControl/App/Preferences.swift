@@ -302,6 +302,21 @@ enum Preferences {
         set { d.set(newValue, forKey: "poll.menuBar") }
     }
 
+    /// Virtual displays to bring up while the Display feature is on.
+    static var virtualDisplays: [VirtualDisplay.Specification] {
+        get {
+            guard let data = d.data(forKey: "display.virtual"),
+                  let decoded = try? JSONDecoder()
+                    .decode([VirtualDisplay.Specification].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            d.set(data, forKey: "display.virtual")
+        }
+    }
+
     // MARK: Cooling
 
     /// Which sensor each fan's curve follows. Empty means whatever looks like

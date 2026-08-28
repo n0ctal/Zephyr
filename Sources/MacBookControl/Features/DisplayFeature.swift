@@ -22,6 +22,40 @@ final class DisplayFeature: Feature {
     @Published var scope: CGDirectDisplayID?
     private var refreshTimer: Timer?
 
+    /// The screens with no cable behind them.
+    ///
+    /// Held here, on the feature, because the display exists exactly as long
+    /// as the object does: put these in a view and they would come and go
+    /// with the window.
+    private var live: [UUID: VirtualDisplay] = [:]
+
+    @Published var virtualDisplays: [VirtualDisplay.Specification] {
+        didSet {
+            Preferences.virtualDisplays = virtualDisplays
+            guard isEnabled else { return }
+            syncVirtualDisplays()
+        }
+    }
+
+    var virtualDisplaysSupported: Bool { VirtualDisplay.isAvailable }
+
+    /// Brings up what is missing and drops what is gone. Only the difference,
+    /// so editing one specification does not blink the others off and on.
+    private func syncVirtualDisplays() {
+        let wanted = Set(virtualDisplays.map(\.id))
+        for (id, _) in live where !wanted.contains(id) { live[id] = nil }
+        for specification in virtualDisplays {
+            if let existing = live[specification.id],
+               existing.specification == specification { continue }
+            // Replaced rather than adjusted: the settings of a display that is
+            // already up can be applied again, but a resolution change that
+            // half-succeeds leaves a screen nobody can describe.
+            live[specification.id] = nil
+            live[specification.id] = VirtualDisplay(specification)
+        }
+        refresh()
+    }
+
     /// nil is "leave it to macOS", which is a real choice and not the absence
     /// of one — it is what the machine ships with.
     @Published var fontSmoothing: FontSmoothing.Level? {
@@ -33,6 +67,7 @@ final class DisplayFeature: Feature {
 
 
     init() {
+        virtualDisplays = Preferences.virtualDisplays
         super.init(id: "display",
                    title: "Display",
                    summary: "Dim below the panel's own minimum, and pick from the resolutions the Displays pane declines to list.")
@@ -53,6 +88,7 @@ final class DisplayFeature: Feature {
         // notice that with the window shut.
         control.startWatchingConfiguration()
         fontSmoothing = FontSmoothing.current
+        syncVirtualDisplays()
         refresh()
     }
 
@@ -89,6 +125,10 @@ final class DisplayFeature: Feature {
         // an unticked feature makes is the same: nothing of ours left behind.
         FontSmoothing.restore()
         fontSmoothing = FontSmoothing.current
+        // The screens go with the switch. They cannot outlive the process in
+        // any case, but leaving them up while the feature says it is off would
+        // be the interface lying about the machine.
+        live.removeAll()
     }
 
     /// The display the tab is currently about.
@@ -246,6 +286,8 @@ private struct DisplayView: View {
             }
 
             Divider()
+            virtualSection
+            Divider()
             smoothingSection
             Divider()
             if let screen = feature.scopedScreen {
@@ -287,6 +329,64 @@ private struct DisplayView: View {
 /// field of squares nobody is using. Push a screen out to the edge and the
 /// grid gains a row; bring them back together and it loses one.
 private extension DisplayView {
+    /// Screens with no cable behind them.
+    var virtualSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Virtual screens").font(.headline)
+                Spacer()
+                if feature.virtualDisplaysSupported {
+                    Menu {
+                        ForEach(VirtualDisplay.Specification.presets, id: \.0) { preset in
+                            Button(preset.0) {
+                                feature.virtualDisplays.append(
+                                    VirtualDisplay.Specification(
+                                        name: "Zephyr \(preset.0)",
+                                        width: preset.1, height: preset.2,
+                                        refreshRate: 60, hiDPI: false))
+                            }
+                        }
+                        .buttonStyle(DefaultButtonStyle())
+                    } label: {
+                        Text("Add")
+                    }
+                    .menuStyle(BorderlessButtonMenuStyle())
+                    .fixedSize()
+                }
+            }
+            if !feature.virtualDisplaysSupported {
+                Text("This macOS does not carry the display classes Zephyr uses for this. They are private, so a version that moves them takes the feature with it rather than crashing.")
+                    .font(.caption).foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if feature.virtualDisplays.isEmpty {
+                Text("A screen macOS believes in that no cable leads to — somewhere to park a window, or a canvas to share instead of a real desktop.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Array(feature.virtualDisplays.enumerated()), id: \.element.id) { index, screen in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(screen.name).font(.subheadline)
+                        Text("\(screen.width) × \(screen.height)")
+                            .font(.caption).foregroundColor(.secondary)
+                        Spacer()
+                        Button("Remove") { feature.virtualDisplays.remove(at: index) }
+                            .buttonStyle(BorderlessButtonStyle())
+                    }
+                    Toggle("Retina scaling", isOn: Binding(
+                        get: { feature.virtualDisplays[index].hiDPI },
+                        set: { feature.virtualDisplays[index].hiDPI = $0 }))
+                }
+                .padding(.vertical, 2)
+            }
+            if !feature.virtualDisplays.isEmpty {
+                Text("These exist only while Zephyr is running: quitting takes them away, and so does turning this section off. That is deliberate — a screen that outlived the application that made it would be one nothing on the machine could remove.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     /// The setting System Settings stopped showing in Big Sur.
     var smoothingSection: some View {
         VStack(alignment: .leading, spacing: 8) {
