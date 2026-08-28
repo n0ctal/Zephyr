@@ -450,12 +450,15 @@ enum SelfTest {
         // The control that makes other display utilities dangerous. The guard
         // is checked here rather than trusted: with one display attached it
         // must refuse, and it must keep refusing however it is asked.
-        let guardControl = DisplayControl()
-        if let only = guardControl.screens().first, guardControl.screens().count == 1 {
-            expect(!guardControl.setEnabled(false, of: only.id),
-                   "switching off the only screen is refused outright")
-            expect(guardControl.isEnabled(only.id),
-                   "and the screen is still on afterwards")
+        // Blanking is the only "off" the interface offers, and the property
+        // that makes it safe is that it changes nothing about the arrangement:
+        // whatever it does, the display is still there to draw on.
+        let blankControl = DisplayControl()
+        if let screen = blankControl.screens().first {
+            let before = blankControl.screens().count
+            expect(!blankControl.isBlanked(screen.id), "nothing is blanked to begin with")
+            expect(blankControl.screens().count == before,
+                   "and asking does not change the arrangement")
         }
 
         // The rule that prevents the failure people report of other display

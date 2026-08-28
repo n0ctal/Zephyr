@@ -512,30 +512,27 @@ final class DisplayControl {
 
     // MARK: Switching a panel off
 
-    /// Turns a display off or back on.
+    /// Removes a display from the arrangement, or puts it back.
     ///
-    /// This is the control that makes other utilities dangerous, and the
-    /// reason the guard exists before the call rather than after it: switch
-    /// the built-in panel off with an external attached, unplug the external,
-    /// and there is nowhere left to draw the window that would switch the
-    /// built-in back on. Three things stand between a person and that:
+    /// **Not offered in the interface, and not to be offered again without a
+    /// way out that has actually been seen to work.** Switching the built-in
+    /// panel off and then unplugging the external one left a machine with no
+    /// picture at all: the reconfiguration callback, the timed watch, the
+    /// restore of the permanent arrangement and re-enabling the panel by name
+    /// all failed to bring it back, and so did plugging the cable in again.
+    /// The only way out was holding the power button.
     ///
-    /// - it refuses outright when this is the last display standing;
-    /// - the switch stays in the list, so the way back is where the way out
-    ///   was;
-    /// - the change is for this session only, so a restart undoes it even if
-    ///   everything else has failed — which is precisely the escape the
-    ///   reported failure did not have.
+    /// That is the exact failure this application set out to protect people
+    /// from, reproduced by its own code. Three guards were not enough, and the
+    /// honest reading is that they cannot be: once the window server has no
+    /// display it will not take a configuration change to give it one.
     ///
-    /// There is deliberately no timer putting it back. A resolution or a
-    /// rotation can leave a panel that cannot be read, so those revert unless
-    /// confirmed; a screen switched off while another one is lit cannot strand
-    /// anybody, and a screen that turns itself back on after fifteen seconds
-    /// is not a screen that has been switched off.
+    /// What the interface offers instead is `setBlanked`, which turns the
+    /// backlight off and leaves the display in the arrangement — dark, but
+    /// never absent, so the machine cannot arrive at nothing.
     ///
-    /// And separately from all three, the watcher further down notices a
-    /// machine with no active display at all and asks for the permanent
-    /// arrangement back.
+    /// Kept here because the rescue below still needs to be able to switch a
+    /// panel back on when some *other* application has done this.
     @discardableResult
     func setEnabled(_ enabled: Bool, of display: CGDirectDisplayID,
                     revertAfter: TimeInterval = 0) -> Bool {
@@ -601,6 +598,33 @@ final class DisplayControl {
 
     func isEnabled(_ display: CGDirectDisplayID) -> Bool {
         activeDisplayIDs().contains(display)
+    }
+
+    // MARK: Blanking, which is the safe half of switching a screen off
+
+    /// Takes the backlight out of a panel and leaves everything else alone.
+    ///
+    /// This is what "off" can safely mean. The display stays in the
+    /// arrangement, so unplugging every other screen leaves this one still
+    /// there to draw on; the machine cannot end up with nothing. The panel is
+    /// dark, which is what a laptop lid propped open beside a monitor is
+    /// wanted for, and windows still consider it part of the desktop — which
+    /// is the honest cost, and the tab says so.
+    @discardableResult
+    func setBlanked(_ blanked: Bool, of display: CGDirectDisplayID) -> Bool {
+        if blanked {
+            guard brightnessBeforeDisable[display] == nil else { return true }
+            brightnessBeforeDisable[display] = brightness(of: display)
+            setBrightness(0, on: display)
+        } else {
+            let previous = brightnessBeforeDisable.removeValue(forKey: display)
+            setBrightness(previous.flatMap { $0 } ?? 1, on: display)
+        }
+        return true
+    }
+
+    func isBlanked(_ display: CGDirectDisplayID) -> Bool {
+        brightnessBeforeDisable[display] != nil
     }
 
     /// There is no published call for this. Looked up by name rather than

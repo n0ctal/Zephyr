@@ -139,11 +139,11 @@ final class DisplayFeature: Feature {
         control.canSafelyDisable(display)
     }
 
-    @discardableResult
-    func setDisplayEnabled(_ enabled: Bool, of display: CGDirectDisplayID) -> Bool {
-        let applied = control.setEnabled(enabled, of: display)
-        refresh()
-        return applied
+    func isBlanked(_ display: CGDirectDisplayID) -> Bool { control.isBlanked(display) }
+
+    func setBlanked(_ blanked: Bool, of display: CGDirectDisplayID) {
+        control.setBlanked(blanked, of: display)
+        objectWillChange.send()
     }
 
     func rotation(of display: CGDirectDisplayID) -> DisplayControl.Rotation {
@@ -376,25 +376,15 @@ private struct ScreenControls: View {
                 set: { feature.setDimming($0, on: screen.id) }
             ), in: 0.1...1)
 
-            if feature.canSwitchDisplaysOff {
-                Toggle(isOn: Binding(
-                    get: { screen.isOn },
-                    set: { feature.setDisplayEnabled($0, of: screen.id) }
-                )) {
-                    Text("Screen on").font(.headline)
-                }
-                .disabled(screen.isOn && !feature.canTurnOff(screen.id))
-                if !WindowArrangement.isPermitted {
-                    Text("Windows will not be put back where they were: that needs the same Accessibility permission the Pointer section asks for. macOS moves every window onto whatever screen is left and returns none of them by itself.")
-                        .font(.caption).foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text(feature.canTurnOff(screen.id) || !screen.isOn
-                     ? "Switching a screen off is for this session only — a restart brings it back whatever else has happened. It also comes back by itself in a few seconds unless you confirm, and Zephyr puts the arrangement back if the machine is ever left with no screen at all."
-                     : "This is the only screen the machine has. Switching it off would leave nowhere to switch it back on from, which is exactly the state other display utilities are known for.")
-                    .font(.caption).foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Toggle(isOn: Binding(
+                get: { feature.isBlanked(screen.id) },
+                set: { feature.setBlanked($0, of: screen.id) }
+            )) {
+                Text("Blank this screen").font(.headline)
             }
+            Text("The backlight goes out and the display stays in the arrangement. That second half is deliberate: taking a display out of the arrangement, then unplugging the other one, leaves a Mac with no picture that nothing short of the power button will recover — this application could do that until it was tried, and it is exactly the failure it exists to protect people from. Dark and present is the version that cannot strand anybody. Windows still treat it as part of the desktop.")
+                .font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             SegmentedChoice(label: "Rotation",
                             selection: Binding(get: { feature.rotation(of: screen.id) },
