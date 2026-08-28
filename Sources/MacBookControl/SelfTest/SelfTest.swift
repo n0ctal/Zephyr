@@ -703,7 +703,7 @@ enum SelfTest {
         // Must match the registry in AppController.swift. A feature missing
         // from here is unreachable in the sidebar layouts — the tab list is
         // built from the registry, the sidebar from this.
-        expectEqual(Set(ids), ["cooling", "power", "graphics", "battery", "awake",
+        expectEqual(Set(ids), ["cooling", "turbo", "powerlimit", "graphics", "battery", "awake",
                                "display", "keyboard", "pointer", "profiles"],
                     "every feature the app builds has a section to live in")
         expect(SettingsSection(rawValue: "profiles") == nil,

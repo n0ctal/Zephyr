@@ -282,21 +282,26 @@ struct TerminalDesignView: View {
                 }
             }
 
-            group("POWER") {
-                switchRow("Enable Power", id: "power")
-                if let power = registry.feature(id: "power") as? PowerFeature {
-                    toggleRow("Disable Turbo Boost", isOn: power.turboDisabled) {
-                        power.setTurboDisabled($0)
+            group("TURBO BOOST") {
+                switchRow("Enable Turbo Boost", id: "turbo")
+                if let turbo = registry.feature(id: "turbo") as? TurboBoostFeature {
+                    toggleRow("Disable Turbo Boost", isOn: turbo.turboDisabled) {
+                        turbo.setTurboDisabled($0)
                     }
-                    if let limits = power.limits, !limits.isLocked {
-                        valueRow("Sustained limit", value: power.pl1, unit: "W",
-                                 range: limits.lowerBound...limits.upperBound) {
-                            power.pl1 = $0; power.applyLimits()
-                        }
-                        valueRow("Burst limit", value: power.pl2, unit: "W",
-                                 range: limits.lowerBound...limits.upperBound) {
-                            power.pl2 = $0; power.applyLimits()
-                        }
+                }
+            }
+
+            group("POWER LIMIT") {
+                switchRow("Enable Power limit", id: "powerlimit")
+                if let power = registry.feature(id: "powerlimit") as? PowerLimitFeature,
+                   let limits = power.limits, !limits.isLocked {
+                    valueRow("Sustained limit", value: power.pl1, unit: "W",
+                             range: limits.lowerBound...limits.upperBound) {
+                        power.pl1 = $0; power.applyLimits()
+                    }
+                    valueRow("Burst limit", value: power.pl2, unit: "W",
+                             range: limits.lowerBound...limits.upperBound) {
+                        power.pl2 = $0; power.applyLimits()
                     }
                 }
             }

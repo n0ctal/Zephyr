@@ -23,13 +23,18 @@ final class AppController: NSObject, NSMenuDelegate {
     private var helperState: HelperState = .notInstalled
 
     override init() {
+        // Before the registry, not with the other migrations in configure():
+        // a feature reads its own enabled state as it is constructed, so a
+        // migration that runs afterwards is a migration that runs too late.
+        Preferences.migratePowerSplit()
         let telemetry = self.telemetry
         let helper = self.helper
         let buildStart = Date()
         let profiles = ProfilesFeature()
         registry = FeatureRegistry(features: [
             CoolingFeature(helper: helper, telemetry: telemetry),
-            PowerFeature(helper: helper, turbo: turbo, telemetry: telemetry),
+            TurboBoostFeature(helper: helper, turbo: turbo),
+            PowerLimitFeature(helper: helper, telemetry: telemetry),
             GraphicsFeature(helper: helper, gpu: gpu),
             BatteryFeature(helper: helper, telemetry: telemetry),
             DisplayFeature(),
@@ -100,9 +105,10 @@ final class AppController: NSObject, NSMenuDelegate {
             self?.helper.reapplyChargeLimitAfterWake()
             // The cached kext state can only be stale after a wake, so this is
             // the one place it is worth re-reading.
-            let power = self?.registry.feature(id: "power") as? PowerFeature
-            power?.refreshTurboState()
-            power?.reapplyStoredLimits()
+            let turbo = self?.registry.feature(id: "turbo") as? TurboBoostFeature
+            turbo?.refreshTurboState()
+            let limits = self?.registry.feature(id: "powerlimit") as? PowerLimitFeature
+            limits?.reapplyStoredLimits()
         }
     }
 

@@ -102,7 +102,7 @@ final class FeatureRegistry: ObservableObject {
     /// can cook the machine.
     ///
     /// Only enabled features. Deactivating the rest looks tidy and is wrong:
-    /// `PowerFeature.deactivate` re-enables Turbo Boost, so quitting Zephyr
+    /// `TurboBoostFeature.deactivate` re-enables Turbo Boost, so quitting Zephyr
     /// used to switch it back on for someone who had never enabled the tab and
     /// had turned turbo off by other means. A feature that was never asked to
     /// touch the machine must not touch it on the way out either.

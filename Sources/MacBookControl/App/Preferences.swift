@@ -34,6 +34,23 @@ enum Preferences {
         d.set(true, forKey: "migrated.1.3")
     }
 
+    /// Carries the single "Power" switch forward into the two it became.
+    ///
+    /// Without this a machine that had Power on comes back with both new
+    /// features off — and Turbo Boost stays disabled in the hardware, because
+    /// nothing called the old feature's deactivate. That is precisely the
+    /// state this application exists to prevent: the machine changed, and
+    /// nothing in the interface admits to changing it.
+    static func migratePowerSplit() {
+        guard !d.bool(forKey: "migrated.powerSplit") else { return }
+        if featureEnabled("power") {
+            setFeatureEnabled("turbo", true)
+            setFeatureEnabled("powerlimit", true)
+        }
+        setFeatureEnabled("power", false)
+        d.set(true, forKey: "migrated.powerSplit")
+    }
+
     // MARK: Per-feature enable
 
     private static func enableKey(_ id: String) -> String { "feature.\(id).enabled" }

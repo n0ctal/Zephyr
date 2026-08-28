@@ -153,7 +153,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     /// switches, which is why a merged section shows more than one.
     var featureIDs: [String] {
         switch self {
-        case .thermals: return ["cooling", "power"]
+        case .thermals: return ["cooling", "turbo", "powerlimit"]
         case .graphics: return ["graphics"]
         case .batterySleep: return ["battery", "awake"]
         case .display: return ["display"]

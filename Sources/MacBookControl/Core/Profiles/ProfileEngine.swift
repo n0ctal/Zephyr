@@ -57,7 +57,7 @@ final class ProfileEngine {
                 cooling?.curveMin = min
                 cooling?.curveMax = max
             case .turboDisabled(let disabled):
-                power?.setTurboDisabled(disabled)
+                turbo?.setTurboDisabled(disabled)
             case .gpuMode(let raw):
                 if let mode = GPUMode(rawValue: raw) { graphics?.setMode(mode) }
             case .chargeLimit(let percent):
@@ -74,7 +74,7 @@ final class ProfileEngine {
     }
 
     private var cooling: CoolingFeature? { registry.feature(id: "cooling") as? CoolingFeature }
-    private var power: PowerFeature? { registry.feature(id: "power") as? PowerFeature }
+    private var turbo: TurboBoostFeature? { registry.feature(id: "turbo") as? TurboBoostFeature }
     private var graphics: GraphicsFeature? { registry.feature(id: "graphics") as? GraphicsFeature }
     private var battery: BatteryFeature? { registry.feature(id: "battery") as? BatteryFeature }
     private var awake: AwakeFeature? { registry.feature(id: "awake") as? AwakeFeature }
