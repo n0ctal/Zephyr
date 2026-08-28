@@ -1,10 +1,15 @@
 .build/
 *.app/
 .DS_Store
-# kext build artifacts (rebuild via kext/build-kext.sh)
+# kext build artifacts. Both are rebuilt by kext/build-kext.sh — the name is
+# its first argument — and neither belongs in the repository: a compiled kernel
+# extension that has drifted from the source beside it is the one binary on the
+# machine nobody should be loading.
 kext/*.o
 kext/*.lto.o
 kext/DisableTurboBoost
 kext/DisableTurboBoost.kext/
 Resources/AppIcon.iconset/
 *.dmg
+kext/ZephyrPower
+kext/ZephyrPower.kext/

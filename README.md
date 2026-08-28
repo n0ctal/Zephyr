@@ -1,51 +1,72 @@
 # Zephyr
 
-A single menu-bar app for **Intel** MacBooks that combines the everyday jobs of
-**Macs Fan Control**, **gfxCardStatus**, and **Turbo Boost Switcher**:
+One menu-bar application for **Intel** Macs, in place of about ten separate
+utilities. Nine tabs, each behind its own switch, plus a rule engine that can
+drive them together — which is the only thing a single process can do that nine
+utilities cannot.
 
-- 🌡️ **Sensor monitoring** — live temperatures from every SMC sensor, hottest shown in the menu bar.
-- 🌀 **Fan control** — per-fan automatic / manual targets, held reliably by a control loop.
-- 🎛️ **GPU switching** — force integrated-only, discrete-only, or automatic on dual-GPU machines.
-- ⚡ **Turbo Boost** — enable / disable Intel Turbo Boost (cooler & quieter when off).
-- 🐢 **Throttling monitor** — the firmware's own CPU speed cap, the number that explains why a cool-looking machine feels slow.
-- 🔋 **Charge ceiling** — stop charging at 80 % (or wherever you like) to slow battery wear, the way AlDente does.
+| Instead of | Zephyr |
+|---|---|
+| Macs Fan Control | fan curves, fixed speeds, per-fan sensor choice, throttling |
+| Turbo Boost Switcher | Turbo Boost, Intel package power limits, live wattage |
+| gfxCardStatus / gSwitch | pins a GPU and holds it, names what is keeping the discrete card awake |
+| AlDente | charge ceiling, pause-on-heat, wear, cycles, power flow |
+| BetterDisplay | brightness past the panel's minimum, hidden resolutions, arrangement, rotation, mirroring, font smoothing |
+| Karabiner-Elements | key swaps below the window server, plus rules that need a modifier held |
+| LinearMouse / Mos | scroll direction and speed per device, per-application rules, smoothed wheel, button bindings |
+| Amphetamine / KeepingYouAwake | holds the Mac awake, with the display off or the lid shut |
+| Stats | temperatures, load, memory, disk, network and battery drawn into the menu bar |
+| — | **Profiles**: rules that set several of the above when the circumstances call for it |
 
-Native Swift + AppKit. No Xcode required to build, no third-party dependencies.
+Native Swift and AppKit. No Xcode to build, no third-party dependencies, no
+network access of any kind.
 
 ## Supported machines
 
-- **Intel Macs only** (`x86_64`). Apple Silicon is out of scope by design.
-- **macOS 11 (Big Sur) → macOS 26.** Fan control auto-detects the mechanism:
-  the legacy `FS!` force bitmask on pre-T2 Macs, and the per-fan `F{i}Md`
-  mode key on T2 Macs (2018+).
-- GPU switching applies to dual-GPU models (e.g. MacBook Pro with Intel + AMD).
-- The charge ceiling needs the SMC key `BCLM`, present on most Intel laptops.
-  Machines without it simply do not show the section.
+- **Intel Macs only** (`x86_64`). Apple Silicon is out of scope: much of what
+  this does is Intel-specific (MSRs, the Intel package power limit, the
+  discrete-GPU mux), and there is no ARM hardware here to test the rest on.
+- **macOS 11 (Big Sur) → macOS 26** is the declared range, chosen because it is
+  the whole Intel span. **Verified on macOS 15.7.9, MacBookPro16,1** — that is
+  the only machine this has run on, and the honest limit of the claim.
+- Not a laptop-only application: an iMac or a Mac Pro is a better fit for parts
+  of it than this laptop is. The display arrangement grid sizes itself to the
+  screens attached, up to the twelve a Mac Pro can drive.
+- Features that need hardware the machine does not have hide themselves rather
+  than failing: no charge ceiling without the SMC key `BCLM`, no GPU tab on a
+  single-GPU Mac, no Turbo Boost or power limits without the kexts.
 
-## Privilege model — three different tiers
+## Privilege model — four different tiers
 
-| Feature | Access needed | How |
+Most of what Zephyr does needs nothing at all. The table is worth reading
+before installing anything, because it says exactly how much is being asked for
+and why.
+
+| What | Access | How |
 |---|---|---|
-| Read temps / fan RPM / active GPU | none | in-process IOKit + Metal |
-| Write fan speed, switch GPU (`pmset gpuswitch`) | **root** | privileged LaunchDaemon over XPC |
-| Read the CPU speed cap / thermal pressure | none | in-process IOKit |
-| Set the charge ceiling (SMC `BCLM`) | **root** | same privileged LaunchDaemon |
-| Enable/disable Turbo Boost (MSR `0x1A0`) | **ring-0** | bundled **kernel extension** (needs SIP disabled) |
+| Temperatures, fan RPM, active GPU, throttling | none | in-process IOKit and Metal |
+| SSD SMART, sleep assertions, wake and shutdown records, GPU clients | none | in-process IOKit |
+| Brightness, resolutions, arrangement, rotation, mirroring, font smoothing | none | CoreGraphics and the user's own preferences |
+| Key swaps (hidutil), pointer acceleration | none | in-process HID, per user |
+| Scroll rewriting, modifier key rules, window capture and restore | **Accessibility** | an event tap and the accessibility API, granted in System Settings |
+| Fan writes, GPU switching, charge ceiling | **root** | privileged LaunchDaemon over XPC |
+| Turbo Boost (MSR `0x1A0`), package power limit (MSR `0x610`) | **ring 0** | two small kernel extensions, which need SIP disabled |
 
-Fan and GPU control use the same **sanctioned privileged-helper pattern** as
-Macs Fan Control — a small **LaunchDaemon** (`--helper-daemon`) the app talks to
-over XPC. No kernel extension, no reduced security.
+Fan, GPU and battery control use the sanctioned privileged-helper pattern — a
+small **LaunchDaemon** the app talks to over XPC. The helper does not trust
+whatever asks: `install-helper.sh` pins the calling application's code
+signature, and the daemon rejects every client whose cdhash does not match. The
+practical consequence is that replacing the app means re-running that script,
+which the build reminds you of.
 
-Turbo Boost is different: toggling it means writing a CPU **MSR**, which is only
-possible from the kernel. So it ships as a tiny kext that the helper loads /
-unloads. Writing MSRs has no sanctioned userspace API, so this **requires SIP to
-be disabled** (see below). If you don't disable SIP, the other two features work
-fully and the Turbo Boost section simply stays hidden.
+The kexts are the only part that reduces the machine's security, they are
+entirely optional, and without them those two tabs simply do not appear.
 
-> Undervolting (Volta / VoltageShift) is intentionally **not** included: same
-> kext requirement, and on 2019+ Macs the undervolt MSR is locked by Apple's
-> Plundervolt (CVE-2019-11157) firmware mitigation anyway. On those machines it
-> is not a matter of effort — the mailbox the tools write to no longer answers.
+> Undervolting (Volta / VoltageShift) is deliberately not included: same kext
+> requirement, and on 2019 and later Macs the undervolt MSR is locked by
+> Apple's Plundervolt (CVE-2019-11157) firmware mitigation anyway. There the
+> mailbox those tools write to no longer answers, so it is not a question of
+> effort.
 
 ## What each tab does
 
@@ -62,15 +83,25 @@ app was uninstalled.
 
 | Tab | What it replaces | What it does |
 |---|---|---|
-| **Cooling** | Macs Fan Control, Hot | Fans on a temperature curve or a fixed speed, plus how far the firmware has capped the CPU and for how long this session |
+| **Cooling** | Macs Fan Control, Hot | Fans on a temperature curve or a fixed percentage, the sensor each fan follows, and how far the firmware has capped the CPU this session |
 | **Power** | Turbo Boost Switcher, VoltageShift | Turbo Boost off, the Intel package power limit, live wattage |
-| **Graphics** | gSwitch | Pins the integrated or discrete GPU — and *holds* the choice, re-asserting when macOS hands the other one out |
-| **Battery** | AlDente | Charge ceiling enforced by the SMC, plus wear, cycles and where the watts are going |
-| **Display** | BetterDisplay | Brightness, dimming past the panel's own minimum, and the resolutions the Displays pane hides |
-| **Keyboard** | Karabiner-Elements | Key-for-key swaps written below the window server, so they hold on the login screen |
-| **Pointer** | LinearMouse | Separate scroll directions for mouse and trackpad, fixed distance per notch, no pointer acceleration |
-| **Awake** | Amphetamine | Holds the Mac awake, optionally with the display off or through a closed lid |
+| **Graphics** | gfxCardStatus, gSwitch | Pins the integrated or discrete GPU and *holds* it, and names the processes keeping the discrete card awake |
+| **Battery & Sleep** | AlDente | Charge ceiling enforced by the SMC, charging paused above a temperature, wear and cycles, where the watts are going, and what is holding the machine awake |
+| **Display** | BetterDisplay | Brightness, dimming past the panel's own minimum, resolutions the Displays pane hides, the arrangement grid, rotation, mirroring, blanking a panel, and font smoothing |
+| **Input** | Karabiner-Elements, LinearMouse, Mos | Key swaps and modifier rules; per-device scroll direction, speed and buttons; per-application scroll rules; a smoothed wheel |
+| **Awake** | Amphetamine, KeepingYouAwake | Holds the Mac awake, optionally with the display off or through a closed lid |
+| **Diagnostics** | DriveDx, smartmontools | SSD health from the NVMe SMART log, why the machine last woke, slept and shut down, and which processes are loading it |
+| **Menu Bar** | Stats, iStat Menus | Chooses what the menu bar shows and in what order, drawn as one image so the order is actually obeyed |
+| **Settings** | — | Helper state, launch at login, window appearance |
 | **Profiles** | — | Rules that set several of the above at once when the circumstances call for it |
+
+### Appearance
+
+Three window layouts — **Classic** (tabs across the top), **Quiet** (a side
+list) and **Terminal** (the same list, monospaced and drawn in brackets) — each
+with a light and a dark face, plus **Darkness**, a true black for OLED and for
+people who mean it. This is a real setting rather than a preview: the direction
+the 2.0 redesign is going has to be usable before it is committed to.
 
 ### Why Profiles is the point
 
@@ -93,26 +124,64 @@ A profile can only drive functions you have already enabled. A rule may decide
 **Undervolting.** The register is locked by the firmware's Plundervolt
 mitigation (CVE-2019-11157) on every Mac built after 2018. The Power tab offers
 the package power limit instead, which is a mechanism Intel intends to be used
-and gets you the same practical result: cooler, quieter, less throttling.
+and gets the same practical result: cooler, quieter, less throttling.
 
-**Karabiner's conditional rules.** Layers, chords and hold-versus-tap need to
-watch the event stream, and macOS shuts event taps out of password fields and
-the login window. A Caps Lock that had become Escape would stop being Escape at
-exactly the moment it is least expected. Plain swaps go through the HID layer,
-where they hold everywhere.
+**Karabiner's layers, chords and hold-versus-tap.** Plain key swaps go through
+hidutil, below the window server, so they hold on the login screen and inside
+password fields. Anything that has to notice a modifier needs an event tap,
+which is a different bargain: a tap rule applies to every keyboard, because an
+event does not say which one produced it, and it stops the moment Zephyr does.
+Both are offered, side by side, with that difference written in the interface —
+because a Caps Lock that had become Escape and then quietly stopped being
+Escape at the login window is worse than not having the rule.
 
-**DDC/CI for external monitors.** Written blind it fails silently, and there was
-no external display to test against.
+**Switching a display off.** Removing a panel from the arrangement, and then
+unplugging the external one, left this machine with no picture at all: the
+reconfiguration callback, a timed watch, restoring the permanent arrangement
+and re-enabling the panel by name all failed, and so did plugging the cable
+back in. Only holding the power button worked. Once the window server has no
+display it will not accept a configuration that would give it one, so no fourth
+guard can help. The tab blanks the backlight instead, which leaves the screen
+in the arrangement — dark, but present.
+
+**DDC/CI for external monitors.** Not merely untested: probed and found
+unreachable on this hardware. The framebuffer driving the external panel was
+identified by its EDID, and every combination of transaction type and delay
+failed; `IOAVServiceCreate` returns nil and no service class binds on Intel.
+Writing it blind would produce a control that silently does nothing.
+
+**Virtual displays.** BetterDisplay's headline feature needs a driver, not an
+API call. Not started.
+
+## Verifying it does what it says
+
+The binary runs its own checks and the build refuses to package a bundle that
+fails them:
+
+```sh
+./build.sh                 # runs --self-test before assembling Zephyr.app
+```
+
+The checks cover the parts where being wrong is invisible: fan curve
+arithmetic, profile conditions, the scroll and key rewriting rules, the
+arrangement grid, drive-health thresholds, menu-bar composition, and the
+readout column widths.
 
 ## Build
 
 ```sh
-# Build the .app bundle (ad-hoc signed, no Xcode):
-./build.sh                 # -> Zephyr.app
+# The .app bundle (ad-hoc signed, no Xcode — Command Line Tools are enough):
+./build.sh                          # -> Zephyr.app
 
-# Build the Turbo Boost kext (optional, only if you want that feature):
-./kext/build-kext.sh       # -> kext/DisableTurboBoost.kext
+# The kexts, both optional and neither kept in the repository — a compiled
+# kernel extension that has drifted from its source is the one binary on the
+# machine nobody should load:
+./kext/build-kext.sh                # -> kext/DisableTurboBoost.kext  (Turbo Boost)
+./kext/build-kext.sh ZephyrPower    # -> kext/ZephyrPower.kext        (power limits)
 ```
+
+`build.sh` copies whichever kexts it finds into the bundle, so building them is
+the only thing that decides whether those features appear.
 
 ## Install & run
 
@@ -189,35 +258,81 @@ rm -rf Zephyr.app
 
 ## CLI / debugging
 
-The same binary exposes diagnostic flags:
+The same binary carries its diagnostic flags. Nothing here is needed to use the
+application; they exist because every hardware claim in it was checked on a
+real machine before it was written.
 
-| Flag | Description |
-|------|-------------|
-| `--dump-smc` | Dump all temperature and fan SMC keys |
-| `--test-fans [--write]` | Read fans; `--write` runs a manual/auto round-trip (needs root) |
-| `--test-gpu` | Show GPU detection and current policy |
-| `--test-helper` | Exercise fan control through the installed helper (no sudo) |
-| `--helper-daemon` | Run as the privileged daemon (used by launchd) |
+| Flag | What it does |
+|------|--------------|
+| `--self-test` | Run the built-in checks (the build gate) |
+| `--dump-smc` | Every temperature and fan SMC key |
+| `--test-fans [--write]` | Read fans; `--write` runs a manual/auto round trip (root) |
+| `--test-gpu` | GPU detection and the policy in force |
+| `--test-power-limit [--write]` | Read MSR 0x610 through the kext; `--write` sets and restores |
+| `--test-helper` | Exercise fan control through the installed helper |
+| `--test-keyboard [--write]` | hidutil mappings, read back from the device |
+| `--test-pointer [--write]` | Pointing devices, their identities and acceleration curves |
+| `--test-scroll [--seconds=N]` | Record every field of real scroll events and compare devices |
+| `--test-network` | Interface counters, wrap handling, tunnel detection |
+| `--test-windows` | Capture and restore window positions through the accessibility API |
+| `--test-diagnostics` | SSD SMART, sleep assertions, wake and shutdown records, GPU clients |
+| `--test-profiles` | Evaluate every profile condition against the machine now |
+| `--test-timing`, `--time-phases` | Where the startup milliseconds go |
+| `--measure-sections` | The height of each settings section, menu bar expanded |
+| `--dump-window <path> [--dark\|--darkness]` | Render every layout offscreen to a contact sheet |
+| `--dump-real-window <path> [--layout=…] [--open-settings=…] [--strip=N]` | Photograph the real window, frame and buttons included |
+| `--dump-icons <path>` | Every menu-bar icon state as a contact sheet |
+| `--preview-design`, `--dump-preview` | The design prototype, kept out of the shipping path |
+| `--helper-daemon` | Run as the privileged daemon (launchd uses this) |
 
 ## Architecture
 
+One executable in three roles: the menu-bar application, the root daemon when
+launchd starts it with `--helper-daemon`, and a pile of diagnostic entry points.
+
 ```
-Zephyr.app  (user)                  LaunchDaemon (root)
-┌────────────────────────────┐   XPC    ┌───────────────────────────┐
-│ AppController (NSStatusItem)│ ───────▶ │ HelperService              │
-│ SensorReader   (read temps) │         │  • SMC fan writes + loop   │
-│ FanController  (read RPM)   │         │  • pmset gpuswitch         │
-│ GPUController  (detect/read)│         │  • kmutil load/unload kext │──▶ DisableTurboBoost.kext
-│ TurboBoost     (read state) │         │  • SMC charge ceiling      │──▶ DisableTurboBoost.kext
-│ ThermalMonitor (speed cap)  │         └───────────────────────────┘     (MSR 0x1A0, ring-0)
-│ BatteryReader  (charge)     │
-│ HelperClient   (XPC proxy)  │
-└────────────────────────────┘
-        unprivileged                          (same binary, --helper-daemon)
+Zephyr.app (you)                                  LaunchDaemon (root)
+┌──────────────────────────────────┐   XPC   ┌──────────────────────────────┐
+│ AppController — NSStatusItem     │ ──────▶ │ HelperService                │
+│ FeatureRegistry — nine features  │         │  • SMC fan writes + curve    │
+│ Telemetry — reads only what is   │         │  • SMC charge ceiling (BCLM) │
+│   currently being shown          │         │  • pmset gpuswitch           │
+│ Profiles — conditions → actions  │         │  • kmutil load/unload        │──▶ kexts
+└──────────────────────────────────┘         └──────────────────────────────┘    (ring 0)
+        unprivileged                              (same binary, --helper-daemon)
 ```
 
-Reads happen in-process and unprivileged; only the few root operations cross the
-XPC boundary, and only Turbo Boost touches the kernel.
+Everything that can be read without privilege is read in process — SMC sensors,
+IOKit registries, NVMe SMART, power assertions, HID services. Only the handful
+of operations that genuinely need root cross the XPC boundary, and only MSR
+access reaches the kernel.
+
+Two design rules run through the whole thing:
+
+**A switch that is off means the hardware was handed back.** Turning a feature
+off restores what it changed — fans to the firmware, the charge ceiling lifted,
+the pointer curve returned, font smoothing put back. Anything less strands the
+machine in a state with nothing in the interface to explain it, which is how a
+battery ends up capped at 80 % for a year because an application was deleted.
+
+**Nothing is read that nobody is looking at.** Telemetry asks the menu bar, the
+open tab and the enabled profiles what they actually need, and reads that. With
+the window shut and one sensor in the menu bar it reads one sensor rather than
+forty-eight: 1.3 % CPU became 0.2 % when this was put in.
+
+## Repository layout
+
+```
+Sources/MacBookControl/
+  App/          telemetry, preferences, the feature registry
+  Core/         one folder per subsystem: SMC, Power, GPU, Display, Pointer,
+                HID, Storage, System — no SwiftUI below this line
+  Features/     one file per tab: the model and its view together
+  UI/           window layouts, palettes, shared controls, the menu-bar drawing
+  SelfTest/     the checks the build gate runs, and the hardware probes
+kext/           two kernel extensions and the script that builds them
+scripts/        helper install/uninstall, the icon generator
+```
 
 ## License
 
