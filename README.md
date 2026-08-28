@@ -129,6 +129,25 @@ A temperature appears in the menu bar. Open the menu for sensors, fan presets,
 GPU switching, and Turbo Boost. Without the helper the app still **monitors**
 everything; control items are disabled until the helper is installed.
 
+### Replacing a copy already in /Applications
+
+```sh
+osascript -e 'quit app "Zephyr"'; sleep 1
+sudo rm -rf /Applications/Zephyr.app
+sudo cp -R Zephyr.app /Applications/
+sudo /Applications/Zephyr.app/Contents/Resources/scripts/install-helper.sh
+open /Applications/Zephyr.app
+```
+
+Both the removal and the copy need `sudo`: an installed bundle is owned by
+root, which is what keeps a process running as you from swapping the
+application the privileged helper talks to. `open` deliberately does not —
+nothing with a window should run as root.
+
+The helper step is not optional. The app is ad-hoc signed, so every build has
+a different code signature, and the helper only accepts the exact copy it was
+installed against. Skip it and the app launches but every control is refused.
+
 ## Enabling Turbo Boost control (requires disabling SIP)
 
 Writing the Turbo Boost MSR needs a kernel extension, which an unsigned/ad-hoc

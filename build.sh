@@ -87,9 +87,12 @@ codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || \
 
 echo "==> Done: $APP_DIR"
 echo
-echo "    Reminder: the app is ad-hoc signed, so this build has a different code"
-echo "    signature from the last one. The privileged helper only accepts the copy"
-echo "    it was installed against, so after replacing /Applications/Zephyr.app run:"
+echo "    Replacing the copy in /Applications (sudo: an installed bundle is"
+echo "    root-owned, and the helper only accepts the build it was pinned to):"
+echo "      osascript -e 'quit app \"Zephyr\"'; sleep 1"
+echo "      sudo rm -rf /Applications/Zephyr.app"
+echo "      sudo cp -R \"$APP_DIR\" /Applications/"
 echo "      sudo \"/Applications/Zephyr.app/Contents/Resources/scripts/install-helper.sh\""
+echo "      open /Applications/Zephyr.app"
 echo "    Launch:  open \"$APP_DIR\""
 echo "    Helper:  sudo \"$PROJECT_DIR/scripts/install-helper.sh\""
