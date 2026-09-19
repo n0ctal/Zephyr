@@ -31,6 +31,7 @@ enum Condition: Codable, Equatable, Hashable {
     case wifiNetwork(String)
     case timeBetween(startMinutes: Int, endMinutes: Int)
     case cpuHotterThan(Double)
+    case cpuLoadAbove(Double)
 
     /// What deciding this condition costs. An exhaustive switch on purpose:
     /// adding a condition that samples something new must not compile until
@@ -45,6 +46,11 @@ enum Condition: Codable, Equatable, Hashable {
             break   // counted from CoreGraphics, not from telemetry
         case .batteryBelow:
             needs.battery = true
+        case .cpuLoadAbove:
+            // Heat lags the work by a minute or more, so a rule meant for
+            // "while it is busy" cannot be written as a temperature and have
+            // the fans arrive on time.
+            needs.load = true
         case .cpuHotterThan:
             // The CPU sensor by name, not whichever one the menu bar happens
             // to show: a rule about the CPU being hot must not be decided by
@@ -63,6 +69,7 @@ enum Condition: Codable, Equatable, Hashable {
         case .wifiNetwork(let ssid): return "Wi-Fi network is \(ssid)"
         case .timeBetween(let start, let end): return "Between \(Self.clock(start)) and \(Self.clock(end))"
         case .cpuHotterThan(let celsius): return String(format: "CPU above %.0f °C", celsius)
+        case .cpuLoadAbove(let percent): return String(format: "CPU load above %.0f %%", percent)
         }
     }
 
@@ -110,6 +117,8 @@ struct Context {
     let wifiSSID: String?
     let minutesSinceMidnight: Int
     let cpuCelsius: Double?
+    /// Overall CPU busy fraction as a percentage, 0...100.
+    let cpuLoadPercent: Double?
 
     static func sample(telemetry: Telemetry) -> Context {
         let now = Calendar.current.dateComponents([.hour, .minute], from: Date())
@@ -122,7 +131,10 @@ struct Context {
             runningApps: NSWorkspace.shared.runningApplications.compactMap { $0.localizedName },
             wifiSSID: CWWiFiClient.shared().interface()?.ssid(),
             minutesSinceMidnight: (now.hour ?? 0) * 60 + (now.minute ?? 0),
-            cpuCelsius: telemetry.cpuTemperature?.celsius
+            cpuCelsius: telemetry.cpuTemperature?.celsius,
+            // The busy fraction the load reading already carries, as a
+            // percentage so the rule reads the way the number is spoken.
+            cpuLoadPercent: telemetry.load.map { $0.total * 100 }
         )
     }
 }
@@ -153,6 +165,9 @@ extension Condition {
         case .cpuHotterThan(let celsius):
             guard let current = context.cpuCelsius else { return false }
             return current > celsius
+        case .cpuLoadAbove(let percent):
+            guard let current = context.cpuLoadPercent else { return false }
+            return current > percent
         }
     }
 }

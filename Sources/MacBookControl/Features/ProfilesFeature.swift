@@ -236,6 +236,7 @@ private struct ProfileEditor: View {
             Button("External display attached") { profile.conditions.append(.externalDisplayAttached(true)) }
             Button("No external display") { profile.conditions.append(.externalDisplayAttached(false)) }
             Button("CPU above 80 °C") { profile.conditions.append(.cpuHotterThan(80)) }
+            Button("CPU load above 60 %") { profile.conditions.append(.cpuLoadAbove(60)) }
             Button("Between two times") { profile.conditions.append(.timeBetween(startMinutes: 22 * 60, endMinutes: 8 * 60)) }
             Button("An app is running") { profile.conditions.append(.appRunning("Xcode")) }
             Button("On a named Wi-Fi network") { profile.conditions.append(.wifiNetwork("")) }
@@ -328,6 +329,11 @@ private struct ConditionRow: View {
             Text("CPU above").font(.subheadline)
             CompactNumberField(range: 40...105, suffix: "°C", value: Binding(
                 get: { Int(celsius) }, set: { condition = .cpuHotterThan(Double($0)) }
+            ))
+        case .cpuLoadAbove(let percent):
+            Text("CPU load above").font(.subheadline)
+            CompactNumberField(range: 5...100, suffix: "%", value: Binding(
+                get: { Int(percent) }, set: { condition = .cpuLoadAbove(Double($0)) }
             ))
         }
     }

@@ -5,6 +5,24 @@ that version number. Up to 1.9.43 and again from 1.9.50 the bump is a commit
 of its own named `Release X`, which is why some entries carry one; in between
 the bump travelled inside the change it released.
 
+## Unreleased
+
+- Profiles: a rule can ask whether the CPU is busy, not only whether it is hot.
+  Heat lags the work by a minute, and naming an application only covers the
+  ones you thought of — "on mains, docked, and running something heavy" is
+  what the tab is for and could not be said until now.
+- Cooling: the GPU temperature is looked up through a preference list the way
+  the CPU's already was. One key each way meant a dash on any machine that
+  spells the discrete sensor differently.
+- Sensors: TC1C through TC8C and TCMX are named rather than shown as
+  themselves. The other unnamed keys are left alone — a wrong label reads
+  worse than a raw one.
+- Five repeating timers now carry a tolerance, so the system can line their
+  wake-ups up with whatever else is waking.
+- The disk image carries a note about the first-launch refusal, and the README
+  has an install path for someone who downloaded it rather than built it.
+- Eight releases that shipped without a changelog entry have one.
+
 ## 1.9.57 — 2026-08-28
 - Build the release image with a script rather than by hand (`9176004`)
 

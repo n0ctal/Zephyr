@@ -61,6 +61,7 @@ enum SelfTest {
         driveWarnings()
         acceleratorClientKinds()
         gpuSensorChoice()
+        cpuLoadCondition()
         sleepAssertionWording()
 
         if failures.isEmpty {
@@ -75,11 +76,12 @@ enum SelfTest {
     private static func context(
         power: Bool = true, battery: Int? = 50, displays: Int = 0,
         apps: [String] = [], wifi: String? = nil, minutes: Int = 12 * 60,
-        cpu: Double? = 50
+        cpu: Double? = 50, load: Double? = 10
     ) -> Context {
         Context(onExternalPower: power, batteryPercent: battery,
                 externalDisplayCount: displays, runningApps: apps,
-                wifiSSID: wifi, minutesSinceMidnight: minutes, cpuCelsius: cpu)
+                wifiSSID: wifi, minutesSinceMidnight: minutes, cpuCelsius: cpu,
+                cpuLoadPercent: load)
     }
 
     // MARK: Conditions
@@ -369,6 +371,31 @@ enum SelfTest {
                     "the rule catalogue speaks virtual key codes")
         expectEqual(Set(KeyInterceptor.virtualKeys.map(\.code)).count,
                     KeyInterceptor.virtualKeys.count, "no key code is listed twice")
+    }
+
+    private static func cpuLoadCondition() {
+        // The case the README describes and the vocabulary could not say:
+        // "on mains, docked, and running something heavy". Heat is the wrong
+        // proxy — it arrives a minute late — and naming an application only
+        // covers the applications you thought of.
+        expect(Condition.cpuLoadAbove(60).holds(in: context(load: 75)),
+               "a busy machine satisfies the rule")
+        expect(!Condition.cpuLoadAbove(60).holds(in: context(load: 40)),
+               "an idle one does not")
+        // Strictly above, like the temperature rule next to it, so a machine
+        // sitting exactly on the threshold does not flip on rounding.
+        expect(!Condition.cpuLoadAbove(60).holds(in: context(load: 60)),
+               "exactly at the threshold is not above it")
+        expect(!Condition.cpuLoadAbove(60).holds(in: context(load: nil)),
+               "no reading is not a reason to act")
+        // The exhaustive switch in telemetryNeeds exists so a new condition
+        // cannot be evaluated against a reading nobody asked for.
+        expect(Condition.cpuLoadAbove(60).telemetryNeeds.load,
+               "the rule asks for the load reading")
+        expect(!Condition.cpuLoadAbove(60).telemetryNeeds.cpuSensor,
+               "and not for the temperature it is not about")
+        expectEqual(Condition.cpuLoadAbove(60).label, "CPU load above 60 %",
+                    "the rule reads as a sentence")
     }
 
     private static func gpuSensorChoice() {
