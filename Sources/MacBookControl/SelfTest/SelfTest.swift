@@ -61,6 +61,7 @@ enum SelfTest {
         driveWarnings()
         acceleratorClientKinds()
         gpuSensorChoice()
+        sensorDiscovery()
         cpuLoadCondition()
         sleepAssertionWording()
 
@@ -396,6 +397,30 @@ enum SelfTest {
                "and not for the temperature it is not about")
         expectEqual(Condition.cpuLoadAbove(60).label, "CPU load above 60 %",
                     "the rule reads as a sentence")
+    }
+
+    private static func sensorDiscovery() {
+        // The case this exists for: a machine whose discrete card is asleep
+        // when the app starts. Its sensor reads zero, and a list of only the
+        // sensors that were live would never let it back in.
+        let atStartup: [(key: String, celsius: Double)] = [
+            ("TC0P", 48), ("TG0P", 0), ("TGDT", 0), ("TC0T", -0.6), ("TB0T", 31),
+        ]
+        let chosen = SensorReader.select(from: atStartup)
+        expect(chosen.keys.contains("TG0P"), "a sleeping GPU sensor is kept for later")
+        expect(chosen.keys.contains("TC0T"), "a sensor reading below zero is kept too")
+        expectEqual(chosen.keys.count, 5, "nothing that answered is thrown away")
+        expectEqual(chosen.keys, chosen.keys.sorted(), "the keys come back in order")
+
+        // The title sensor is the one exception: it has to be answering now,
+        // because the menu bar has to show a number now.
+        expectEqual(chosen.cpuKey, "TC0P", "the title follows the first live preferred sensor")
+
+        let coldCPU: [(key: String, celsius: Double)] = [("TC0P", 0), ("TCXC", 51)]
+        expectEqual(SensorReader.select(from: coldCPU).cpuKey, "TCXC",
+                    "a preferred sensor that is asleep is passed over")
+        expectEqual(SensorReader.select(from: [("TB0T", 31)]).cpuKey, nil,
+                    "no preferred sensor means no chosen one")
     }
 
     private static func gpuSensorChoice() {

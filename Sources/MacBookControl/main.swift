@@ -198,11 +198,27 @@ func runSMCDump() {
 
     // Temperatures: keys beginning with "T".
     print("=== Temperatures (T*) ===")
+    var dormant: [(String, String, Double)] = []
     for key in keys.sorted() where key.hasPrefix("T") {
         guard let value = try? smc.read(key), let celsius = value.double else { continue }
         // Plausible on-die temp range; filters out unrelated T* keys.
         if celsius > 0, celsius < 130 {
             print(String(format: "  %@ [%@]  %.1f °C", key, value.type, celsius))
+        } else {
+            dormant.append((key, value.type, celsius))
+        }
+    }
+
+    // The ones outside that range, listed rather than hidden. A sensor whose
+    // part is powered down reads zero, and someone asking "why is there no
+    // GPU temperature" needs to see that the key exists and is asleep, not an
+    // empty space where it would have been.
+    print("\n=== Temperatures asleep or out of range ===")
+    if dormant.isEmpty {
+        print("  (none)")
+    } else {
+        for (key, type, celsius) in dormant {
+            print(String(format: "  %@ [%@]  %.1f", key, type, celsius))
         }
     }
 

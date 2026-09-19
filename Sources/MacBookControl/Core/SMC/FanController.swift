@@ -1,17 +1,26 @@
 import Foundation
 
-/// Reads temperature sensors. Discovers valid temperature keys once
-/// (enumerating all SMC keys is expensive), then re-reads only that
-/// cached set on each refresh.
+/// Reads temperature sensors. Enumerating every SMC key is expensive, so the
+/// list of temperature keys is found once and only that list is re-read on
+/// each refresh.
 final class SensorReader {
     private let smc: SMC
+
+    /// Every key that answered as a number at startup, including the ones
+    /// reading zero because the part behind them was powered down. Whether a
+    /// reading is believable is decided on each refresh instead of once, so a
+    /// sensor that wakes up later — a discrete GPU, most often — starts being
+    /// reported. Keeping only what was live at startup hid it for the whole
+    /// life of the process. The cost is re-reading a handful of keys that may
+    /// never answer; on the machine this was written on that is two of
+    /// thirty-nine.
     private(set) var temperatureKeys: [String] = []
 
     /// Plausible on-die temperature range in °C; filters unrelated T* keys.
-    private let plausibleRange = 1.0 ... 125.0
+    static let plausibleRange = 1.0 ... 125.0
 
     /// Preferred CPU sensor keys, best first; first one that exists is used.
-    private let cpuKeyPreference = ["TC0P", "TC0E", "TC0F", "TCXC", "TCGC", "TC0D", "TC0H"]
+    static let cpuKeyPreference = ["TC0P", "TC0E", "TC0F", "TCXC", "TCGC", "TC0D", "TC0H"]
 
     /// The CPU sensor key chosen at startup (nil if none of the preferred keys exist).
     private(set) var cpuKey: String?
@@ -19,26 +28,36 @@ final class SensorReader {
     init(smc: SMC) {
         self.smc = smc
         discoverTemperatureKeys()
-        cpuKey = cpuKeyPreference.first { temperatureKeys.contains($0) }
     }
 
     private func discoverTemperatureKeys() {
         guard let keys = try? smc.allKeys() else { return }
-        var discovered: [String] = []
+        var readings: [(key: String, celsius: Double)] = []
         for key in keys where key.hasPrefix("T") {
             guard let value = try? smc.read(key), let celsius = value.double else { continue }
-            if plausibleRange.contains(celsius) {
-                discovered.append(key)
-            }
+            readings.append((key, celsius))
         }
-        temperatureKeys = discovered.sorted()
+        let chosen = SensorReader.select(from: readings)
+        temperatureKeys = chosen.keys
+        cpuKey = chosen.cpuKey
+    }
+
+    /// The startup decision apart from the machine that answers it: which keys
+    /// are worth re-reading, and which sensor the menu-bar title follows.
+    static func select(from readings: [(key: String, celsius: Double)])
+        -> (keys: [String], cpuKey: String?) {
+        // The title sensor is picked from what is actually answering. A key
+        // that is merely present would leave the menu bar showing nothing
+        // until whatever it measures happens to warm up.
+        let live = Set(readings.filter { plausibleRange.contains($0.celsius) }.map(\.key))
+        return (readings.map(\.key).sorted(), cpuKeyPreference.first(where: live.contains))
     }
 
     func readTemperatures() -> [TemperatureReading] {
         temperatureKeys.compactMap { key in
             guard let value = try? smc.read(key),
                   let celsius = value.double,
-                  plausibleRange.contains(celsius) else { return nil }
+                  Self.plausibleRange.contains(celsius) else { return nil }
             return TemperatureReading(
                 key: key,
                 label: SensorLabels.label(for: key),
@@ -63,7 +82,7 @@ final class SensorReader {
         guard !key.isEmpty else { return cpuTemperature() }
         if let value = try? smc.read(key),
            let celsius = value.double,
-           plausibleRange.contains(celsius) {
+           Self.plausibleRange.contains(celsius) {
             return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
         }
         return cpuTemperature()
@@ -75,7 +94,7 @@ final class SensorReader {
         if let key = cpuKey,
            let value = try? smc.read(key),
            let celsius = value.double,
-           plausibleRange.contains(celsius) {
+           Self.plausibleRange.contains(celsius) {
             return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
         }
         return hottest()

@@ -11,6 +11,13 @@ the bump travelled inside the change it released.
   Heat lags the work by a minute, and naming an application only covers the
   ones you thought of — "on mains, docked, and running something heavy" is
   what the tab is for and could not be said until now.
+- Sensors: a sensor that is asleep when the app starts is no longer lost for
+  the rest of the session. The list of keys was filtered by plausibility once,
+  so a discrete GPU that happened to be parked at launch could never be read
+  again; believability is now decided on each refresh instead.
+- `--dump-smc` lists the sensors that are asleep or out of range instead of
+  hiding them, which is what you need when a temperature you expected is
+  missing.
 - Cooling: the GPU temperature is looked up through a preference list the way
   the CPU's already was. One key each way meant a dash on any machine that
   spells the discrete sensor differently.
