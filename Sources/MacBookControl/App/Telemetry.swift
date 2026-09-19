@@ -202,11 +202,18 @@ final class Telemetry: ObservableObject {
     /// asked for a single key and showed a dash on any machine that spells it
     /// differently.
     func gpuTemperature(discrete: Bool) -> TemperatureReading? {
+        Telemetry.gpuTemperature(in: temperatures, discrete: discrete)
+    }
+
+    /// The choice itself, apart from the readings it is made against, so the
+    /// order can be checked without a machine that has the sensors.
+    static func gpuTemperature(in readings: [TemperatureReading],
+                               discrete: Bool) -> TemperatureReading? {
         let preference = discrete
             ? ["TG0P", "TG1P", "TGDD", "TGVP"]
             : ["TCGC", "TCXC"]
         for key in preference {
-            if let reading = temperatures.first(where: { $0.key == key }) { return reading }
+            if let reading = readings.first(where: { $0.key == key }) { return reading }
         }
         return nil
     }

@@ -60,6 +60,7 @@ enum SelfTest {
         arrangementGrid()
         driveWarnings()
         acceleratorClientKinds()
+        gpuSensorChoice()
         sleepAssertionWording()
 
         if failures.isEmpty {
@@ -368,6 +369,34 @@ enum SelfTest {
                     "the rule catalogue speaks virtual key codes")
         expectEqual(Set(KeyInterceptor.virtualKeys.map(\.code)).count,
                     KeyInterceptor.virtualKeys.count, "no key code is listed twice")
+    }
+
+    private static func gpuSensorChoice() {
+        func reading(_ key: String, _ celsius: Double) -> TemperatureReading {
+            TemperatureReading(key: key, label: key, celsius: celsius)
+        }
+        // The machine this was written on publishes all four discrete keys, so
+        // the order only shows itself on a machine that does not.
+        let all = [reading("TG0P", 60), reading("TG1P", 56),
+                   reading("TGDD", 35), reading("TCGC", 64)]
+        expectEqual(Telemetry.gpuTemperature(in: all, discrete: true)?.key, "TG0P",
+                    "the discrete card is read from TG0P when it is there")
+        expectEqual(Telemetry.gpuTemperature(in: all, discrete: false)?.key, "TCGC",
+                    "the integrated card is read from TCGC")
+        // The case the preference exists for: no TG0P, a live sensor under
+        // another name. Before the list this showed a dash.
+        let noTG0P = all.filter { $0.key != "TG0P" }
+        expectEqual(Telemetry.gpuTemperature(in: noTG0P, discrete: true)?.key, "TG1P",
+                    "without TG0P the discrete card falls back to TG1P")
+        let dieOnly = [reading("TGDD", 35), reading("TCGC", 64)]
+        expectEqual(Telemetry.gpuTemperature(in: dieOnly, discrete: true)?.key, "TGDD",
+                    "and to the die reading when that is all there is")
+        // Nothing invented when the card publishes nothing: a dash is the
+        // honest answer, and TCGC belongs to the integrated side.
+        expect(Telemetry.gpuTemperature(in: [reading("TCGC", 64)], discrete: true) == nil,
+               "the integrated sensor is not offered as the discrete one")
+        expect(Telemetry.gpuTemperature(in: [], discrete: false) == nil,
+               "no readings, no answer")
     }
 
     private static func keyMappingWireFormat() {
