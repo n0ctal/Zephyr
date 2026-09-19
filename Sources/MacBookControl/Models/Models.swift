@@ -195,11 +195,25 @@ struct ThermalStats {
     private(set) var throttledSeconds = 0
     private(set) var samples = 0
 
-    mutating func record(_ status: ThermalStatus, interval: Int) {
+    /// When the last sample was taken, so a sample can be credited with the
+    /// time it actually stands for rather than with the time it was supposed
+    /// to stand for.
+    private var lastRecordedAt: Date?
+
+    /// `now` is a parameter so the arithmetic can be checked against a clock
+    /// that does not move on its own.
+    mutating func record(_ status: ThermalStatus, interval: Int, at now: Date = Date()) {
         samples += 1
+        // Ticks arrive on the interval, but a window opening reads out of turn
+        // — and crediting every reading with a whole interval let a few
+        // seconds of opening and closing a window claim minutes of "held back
+        // for". Capped at the interval the other way round, so the first
+        // sample after a night asleep does not claim the night.
+        let elapsed = lastRecordedAt.map { Int(now.timeIntervalSince($0).rounded()) } ?? interval
+        lastRecordedAt = now
         guard let limit = status.speedLimitPercent else { return }
         lowestSpeedLimit = min(lowestSpeedLimit, limit)
-        if limit < 100 { throttledSeconds += interval }
+        if limit < 100 { throttledSeconds += min(max(elapsed, 0), interval) }
     }
 
     var everThrottled: Bool { lowestSpeedLimit < 100 }

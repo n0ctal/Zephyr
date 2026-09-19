@@ -63,6 +63,7 @@ enum SelfTest {
         gpuSensorChoice()
         sensorDiscovery()
         fanTargetSkipping()
+        throttleAccounting()
         cpuLoadCondition()
         sleepAssertionWording()
 
@@ -398,6 +399,54 @@ enum SelfTest {
                "and not for the temperature it is not about")
         expectEqual(Condition.cpuLoadAbove(60).label, "CPU load above 60 %",
                     "the rule reads as a sentence")
+    }
+
+    private static func throttleAccounting() {
+        func held(at percent: Int) -> ThermalStatus {
+            ThermalStatus(speedLimitPercent: percent, schedulerLimitPercent: 100,
+                          availableCPUs: 16, pressure: .fair)
+        }
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
+
+        var stats = ThermalStats()
+        stats.record(held(at: 80), interval: 2, at: start)
+        stats.record(held(at: 80), interval: 2, at: at(2))
+        stats.record(held(at: 80), interval: 2, at: at(4))
+        expectEqual(stats.throttledSeconds, 6, "three ticks two seconds apart are six seconds")
+
+        // The case this exists for: opening and closing the window reads out
+        // of turn, and each of those readings used to claim a whole interval.
+        var twitchy = ThermalStats()
+        twitchy.record(held(at: 80), interval: 2, at: start)
+        for i in 1 ... 20 { twitchy.record(held(at: 80), interval: 2, at: at(Double(i) / 20)) }
+        expectEqual(twitchy.throttledSeconds, 2,
+                    "twenty readings inside one second add nothing; they used to add forty")
+
+        // Rounding each gap to whole seconds does not drift: a reading that
+        // lands just before a tick takes the time, and the tick then takes
+        // none.
+        var interleaved = ThermalStats()
+        interleaved.record(held(at: 80), interval: 2, at: start)
+        interleaved.record(held(at: 80), interval: 2, at: at(1.9))   // window opened
+        interleaved.record(held(at: 80), interval: 2, at: at(2.0))   // and the tick
+        expectEqual(interleaved.throttledSeconds, 4,
+                    "two seconds of throttling plus the first sample's own interval")
+
+        // And the other way: a sample after a night asleep stands for one
+        // interval, not for the night.
+        var overnight = ThermalStats()
+        overnight.record(held(at: 80), interval: 2, at: start)
+        overnight.record(held(at: 80), interval: 2, at: at(8 * 3600))
+        expectEqual(overnight.throttledSeconds, 4, "the night the machine slept is not throttling")
+
+        var healthy = ThermalStats()
+        healthy.record(held(at: 100), interval: 2, at: start)
+        healthy.record(held(at: 100), interval: 2, at: at(2))
+        expectEqual(healthy.throttledSeconds, 0, "a machine at full speed is held back for nothing")
+        expect(!healthy.everThrottled, "and is not reported as having been")
+        expect(stats.everThrottled, "one that was, is")
+        expectEqual(stats.lowestSpeedLimit, 80, "the lowest it went is kept")
     }
 
     private static func fanTargetSkipping() {

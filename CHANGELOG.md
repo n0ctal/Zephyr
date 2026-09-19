@@ -20,6 +20,12 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- "Held back for" counted the time it expected to pass rather than the time
+  that did. Every reading credited a whole poll interval, including the
+  readings taken out of turn when the window opens — twenty-one of those
+  inside one second reported forty-two seconds of throttling. A sample is now
+  credited with the time since the last one, capped at the interval so that
+  the first reading after a night asleep does not claim the night.
 - Fixed a data race that has been in the shipped app: opening the settings
   window reads the hardware on the main thread while a tick may already be
   reading it on the telemetry queue. The readers are not stateless — the load
