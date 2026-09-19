@@ -587,7 +587,18 @@ func runTimingTest() {
                      mean(BatteryReader())))
     }
     let thermal = ThermalMonitor()
-    time("ThermalMonitor.read") { _ = thermal.read() }
+    // A mean rather than a single go: this one is never skipped, so it is paid
+    // on every tick whatever the window is doing.
+    do {
+        _ = thermal.read()   // warm
+        var total: TimeInterval = 0
+        for _ in 0 ..< 20 {
+            let start = Date()
+            _ = thermal.read()
+            total += Date().timeIntervalSince(start)
+        }
+        print(String(format: "  %6.1f ms  ThermalMonitor.read (mean of 20)", total / 20 * 1000))
+    }
     let gpu = GPUController()
     time("GPUController.info (runs pmset)") { _ = gpu.info() }
     let turbo = TurboBoostController()

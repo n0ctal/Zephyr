@@ -27,20 +27,26 @@ final class ThermalMonitor {
     }
 
     func read() -> ThermalStatus {
-        ThermalStatus(
-            speedLimitPercent: cpuPowerValue("CPU_Speed_Limit"),
-            schedulerLimitPercent: cpuPowerValue("CPU_Scheduler_Limit"),
-            availableCPUs: cpuPowerValue("CPU_Available_CPUs"),
+        // One dictionary, read once. All three figures come out of the same
+        // answer, and asking for them one at a time meant three trips to
+        // configd per tick — each of which opens a session of its own before
+        // it asks anything.
+        let status = cpuPowerStatus()
+        return ThermalStatus(
+            speedLimitPercent: status?["CPU_Speed_Limit"] as? Int,
+            schedulerLimitPercent: status?["CPU_Scheduler_Limit"] as? Int,
+            availableCPUs: status?["CPU_Available_CPUs"] as? Int,
             pressure: ThermalPressure(ProcessInfo.processInfo.thermalState)
         )
     }
 
-    private func cpuPowerValue(_ key: String) -> Int? {
+    /// Everything `pmset -g therm` prints, or nil when the machine publishes
+    /// none of it.
+    private func cpuPowerStatus() -> [String: Any]? {
         guard let copyStatus else { return nil }
         var raw: Unmanaged<CFDictionary>?
-        guard copyStatus(&raw) == KERN_SUCCESS, let dict = raw?.takeRetainedValue() as? [String: Any] else {
-            return nil
-        }
-        return dict[key] as? Int
+        guard copyStatus(&raw) == KERN_SUCCESS,
+              let dict = raw?.takeRetainedValue() as? [String: Any] else { return nil }
+        return dict
     }
 }

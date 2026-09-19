@@ -20,6 +20,9 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- The throttle reading asks the system for its dictionary once instead of
+  once per field. Three fields meant three trips to configd on every tick,
+  each opening a session of its own first: 0.4 ms became 0.1.
 - Every SMC read and every SMC write used to ask the chip how big the key is
   and what type it holds, first, as a round trip of its own. The SMC builds
   that table when the machine boots and it does not change, so it is now asked
