@@ -244,26 +244,41 @@ final class Telemetry: ObservableObject {
     /// The wait is one tick's worth of reads, on a path that already accepts
     /// about 45 ms of one.
     private func readNow() {
-        let reading = queue.sync { () -> (temperatures: [TemperatureReading],
-                                          fans: [FanReading],
-                                          battery: BatteryStatus?,
-                                          load: SystemLoad.Snapshot?,
-                                          network: NetworkThroughput.Snapshot?,
-                                          thermal: ThermalStatus) in
-            (self.sensors?.readTemperatures() ?? [],
-             self.fanController?.readFans() ?? [],
-             self.batteryReader.read(),
-             self.systemLoad.read(),
-             self.throughput.read(),
-             self.thermalMonitor.read())
+        let reading = queue.sync {
+            Reading(temperatures: self.sensors?.readTemperatures() ?? [],
+                    fans: self.fanController?.readFans() ?? [],
+                    battery: self.batteryReader.read(),
+                    load: self.systemLoad.read(),
+                    network: self.throughput.read(),
+                    thermal: self.thermalMonitor.read())
         }
-        temperatures = reading.temperatures
-        fans = reading.fans
-        // Only when there is one, for the reason the tick gives: a reader that
-        // declines to answer — the network's across a sleep, the load's when
-        // two samples land too close together — must not blank a field that
-        // has a real number in it. This path is reached every time the window
-        // opens, which is exactly when somebody is looking at that field.
+        apply(reading)
+    }
+
+    /// What one read came back with.
+    ///
+    /// Nil means either "nobody asked for it" or "the reader declined to
+    /// answer", and the fields do not need to tell those apart: both mean
+    /// leave what is there alone.
+    private struct Reading {
+        var temperatures: [TemperatureReading]?
+        var fans: [FanReading]?
+        var battery: BatteryStatus?
+        var load: SystemLoad.Snapshot?
+        var network: NetworkThroughput.Snapshot?
+        var thermal: ThermalStatus
+    }
+
+    /// Publishes a reading, on the main thread.
+    ///
+    /// The one place that decides what an absent value means. The two paths
+    /// that read the hardware each used to carry their own copy of that rule,
+    /// and they drifted: the tick left a field alone when its reader said
+    /// nothing, and the blocking read — the one that runs every time the
+    /// window opens — overwrote it with nothing.
+    private func apply(_ reading: Reading) {
+        if let temperatures = reading.temperatures { self.temperatures = temperatures }
+        if let fans = reading.fans { self.fans = fans }
         if let battery = reading.battery { self.battery = battery }
         if let load = reading.load { self.load = load }
         if let network = reading.network { self.network = network }
@@ -284,8 +299,8 @@ final class Telemetry: ObservableObject {
         queue.async { [weak self] in
             guard let self = self else { return }
 
-            // Each of these is nil when nothing needs it, and a nil result
-            // leaves the last reading in place rather than blanking it.
+            // Each of these stays nil when nothing needs it; see apply() for
+            // what the fields make of that.
             var temperatures: [TemperatureReading]?
             if needs.full {
                 temperatures = self.sensors?.readTemperatures() ?? []
@@ -328,16 +343,8 @@ final class Telemetry: ObservableObject {
             // is not delivered at all inside a nested run loop, which is how
             // the offscreen renders came to draw dashes where the numbers go.
             RunLoop.main.perform(inModes: [.common]) {
-                if let temperatures = temperatures { self.temperatures = temperatures }
-                if let fans = fans { self.fans = fans }
-                if let battery = battery { self.battery = battery }
-                if let load = load { self.load = load }
-                // Only when there is one: the reader declines to answer across
-                // a sleep, and replacing a real speed with nothing there would
-                // blank the field for one tick every time the lid opens.
-                if let network = network { self.network = network }
-                self.thermal = status
-                self.stats.record(status, interval: Int(self.interval))
+                self.apply(Reading(temperatures: temperatures, fans: fans, battery: battery,
+                                   load: load, network: network, thermal: status))
                 self.isReading = false
                 if self.needsAnotherRead {
                     self.needsAnotherRead = false
