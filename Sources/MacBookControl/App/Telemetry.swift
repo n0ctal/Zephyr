@@ -193,6 +193,24 @@ final class Telemetry: ObservableObject {
         timer = nil
     }
 
+    /// The temperature of the card that is doing the work.
+    ///
+    /// Which key carries it depends on the model — this machine publishes
+    /// `TG0P`, others put the discrete card on `TG1P` or name the die instead —
+    /// so take the first that answers rather than the one that happens to be
+    /// right here. The CPU reading has worked this way for a while; the GPU
+    /// asked for a single key and showed a dash on any machine that spells it
+    /// differently.
+    func gpuTemperature(discrete: Bool) -> TemperatureReading? {
+        let preference = discrete
+            ? ["TG0P", "TG1P", "TGDD", "TGVP"]
+            : ["TCGC", "TCXC"]
+        for key in preference {
+            if let reading = temperatures.first(where: { $0.key == key }) { return reading }
+        }
+        return nil
+    }
+
     /// Served from the last poll rather than read on demand: callers are view
     /// bodies and the menu-bar title, both of which ask often.
     var cpuTemperature: TemperatureReading? {
