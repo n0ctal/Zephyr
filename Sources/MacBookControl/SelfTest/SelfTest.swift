@@ -62,6 +62,7 @@ enum SelfTest {
         acceleratorClientKinds()
         gpuSensorChoice()
         sensorDiscovery()
+        fanTargetSkipping()
         cpuLoadCondition()
         sleepAssertionWording()
 
@@ -397,6 +398,29 @@ enum SelfTest {
                "and not for the temperature it is not about")
         expectEqual(Condition.cpuLoadAbove(60).label, "CPU load above 60 %",
                     "the rule reads as a sentence")
+    }
+
+    private static func fanTargetSkipping() {
+        func fan(target: Int, manual: Bool) -> FanReading {
+            FanReading(index: 0, actualRPM: target, minRPM: 1836, maxRPM: 5616,
+                       targetRPM: target, isManual: manual)
+        }
+        let held = fan(target: 2400, manual: true)
+        expectEqual(FanController.clamp(900, to: held), 1836, "below the fan's floor comes back as the floor")
+        expectEqual(FanController.clamp(9000, to: held), 5616, "above its ceiling comes back as the ceiling")
+        expectEqual(FanController.clamp(2400, to: held), 2400, "a figure it can reach is left alone")
+
+        expect(FanController.isAlreadySet(held, to: 2400), "a fan already held there needs nothing")
+        expect(!FanController.isAlreadySet(held, to: 2600), "a different figure is a new instruction")
+        expect(!FanController.isAlreadySet(fan(target: 2400, manual: false), to: 2400),
+               "a fan the firmware has taken back has to be taken again")
+
+        // The comparison has to happen after clamping. Against the requested
+        // figure, a curve asking for less than the fan can do would look like a
+        // fresh instruction on every tick and never stop writing.
+        let atFloor = fan(target: 1836, manual: true)
+        expect(FanController.isAlreadySet(atFloor, to: FanController.clamp(900, to: atFloor)),
+               "asking for less than the floor, again, changes nothing")
     }
 
     private static func sensorDiscovery() {

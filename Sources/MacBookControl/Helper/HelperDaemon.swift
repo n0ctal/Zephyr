@@ -257,7 +257,7 @@ final class HelperService: NSObject, HelperProtocol {
         let target = curve.targetRPM(cpuTemp: celsius,
                                      fanMin: reading.minRPM,
                                      fanMax: reading.maxRPM)
-        try? fans?.setManual(fan: fan, rpm: target)
+        try? fans?.setManual(fan: fan, rpm: target, known: reading)
     }
 
     private func stopControlLoopIfIdle() {

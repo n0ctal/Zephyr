@@ -11,6 +11,12 @@ the bump travelled inside the change it released.
   Heat lags the work by a minute, and naming an application only covers the
   ones you thought of — "on mains, docked, and running something heavy" is
   what the tab is for and could not be said until now.
+- Cooling: the root daemon's control loop stopped doing the same work twice.
+  It read each fan, then `setManual` read it again, then asked the SMC what
+  byte layout the target key wants — every half-second, for as long as a fan
+  was under our control. It also wrote a target the fan was already holding.
+  At about 0.8 ms per SMC round trip on this machine that was roughly 19 ms of
+  every tick; the steady state is now about a third of that.
 - Sensors: a sensor that is asleep when the app starts is no longer lost for
   the rest of the session. The list of keys was filtered by plausibility once,
   so a discrete GPU that happened to be parked at launch could never be read

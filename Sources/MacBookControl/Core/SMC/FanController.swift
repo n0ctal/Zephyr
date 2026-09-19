@@ -179,12 +179,24 @@ final class FanController {
     // MARK: Control
 
     /// Switches a fan to manual mode and sets a target RPM (clamped to min/max).
-    func setManual(fan: Int, rpm requested: Int) throws {
-        guard let current = readFan(fan) else { throw SMCError.keyNotFound(key(fan, "Ac")) }
+    ///
+    /// `known` is a reading the caller already has. The control loop takes one
+    /// every half-second before working out where the fan should be, and
+    /// reading the same five keys again here cost as much as the rest of the
+    /// tick put together.
+    func setManual(fan: Int, rpm requested: Int, known: FanReading? = nil) throws {
+        guard let current = known ?? readFan(fan) else { throw SMCError.keyNotFound(key(fan, "Ac")) }
         guard current.maxRPM >= current.minRPM, current.maxRPM > 0 else {
             throw SMCError.keyNotFound(key(fan, "Mx"))
         }
-        let clamped = min(max(requested, current.minRPM), current.maxRPM)
+        let clamped = FanController.clamp(requested, to: current)
+
+        // Most visits from the control loop have nothing to change: the
+        // temperature moved by a tenth of a degree and the target lands on the
+        // same rpm. Holding a fan steady used to cost exactly as much as
+        // moving it. The reading is fresh, so the firmware cannot have taken
+        // the fan back without us seeing it on the next tick.
+        if FanController.isAlreadySet(current, to: clamped) { return }
 
         if usesForceBits {
             try writeForceBits(forceBits() | (1 << UInt16(fan)))
@@ -211,14 +223,39 @@ final class FanController {
         for i in 0 ..< fanCount { try? setAuto(fan: i) }
     }
 
+    /// The clamped target, and whether the fan is already sitting on it. Both
+    /// are separate from the SMC so the loop's decision to stay silent can be
+    /// checked without a fan to watch.
+    static func clamp(_ requested: Int, to reading: FanReading) -> Int {
+        min(max(requested, reading.minRPM), reading.maxRPM)
+    }
+
+    /// Compares against the clamped figure, not the requested one: asking for
+    /// less than the fan's minimum every half-second would otherwise look like
+    /// a new instruction every time.
+    static func isAlreadySet(_ reading: FanReading, to clamped: Int) -> Bool {
+        reading.isManual && reading.targetRPM == clamped
+    }
+
+    /// The byte layout each target key expects. It is a fact about the
+    /// machine, not about the moment, but asking costs an SMC round trip and
+    /// the control loop would pay it twice a second for as long as it runs.
+    private var targetEncodings: [String: UInt32] = [:]
+
     /// Encodes an RPM value into the byte layout the target key expects.
     /// Newer Macs use `flt` (native 32-bit float); older ones use `fpe2`
     /// (big-endian, value × 4).
     private func encodeRPM(_ rpm: Int, forKey keyString: String) -> [UInt8]? {
         // Never guess the key type: writing a float into an fpe2 key turns a
         // 3000 rpm target into ~32 rpm, i.e. a stopped fan.
-        guard let type = (try? smc.read(keyString))?.type else { return nil }
-        let typeCode = smcKeyCode(type.padding(toLength: 4, withPad: " ", startingAt: 0))
+        let typeCode: UInt32
+        if let cached = targetEncodings[keyString] {
+            typeCode = cached
+        } else {
+            guard let type = (try? smc.read(keyString))?.type else { return nil }
+            typeCode = smcKeyCode(type.padding(toLength: 4, withPad: " ", startingAt: 0))
+            targetEncodings[keyString] = typeCode
+        }
         switch typeCode {
         case SMCDataType.fpe2:
             let raw = UInt16(min(max(rpm, 0), 16383) * 4)
