@@ -10,6 +10,18 @@ import IOKit.ps
 /// what the ceiling is doing — a machine parked at 80 % with the charger
 /// plugged in looks broken until you can see that it is deliberate.
 final class BatteryReader {
+    /// The connection the power registers are read through.
+    ///
+    /// Shared with the rest of telemetry when there is one. Opening a
+    /// connection of its own for every reading — which is what this did — cost
+    /// an IOServiceOpen and an IOServiceClose on every tick and made the
+    /// battery the most expensive thing in it, above the sensor sweep.
+    private let smc: SMC?
+
+    init(smc: SMC? = nil) {
+        self.smc = smc
+    }
+
     func read() -> BatteryStatus? {
         guard let props = smartBatteryProperties() else { return nil }
 
@@ -97,8 +109,15 @@ final class BatteryReader {
     }
 
     private func power(batteryWatts: Double?) -> PowerDraw? {
-        guard let smc = try? SMC() else { return nil }
-        defer { smc.close() }
+        if let shared = smc { return power(batteryWatts: batteryWatts, through: shared) }
+        // Nobody handed us one — a command-line probe, or a caller that has no
+        // telemetry behind it. Open one for the reading and give it back.
+        guard let own = try? SMC() else { return nil }
+        defer { own.close() }
+        return power(batteryWatts: batteryWatts, through: own)
+    }
+
+    private func power(batteryWatts: Double?, through smc: SMC) -> PowerDraw? {
         let system = (try? smc.read("PSTR"))?.double
         let adapter = (try? smc.read("PDTR"))?.double
         guard system != nil || adapter != nil || batteryWatts != nil else { return nil }

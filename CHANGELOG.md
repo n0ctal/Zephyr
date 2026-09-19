@@ -20,6 +20,17 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- Every SMC read and every SMC write used to ask the chip how big the key is
+  and what type it holds, first, as a round trip of its own. The SMC builds
+  that table when the machine boots and it does not change, so it is now asked
+  once per key. A sweep of the sensors fell from 32 ms to 16, a read of both
+  fans from 7 ms to 3, and the daemon's control loop and everything else with
+  it.
+- The battery no longer opens a connection to the SMC of its own on every
+  reading and closes it again. It shares the one the rest of telemetry already
+  holds, which is what that type's own note says everything does. The reading
+  went from 1.8 ms to 1.0 — it was the most expensive thing in a tick, above
+  the sensors.
 - Cooling: the root daemon's control loop stopped doing the same work twice.
   It read each fan, then `setManual` read it again, then asked the SMC what
   byte layout the target key wants — every half-second, for as long as a fan

@@ -230,13 +230,25 @@ final class SMC {
 
     // MARK: Key info / enumeration
 
+    /// How big a key's payload is and what type it holds, remembered per key.
+    ///
+    /// The SMC builds its key table when the machine boots and neither figure
+    /// changes while it is up, but asking costs a full IOKit round trip — and
+    /// it was asked before every single read and every single write, which
+    /// made all of them cost twice what they had to. Only answers are kept: a
+    /// key that is not there throws, and throws just as cheaply next time.
+    private var keyInfoCache: [UInt32: (size: UInt32, type: UInt32)] = [:]
+
     /// Returns (dataSize, dataType) for a key.
     private func keyInfo(_ key: UInt32) throws -> (size: UInt32, type: UInt32) {
+        if let cached = keyInfoCache[key] { return cached }
         var buffer = newBuffer()
         putU32(&buffer, Wire.keyOffset, key)
         buffer[Wire.data8Offset] = SMCSelector.getKeyInfo.rawValue
         let out = try call(buffer)
-        return (getU32(out, Wire.dataSizeOffset), getU32(out, Wire.dataTypeOffset))
+        let info = (size: getU32(out, Wire.dataSizeOffset), type: getU32(out, Wire.dataTypeOffset))
+        keyInfoCache[key] = info
+        return info
     }
 
     /// Total number of keys exposed by the SMC (#KEY).

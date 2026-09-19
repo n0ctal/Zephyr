@@ -30,7 +30,7 @@ final class Telemetry: ObservableObject {
     private let sensors: SensorReader?
     private let fanController: FanController?
     private let thermalMonitor = ThermalMonitor()
-    private let batteryReader = BatteryReader()
+    private let batteryReader: BatteryReader
     private let systemLoad = SystemLoad()
     private let throughput = NetworkThroughput()
     private var timer: Timer?
@@ -165,6 +165,10 @@ final class Telemetry: ObservableObject {
         let smc = try? SMC()
         sensors = smc.map { SensorReader(smc: $0) }
         fanController = smc.map { FanController(smc: $0) }
+        // The same connection, for the reason in this type's own note: the SMC
+        // is one serialised device and the battery was quietly opening a
+        // second line to it twice a second.
+        batteryReader = BatteryReader(smc: smc)
     }
 
     func start() {

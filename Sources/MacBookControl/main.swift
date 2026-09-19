@@ -560,10 +560,32 @@ func runTimingTest() {
         let sensors = SensorReader(smc: smc)
         let fans = FanController(smc: smc)
         time("SensorReader.readTemperatures") { _ = sensors.readTemperatures() }
+        // What every tick after the first one costs: the SMC is asked each
+        // key's size and type once and remembers the answers.
+        time("SensorReader.readTemperatures (again)") { _ = sensors.readTemperatures() }
         time("FanController.readFans") { _ = fans.readFans() }
+        time("FanController.readFans (again)") { _ = fans.readFans() }
     }
-    let battery = BatteryReader()
+    let battery = BatteryReader(smc: smc)
     time("BatteryReader.read") { _ = battery.read() }
+    // The same reading with and without a connection of its own. Opening one
+    // per reading is what this used to do, twice a second, for ever.
+    if let smc = smc {
+        func mean(_ reader: BatteryReader) -> Double {
+            _ = reader.read()   // warm
+            var total: TimeInterval = 0
+            for _ in 0 ..< 20 {
+                let start = Date()
+                _ = reader.read()
+                total += Date().timeIntervalSince(start)
+            }
+            return total / 20 * 1000
+        }
+        print(String(format: "  %6.1f ms  BatteryReader.read, shared connection (mean of 20)",
+                     mean(BatteryReader(smc: smc))))
+        print(String(format: "  %6.1f ms  BatteryReader.read, opening its own (mean of 20)",
+                     mean(BatteryReader())))
+    }
     let thermal = ThermalMonitor()
     time("ThermalMonitor.read") { _ = thermal.read() }
     let gpu = GPUController()
