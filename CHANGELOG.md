@@ -20,6 +20,13 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- Fixed a data race that has been in the shipped app: opening the settings
+  window reads the hardware on the main thread while a tick may already be
+  reading it on the telemetry queue. The readers are not stateless — the load
+  and network figures each hold the previous sample to subtract from — so what
+  is at stake is a corrupted array rather than a stale number. Both paths now
+  read on the one queue. `--test-telemetry-race`, run under the thread
+  sanitizer, reported it five times in four seconds before and none after.
 - The throttle reading asks the system for its dictionary once instead of
   once per field. Three fields meant three trips to configd on every tick,
   each opening a session of its own first: 0.4 ms became 0.1.

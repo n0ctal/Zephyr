@@ -294,6 +294,7 @@ real machine before it was written.
 | `--test-diagnostics` | SSD SMART, sleep assertions, wake and shutdown records, GPU clients |
 | `--test-profiles` | Evaluate every profile condition against the machine now |
 | `--test-timing`, `--time-phases` | Where the startup milliseconds go |
+| `--test-telemetry-race` | Drive the two paths that read the hardware into each other; build with `-Xswiftc -sanitize=thread` and let the sanitizer judge |
 | `--measure-sections` | The height of each settings section, menu bar expanded |
 | `--dump-window <path> [--dark\|--darkness]` | Render every layout offscreen to a contact sheet |
 | `--dump-real-window <path> [--layout=…] [--open-settings=…] [--strip=N]` | Photograph the real window, frame and buttons included |

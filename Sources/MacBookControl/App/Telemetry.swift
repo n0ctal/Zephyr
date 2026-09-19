@@ -230,15 +230,40 @@ final class Telemetry: ObservableObject {
     }
 
     /// Blocking read, for the one moment where a wrong answer is permanent.
+    ///
+    /// The reads themselves go on the queue like every other read, even though
+    /// the caller waits for them. This is reached from `retune()`, which a
+    /// window opening calls on the main thread while a tick may already be
+    /// reading — and the readers are not stateless. `SystemLoad` and
+    /// `NetworkThroughput` both hold the previous sample to subtract from, the
+    /// SMC is one connection with one table of key shapes behind it, and two
+    /// threads writing those is not a wrong number but a corrupted one.
+    /// Demonstrated with `--test-telemetry-race` under the thread sanitizer,
+    /// which reported it five times over four seconds before this.
+    ///
+    /// The wait is one tick's worth of reads, on a path that already accepts
+    /// about 45 ms of one.
     private func readNow() {
-        temperatures = sensors?.readTemperatures() ?? []
-        fans = fanController?.readFans() ?? []
-        battery = batteryReader.read()
-        load = systemLoad.read()
-        network = throughput.read()
-        let status = thermalMonitor.read()
-        thermal = status
-        stats.record(status, interval: Int(interval))
+        let reading = queue.sync { () -> (temperatures: [TemperatureReading],
+                                          fans: [FanReading],
+                                          battery: BatteryStatus?,
+                                          load: SystemLoad.Snapshot?,
+                                          network: NetworkThroughput.Snapshot?,
+                                          thermal: ThermalStatus) in
+            (self.sensors?.readTemperatures() ?? [],
+             self.fanController?.readFans() ?? [],
+             self.batteryReader.read(),
+             self.systemLoad.read(),
+             self.throughput.read(),
+             self.thermalMonitor.read())
+        }
+        temperatures = reading.temperatures
+        fans = reading.fans
+        battery = reading.battery
+        load = reading.load
+        network = reading.network
+        thermal = reading.thermal
+        stats.record(reading.thermal, interval: Int(interval))
     }
 
     private func refresh() {

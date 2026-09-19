@@ -67,6 +67,11 @@ if arguments.contains("--self-test") {
     exit(SelfTest.run())
 }
 
+if arguments.contains("--test-telemetry-race") {
+    runTelemetryRaceTest()
+    exit(0)
+}
+
 if arguments.contains("--test-timing") {
     runTimingTest()
     exit(0)
@@ -547,6 +552,31 @@ func runProfilesTest() {
 
 
 // MARK: - Where the time goes
+
+/// Drives the two paths that read the hardware into each other on purpose.
+///
+/// A window opening calls retune() on the main thread, which reads everything
+/// there and then; a tick is meanwhile reading the same devices on the
+/// telemetry queue. Build with `-Xswiftc -sanitize=thread` and run this: a
+/// clean run means the reads are serialised, and anything else means they are
+/// not. It is here rather than in the self-test because it proves nothing
+/// without the sanitizer.
+func runTelemetryRaceTest() {
+    let telemetry = Telemetry()
+    telemetry.start()
+    let deadline = Date().addingTimeInterval(4)
+    var rounds = 0
+    while Date() < deadline {
+        telemetry.isWindowOpen = true    // dispatches a read onto the queue
+        telemetry.stop()
+        telemetry.start()                // and reads again, here, on this thread
+        telemetry.isWindowOpen = false
+        rounds += 1
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+    }
+    telemetry.stop()
+    print("telemetry race probe: \(rounds) rounds; the verdict is the sanitizer's")
+}
 
 func runTimingTest() {
     func time(_ label: String, _ body: () -> Void) {
