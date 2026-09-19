@@ -153,7 +153,7 @@ final class SystemLoad {
             // "IntelAccelerator" — so the `model` property, which needs a
             // search up the parents and comes back as Data on this machine,
             // is not worth asking for.
-            best = (fraction, AcceleratorClients.isDiscrete(Registry.name(of: accelerator) ?? ""))
+            best = (fraction, AcceleratorClients.isDiscrete(Registry.name(of: accelerator)))
         }
         return best
     }

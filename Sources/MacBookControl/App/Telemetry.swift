@@ -177,6 +177,11 @@ final class Telemetry: ObservableObject {
         let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.refresh()
         }
+        // A fifth of the period, so the system can line this wake-up up with
+        // others. At the two-second floor that is 400 ms of slack, which no one
+        // watching a temperature can see, and with the window shut the period is
+        // the menu bar's and the slack grows with it.
+        timer.tolerance = interval / 5
         // Keep ticking while a menu is open or a slider is being dragged —
         // otherwise the readings freeze exactly when someone is looking.
         RunLoop.main.add(timer, forMode: .common)

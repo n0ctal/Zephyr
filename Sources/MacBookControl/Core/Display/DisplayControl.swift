@@ -364,6 +364,9 @@ final class DisplayControl {
             }
             self.rescueIfHeadless()
         }
+        // Let the system line this wake-up up with others; nothing here
+        // needs to land on the second.
+        timer.tolerance = 1
         RunLoop.main.add(timer, forMode: .common)
         headlessWatch = timer
     }

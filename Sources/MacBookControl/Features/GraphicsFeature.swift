@@ -63,6 +63,9 @@ final class GraphicsFeature: Feature {
         let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.reassertIfDrifted()
         }
+        // Let the system line this wake-up up with others; nothing here
+        // needs to land on the second.
+        timer.tolerance = 1
         RunLoop.main.add(timer, forMode: .common)
         watchdog = timer
     }

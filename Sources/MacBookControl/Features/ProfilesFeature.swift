@@ -68,6 +68,9 @@ final class ProfilesFeature: Feature {
         let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.evaluate()
         }
+        // Let the system line this wake-up up with others; nothing here
+        // needs to land on the second.
+        timer.tolerance = 2
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         evaluate()

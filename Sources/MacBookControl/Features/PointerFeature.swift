@@ -82,6 +82,9 @@ final class PointerFeature: Feature {
             self?.refreshDevices()
             self?.reapply()
         }
+        // Let the system line this wake-up up with others; nothing here
+        // needs to land on the second.
+        timer.tolerance = 2
         RunLoop.main.add(timer, forMode: .common)
         deviceWatch = timer
     }
