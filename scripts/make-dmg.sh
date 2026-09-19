@@ -21,6 +21,18 @@ cp -R "$APP" "$STAGE/"
 # folder someone has to know what to do with.
 ln -s /Applications "$STAGE/Applications"
 
+# Without a paid certificate the first launch is refused, and the person who
+# downloaded this has no way to know that is expected or what to do. The note
+# rides in the window next to the app, where it cannot be missed; the number
+# in the name keeps it first in the listing.
+NOTE_SRC="$PROJECT_DIR/Resources/first-run.txt"
+if [ -f "$NOTE_SRC" ]; then
+    textutil -convert rtf -font "SF Pro Text" -fontsize 13 \
+        -output "$STAGE/1 Read me first.rtf" "$NOTE_SRC"
+else
+    echo "    (no Resources/first-run.txt — packaging without the note)" >&2
+fi
+
 rm -f "$DMG"
 hdiutil create -volname "Zephyr $VERSION" -srcfolder "$STAGE" \
     -ov -format UDZO "$DMG" >/dev/null
@@ -28,6 +40,7 @@ hdiutil create -volname "Zephyr $VERSION" -srcfolder "$STAGE" \
 echo "==> $DMG"
 echo "    $(du -h "$DMG" | cut -f1)"
 echo
-echo "    Ad-hoc signed, so Gatekeeper will refuse it on first open:"
-echo "    right-click the app, Open, then Open again. Or:"
+echo "    Ad-hoc signed, so the first launch is refused on a machine with"
+echo "    Gatekeeper on. The image carries \"1 Read me first.rtf\" saying so."
+echo "    For yourself, the short way is still:"
 echo "      xattr -dr com.apple.quarantine /Applications/Zephyr.app"

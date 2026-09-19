@@ -1,0 +1,29 @@
+Zephyr
+
+To install
+
+1.  Drag Zephyr onto the Applications folder in this window.
+2.  Open it. macOS will refuse the first time, and say the developer
+    cannot be verified.
+3.  Open System Settings, go to Privacy & Security, scroll to the
+    bottom, and click "Open Anyway".
+4.  Open Zephyr again and confirm.
+
+That is once. From then on it opens like anything else.
+
+On macOS 14 and earlier, step 3 is shorter: right-click Zephyr in the
+Applications folder, choose Open, and confirm.
+
+Why this happens
+
+Zephyr is free and open source. Apple charges 99 US dollars a year for
+the certificate that makes this dialog go away, and it buys nothing
+else — the application is the same either way. The source is at
+github.com/n0ctal/Zephyr, and the build that made this disk image is
+reproducible from it.
+
+What it needs from the system
+
+Zephyr reads the sensors and controls the fans through a small helper
+that is installed on first use and asks for your password once. Nothing
+leaves the machine: there is no network code in the application at all.
