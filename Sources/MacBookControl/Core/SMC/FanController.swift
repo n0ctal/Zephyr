@@ -12,8 +12,7 @@ final class SensorReader {
     /// sensor that wakes up later — a discrete GPU, most often — starts being
     /// reported. Keeping only what was live at startup hid it for the whole
     /// life of the process. The cost is re-reading a handful of keys that may
-    /// never answer; on the machine this was written on that is two of
-    /// thirty-nine.
+    /// never answer; on the machine this was written on that is two of fifty.
     private(set) var temperatureKeys: [String] = []
 
     /// Plausible on-die temperature range in °C; filters unrelated T* keys.
