@@ -92,9 +92,9 @@ final class Telemetry: ObservableObject {
     /// What is worth reading on this tick.
     ///
     /// Every field here costs IOKit round trips, and the expensive one is the
-    /// sensor sweep: forty-eight keys on this machine, read one at a time.
-    /// With the window closed and a temperature in the menu bar, exactly one
-    /// of those forty-eight is wanted.
+    /// sensor sweep: fifty keys on this machine, read one at a time, of which
+    /// forty-eight answer. With the window closed and a temperature in the
+    /// menu bar, exactly one of them is wanted.
     struct Needs: Equatable {
         /// Everything, because a window is open and shows all of it — the
         /// sweep of every sensor for the pickers, and the accelerator's busy
@@ -286,8 +286,8 @@ final class Telemetry: ObservableObject {
                 temperatures = self.sensors?.readTemperatures() ?? []
             } else if needs.oneSensor || needs.cpuSensor {
                 // Both, when they are different keys — two reads out of
-                // forty-eight, and the alternative is the profile engine
-                // deciding on the wrong sensor.
+                // fifty, and the alternative is the profile engine deciding on
+                // the wrong sensor.
                 var wanted: [TemperatureReading] = []
                 if needs.oneSensor, let one = self.sensors?.temperature(forKey: sensorKey) {
                     wanted.append(one)
