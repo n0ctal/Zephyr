@@ -64,6 +64,20 @@ enum SensorLabels {
         "TCXC": "CPU PECI",
         "TCGC": "CPU GFX",
         "TCSA": "CPU System Agent",
+        // Per-core, one key per physical core: this i9 has eight and publishes
+        // TC1C through TC8C. A four-core machine simply has no TC5C, and an
+        // unknown key already falls back to itself, so listing all eight costs
+        // nothing there. TCMX tracked the hottest of them across repeated
+        // samples (0.0–0.4 °C apart), which is what the name suggests.
+        "TC1C": "CPU Core 1",
+        "TC2C": "CPU Core 2",
+        "TC3C": "CPU Core 3",
+        "TC4C": "CPU Core 4",
+        "TC5C": "CPU Core 5",
+        "TC6C": "CPU Core 6",
+        "TC7C": "CPU Core 7",
+        "TC8C": "CPU Core 8",
+        "TCMX": "CPU Hottest Core",
         "TG0P": "GPU",
         "TG1P": "GPU (TG1P)",
         "TGVP": "GPU VRAM",
