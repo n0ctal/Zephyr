@@ -624,6 +624,19 @@ func runTimingTest() {
         print(String(format: "  %6.1f ms  BatteryReader.read, opening its own (mean of 20)",
                      mean(BatteryReader())))
     }
+    // Asked from a view body, so SwiftUI pays it again on every redraw — and
+    // a redraw happens on every telemetry tick while the window is open.
+    do {
+        _ = BatteryLimit.isSupported()
+        var total: TimeInterval = 0
+        for _ in 0 ..< 20 {
+            let start = Date()
+            _ = BatteryLimit.isSupported()
+            total += Date().timeIntervalSince(start)
+        }
+        print(String(format: "  %6.2f ms  BatteryLimit.isSupported (mean of 20, answers %@)",
+                     total / 20 * 1000, BatteryLimit.isSupported() ? "yes" : "no"))
+    }
     let thermal = ThermalMonitor()
     // A mean rather than a single go: this one is never skipped, so it is paid
     // on every tick whatever the window is doing.

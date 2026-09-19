@@ -20,6 +20,11 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- Whether this Mac has a charge ceiling at all is worked out once instead of
+  on every redraw. The question is asked from a view body, and SwiftUI re-runs
+  those on every published change — so with the window open the answer was
+  being fetched by opening a connection to the SMC, reading a key and closing
+  it again, twice a second: 0.68 ms each time, now nothing.
 - CPU load refuses to answer when two samples land too close together, which
   is what happens when the window opens and reads out of turn. A tenth of a
   second of scheduler ticks is mostly rounding, and it came out as an idle

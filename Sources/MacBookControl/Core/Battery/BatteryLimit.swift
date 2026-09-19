@@ -26,10 +26,25 @@ enum BatteryLimit {
     /// Whether this Mac exposes the key at all. Apple silicon and some Intel
     /// models do not, and the feature must then stay hidden rather than
     /// silently do nothing.
+    ///
+    /// Remembered, because this is asked from a view body: SwiftUI re-runs
+    /// those on every published change, so with the settings window open the
+    /// question was being answered by opening a connection to the SMC, reading
+    /// a key and closing it again, on every telemetry tick. Whether the
+    /// machine has the key is not something that changes while it is running.
+    ///
+    /// Only an answer is kept. Failing to open the SMC at all is not an
+    /// answer, and caching it would hide the feature for the rest of the
+    /// session over one bad moment.
+    private static var known: Bool?
+
     static func isSupported() -> Bool {
+        if let known { return known }
         guard let smc = try? SMC() else { return false }
         defer { smc.close() }
-        return (try? smc.read(key)) != nil
+        let answer = (try? smc.read(key)) != nil
+        known = answer
+        return answer
     }
 
     /// Current limit in percent, or nil when unreadable.
