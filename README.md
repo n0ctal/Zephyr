@@ -182,6 +182,24 @@ the only thing that decides whether those features appear.
 
 ## Install & run
 
+### From the disk image
+
+Drag Zephyr onto Applications, then open it. macOS refuses the first launch
+and says the developer cannot be verified: the application is signed ad-hoc,
+because the certificate that removes that dialog costs 99 US dollars a year
+and buys nothing else. Open System Settings, go to Privacy & Security, scroll
+to the bottom and click "Open Anyway"; on macOS 14 and earlier, right-click
+the app in Applications and choose Open instead. That is once.
+
+Then install the helper, which is what makes the controls work rather than
+only the readings:
+
+```sh
+sudo /Applications/Zephyr.app/Contents/Resources/scripts/install-helper.sh
+```
+
+### From a build
+
 ```sh
 # 1. Install the privileged helper (one-time, asks for your password).
 #    Also installs the kext if you built it.
