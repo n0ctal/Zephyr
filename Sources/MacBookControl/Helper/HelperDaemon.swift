@@ -33,10 +33,6 @@ final class HelperService: NSObject, HelperProtocol {
     /// both chase the same number is why one of them is always either too loud
     /// or too late.
     private var curveFans: [Int: (curve: FanCurve, sensor: String)] = [:]
-    /// Which sensor the curves follow. One setting rather than one per fan:
-    /// two fans in the same machine cooling to two different opinions of "how
-    /// hot is it" is not a configuration anybody wants to reason about.
-
     /// The hottest-sensor reading, and when it was taken. Finding the hottest
     /// means reading every key, which is a few dozen SMC round trips — worth
     /// doing twice a second for a menu bar, not four times a second inside a
@@ -202,12 +198,20 @@ final class HelperService: NSObject, HelperProtocol {
     private func startControlLoopIfNeeded() {
         guard controlTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
+        // Half a second, give or take a twentieth of one. The loop holds fans
+        // against the firmware; it does not need to be woken on the dot, and
+        // leeway lets the system line this up with whatever else is waking.
+        timer.schedule(deadline: .now() + 0.5, repeating: 0.5, leeway: .milliseconds(50))
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             // A fixed target pins the fan against the firmware, which can no
             // longer raise it, so the hold needs a thermal ceiling of its own.
-            let tooHot = (self.sensors?.cpuTemperature()?.celsius ?? 0) >= kThermalReleaseCelsius
+            // Only a fixed target needs it: a curve raises the fan by itself.
+            // Asking anyway cost a round trip every tick of every curve, and
+            // on a machine with no usable CPU key it costs a sweep of every
+            // sensor there is.
+            let tooHot = !self.forcedTargets.isEmpty
+                && (self.sensors?.cpuTemperature()?.celsius ?? 0) >= kThermalReleaseCelsius
             for (fan, rpm) in self.forcedTargets {
                 if tooHot {
                     try? self.fans?.setAuto(fan: fan)

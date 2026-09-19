@@ -11,6 +11,15 @@ the bump travelled inside the change it released.
   Heat lags the work by a minute, and naming an application only covers the
   ones you thought of — "on mains, docked, and running something heavy" is
   what the tab is for and could not be said until now.
+- Cooling: the thermal ceiling that releases a pinned fan is only consulted
+  when a fan is actually pinned. A curve raises the fan by itself, so the
+  reading was bought and thrown away twice a second — and on a machine with no
+  usable CPU sensor key that reading is a sweep of every sensor there is.
+- The daemon's control loop lets the system choose the exact moment inside a
+  fiftieth of a second, so its wake-ups can be shared.
+- A comment described a setting that had been folded into another one and said
+  the opposite of what the code now does: that all fans follow one sensor.
+  They follow their own.
 - Cooling: the root daemon's control loop stopped doing the same work twice.
   It read each fan, then `setManual` read it again, then asked the SMC what
   byte layout the target key wants — every half-second, for as long as a fan
