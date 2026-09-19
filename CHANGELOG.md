@@ -5,6 +5,30 @@ that version number. Up to 1.9.43 and again from 1.9.50 the bump is a commit
 of its own named `Release X`, which is why some entries carry one; in between
 the bump travelled inside the change it released.
 
+## 1.9.57 — 2026-08-28
+- Build the release image with a script rather than by hand (`9176004`)
+
+## 1.9.56 — 2026-08-28
+- Display: screens with no cable behind them (`7e6b595`)
+
+## 1.9.55 — 2026-08-28
+- Pointer: tell the mice apart (`ffcb008`)
+
+## 1.9.54 — 2026-08-28
+- Cooling: read the clock the CPU is actually running at (`4c1d805`)
+
+## 1.9.53 — 2026-08-28
+- Cooling: show the temperature of the GPU that is doing the work (`9e89580`)
+
+## 1.9.52 — 2026-08-28
+- Cooling: fixed fan speeds in revolutions; Display: a poll rate for each screen (`647b1b4`)
+
+## 1.9.51 — 2026-08-28
+- Split Power into two tabs — Turbo Boost and Power limit (`9874cc0`)
+
+## 1.9.50 — 2026-08-28
+- Bring the repository up to what the application became (`7e860d4`)
+
 ## 1.9.49 — 2026-08-28
 - Display: font smoothing, which Big Sur stopped showing (`35895ff`)
 
