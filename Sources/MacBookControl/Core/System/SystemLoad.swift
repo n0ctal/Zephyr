@@ -68,6 +68,13 @@ final class SystemLoad {
         return value
     }()
 
+    /// Whether two samples are far enough apart to divide one by the other,
+    /// and near enough for the answer to describe now. Separate from the read
+    /// so both bounds can be stated rather than inferred.
+    static func isUsableGap(_ seconds: TimeInterval) -> Bool {
+        seconds > 0.2 && seconds < 20
+    }
+
     /// `includeGPU` is off by default because finding the accelerator's busy
     /// fraction means walking the I/O registry, which is the most expensive
     /// thing in here — and nothing shows it unless the window is open.
@@ -82,9 +89,12 @@ final class SystemLoad {
         // First call has nothing to subtract from. Reporting zero would be a
         // lie that looks like an idle machine; nil says "not yet".
         guard previousTicks.count == ticks.count else { return nil }
-        // Nor does a gap: this becomes the first call again, and the next tick
-        // two seconds later is a real reading.
-        guard let elapsed = elapsed, elapsed < 20 else { return nil }
+        // Nor a gap, nor a reading taken moments after the last one. A window
+        // opening reads out of turn, and a tenth of a second of scheduler
+        // ticks is mostly rounding: it came out as an idle machine or a pegged
+        // one, for one refresh, exactly when somebody had just looked. The
+        // network reader has held the same lower bound all along.
+        guard let elapsed = elapsed, SystemLoad.isUsableGap(elapsed) else { return nil }
 
         var perCore: [Double] = []
         perCore.reserveCapacity(ticks.count)

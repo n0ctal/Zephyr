@@ -514,8 +514,14 @@ func runKeyboardTest(write: Bool) {
 func runProfilesTest() {
     let telemetry = Telemetry()
     telemetry.start()
-    // One tick so the battery and temperature have been read at least once.
-    RunLoop.current.run(until: Date().addingTimeInterval(2.5))
+    // As if a window were open, so everything is read. With it shut, telemetry
+    // reads only what the menu bar and the enabled profiles ask for — and this
+    // probe has neither, which left the CPU load unknown and the condition
+    // that depends on it untestable here.
+    telemetry.isWindowOpen = true
+    // Two ticks: the load and the network speed are rates, and the first
+    // reading of a rate has nothing to subtract from.
+    RunLoop.current.run(until: Date().addingTimeInterval(4.5))
     let context = Context.sample(telemetry: telemetry)
     print("context now:")
     print("  on external power: \(context.onExternalPower)")
@@ -530,12 +536,14 @@ func runProfilesTest() {
     print("  wi-fi: \(context.wifiSSID ?? "unknown (needs Location permission)")")
     print("  clock: \(Condition.clock(context.minutesSinceMidnight))")
     print("  cpu: \(context.cpuCelsius.map { String(format: "%.0f °C", $0) } ?? "unknown")")
+    print("  cpu load: \(context.cpuLoadPercent.map { String(format: "%.0f %%", $0) } ?? "unknown")")
     print("  apps running: \(context.runningApps.count)")
 
     let samples: [Condition] = [
         .onExternalPower(true), .onExternalPower(false),
         .batteryBelow(30), .externalDisplayAttached(true), .externalDisplayAttached(false),
         .cpuHotterThan(50), .cpuHotterThan(95),
+        .cpuLoadAbove(20), .cpuLoadAbove(90),
         .timeBetween(startMinutes: 0, endMinutes: 24 * 60 - 1),
         .appRunning("Finder"), .appRunning("NoSuchApplication"),
     ]

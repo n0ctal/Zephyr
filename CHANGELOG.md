@@ -20,6 +20,17 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- CPU load refuses to answer when two samples land too close together, which
+  is what happens when the window opens and reads out of turn. A tenth of a
+  second of scheduler ticks is mostly rounding, and it came out as an idle
+  machine or a pegged one for one refresh — exactly when somebody had just
+  looked. The network reader has held the same bound all along.
+- That out-of-turn read no longer blanks a field whose reader declined to
+  answer. The ordinary tick has always left the last number in place; this
+  path, reached every time the window opens, overwrote it with nothing.
+- `--test-profiles` reads everything, as if a window were open, and waits for
+  two ticks. It claims to try every condition against the machine, and the one
+  about CPU load had nothing to try itself against.
 - "Held back for" counted the time it expected to pass rather than the time
   that did. Every reading credited a whole poll interval, including the
   readings taken out of turn when the window opens — twenty-one of those

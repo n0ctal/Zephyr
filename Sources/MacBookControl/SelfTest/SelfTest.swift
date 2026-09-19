@@ -64,6 +64,7 @@ enum SelfTest {
         sensorDiscovery()
         fanTargetSkipping()
         throttleAccounting()
+        loadSampleGap()
         cpuLoadCondition()
         sleepAssertionWording()
 
@@ -399,6 +400,19 @@ enum SelfTest {
                "and not for the temperature it is not about")
         expectEqual(Condition.cpuLoadAbove(60).label, "CPU load above 60 %",
                     "the rule reads as a sentence")
+    }
+
+    private static func loadSampleGap() {
+        expect(SystemLoad.isUsableGap(2), "the ordinary tick is a usable gap")
+        expect(SystemLoad.isUsableGap(0.5), "half a second still says something")
+        expect(!SystemLoad.isUsableGap(0.05),
+               "a reading taken moments after the last one is mostly rounding")
+        expect(!SystemLoad.isUsableGap(0), "and one taken at the same instant is nothing at all")
+        expect(!SystemLoad.isUsableGap(8 * 3600),
+               "a night asleep describes the night, not now")
+        // The lower bound is the one the network reader has always used; they
+        // divide by the same kind of gap and should refuse the same ones.
+        expect(!SystemLoad.isUsableGap(0.2), "the bound itself is excluded, as it is there")
     }
 
     private static func throttleAccounting() {

@@ -259,9 +259,14 @@ final class Telemetry: ObservableObject {
         }
         temperatures = reading.temperatures
         fans = reading.fans
-        battery = reading.battery
-        load = reading.load
-        network = reading.network
+        // Only when there is one, for the reason the tick gives: a reader that
+        // declines to answer — the network's across a sleep, the load's when
+        // two samples land too close together — must not blank a field that
+        // has a real number in it. This path is reached every time the window
+        // opens, which is exactly when somebody is looking at that field.
+        if let battery = reading.battery { self.battery = battery }
+        if let load = reading.load { self.load = load }
+        if let network = reading.network { self.network = network }
         thermal = reading.thermal
         stats.record(reading.thermal, interval: Int(interval))
     }
