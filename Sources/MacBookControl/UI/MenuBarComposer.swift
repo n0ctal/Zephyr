@@ -176,7 +176,12 @@ enum MenuBarComposer {
             // it does not wake the card the way asking Metal would.
             case .graphics: break
             case .fan: needs.fans = true
-            case .battery, .power: needs.battery = true
+            case .battery: needs.battery = true
+            // The only field that wants the two SMC power registers; the
+            // battery's own flow is worked out from the registry.
+            case .power:
+                needs.battery = true
+                needs.supplyWatts = true
             // The thermal reading is taken every tick regardless, because the
             // session's throttle history is documented to cover the time
             // nobody was looking.
@@ -214,14 +219,22 @@ enum MenuBarComposer {
         var signature: String = ""
     }
 
-    /// A piece of the line: either text or a drawing.
-    private enum Segment {
+    /// A piece of the line: either text, or a drawing that has not been made
+    /// yet.
+    fileprivate enum Segment {
         /// A colour of its own, for the one field that has something to say.
         case text(String, NSColor? = nil)
-        /// The key says what the drawing was made from. Two drawings with one
-        /// key are the same pixels, which is what lets the signature above be
-        /// built without looking at them.
-        case drawing(NSImage, key: String)
+        /// The key says what the drawing *would* be made from, and the maker
+        /// is not called until something has decided the line is worth
+        /// drawing. Two drawings with one key are the same pixels, which is
+        /// what lets a line be compared without being painted.
+        case drawing(key: String, make: () -> NSImage?)
+    }
+
+    /// A piece with its drawing made.
+    private enum Drawn {
+        case text(String, NSColor?)
+        case image(NSImage)
     }
 
     /// The whole status item is drawn as one image.
@@ -248,14 +261,81 @@ enum MenuBarComposer {
         return discreteBusy.value
     }
 
-    static func compose(telemetry: Telemetry, darkMenuBar: Bool) -> Content {
-        var segments: [Segment] = []
+    /// What the line will be, before a pixel of it is drawn.
+    ///
+    /// The status item is refreshed on a timer and most of those refreshes
+    /// change nothing — a temperature that has not moved, a battery that ticks
+    /// once every few minutes. Drawing first and comparing afterwards meant
+    /// every one of those ticks paid for an offscreen bitmap that was then
+    /// thrown away; a sample of the idle app found the *whole* of its
+    /// main-thread work inside that discarded drawing. So the values come
+    /// first, the signature is built from them, and the drawing happens only
+    /// when the caller says the signature is new.
+    struct Plan {
+        /// Grouped by the field that produced them, because a field is what
+        /// succeeds or fails as a whole: a drawing that cannot be made takes
+        /// its caption and its number with it, which is what the old code did
+        /// by returning an empty list before anything was built.
+        fileprivate var fields: [[Segment]]
+        fileprivate var darkMenuBar: Bool
+        /// What the line would be drawn from, as a string. Empty means there
+        /// is nothing to show; a real line always names its appearance first,
+        /// so the two can never collide.
+        var signature: String
+    }
+
+    static func plan(telemetry: Telemetry, darkMenuBar: Bool) -> Plan {
+        var fields: [[Segment]] = []
         for item in Preferences.menuBarItems {
-            segments.append(contentsOf: render(item, telemetry: telemetry, darkMenuBar: darkMenuBar))
+            let pieces = render(item, telemetry: telemetry, darkMenuBar: darkMenuBar)
+            if !pieces.isEmpty { fields.append(pieces) }
         }
-        guard !segments.isEmpty else { return Content(image: nil, title: "Zephyr") }
-        return Content(image: layout(segments, darkMenuBar: darkMenuBar), title: "",
-                       signature: signature(of: segments, darkMenuBar: darkMenuBar))
+        return Plan(fields: fields, darkMenuBar: darkMenuBar,
+                    signature: fields.isEmpty ? ""
+                        : signature(of: fields.flatMap { $0 }, darkMenuBar: darkMenuBar))
+    }
+
+    /// Makes the drawings and lays them out. The expensive half.
+    static func draw(_ plan: Plan) -> Content {
+        let drawn = plan.fields.compactMap(materialise).flatMap { $0 }
+        guard !drawn.isEmpty else { return Content(image: nil, title: "Zephyr") }
+        return Content(image: layout(drawn, darkMenuBar: plan.darkMenuBar), title: "",
+                       signature: plan.signature)
+    }
+
+    /// How many drawings have been made since the process started.
+    ///
+    /// Diagnostic, and the only way from outside to tell a planned line from a
+    /// drawn one: the point of planning separately is that an unchanged line
+    /// makes none, and that is invisible in the picture because there is no
+    /// picture. The self-test watches this.
+    private(set) static var drawingsMade = 0
+
+    /// Makes one field's drawings, or nothing at all.
+    ///
+    /// Nil when a maker declines: a field is all or nothing, so a battery icon
+    /// that cannot be drawn takes its caption and its percentage with it. A
+    /// `break` inside the switch would have left them behind — it ends the
+    /// switch, not the loop — which is why this is its own function.
+    private static func materialise(_ field: [Segment]) -> [Drawn]? {
+        var pieces: [Drawn] = []
+        for segment in field {
+            switch segment {
+            case .text(let value, let colour):
+                pieces.append(.text(value, colour))
+            case .drawing(_, let make):
+                guard let image = make() else { return nil }
+                drawingsMade += 1
+                pieces.append(.image(image))
+            }
+        }
+        return pieces
+    }
+
+    /// Both halves at once, for the callers that always want the picture: the
+    /// settings preview, the icon dump and the timing harness.
+    static func compose(telemetry: Telemetry, darkMenuBar: Bool) -> Content {
+        draw(plan(telemetry: telemetry, darkMenuBar: darkMenuBar))
     }
 
     /// What the line is made of, as a string. Cheap: a few short pieces joined.
@@ -265,7 +345,7 @@ enum MenuBarComposer {
             switch segment {
             case .text(let value, let colour):
                 parts.append("t:" + value + (colour.map { ":\($0.hashValue)" } ?? ""))
-            case .drawing(_, let key):
+            case .drawing(let key, _):
                 parts.append(key)
             }
         }
@@ -305,21 +385,23 @@ enum MenuBarComposer {
             case .percent:
                 return text("\(battery.percent)%")
             case .icon:
-                guard let icon = batteryImage(battery, darkMenuBar: darkMenuBar) else { return [] }
                 let key = batteryKey(battery, showingPercentage: false, darkMenuBar: darkMenuBar)
-                return caption.isEmpty ? [.drawing(icon, key: key)]
-                    : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(icon, key: key)]
+                let icon = Segment.drawing(key: key) {
+                    batteryImage(battery, darkMenuBar: darkMenuBar)
+                }
+                return caption.isEmpty ? [icon]
+                    : [.text(caption.trimmingCharacters(in: .whitespaces)), icon]
             case .iconAndPercent:
                 // The iPhone puts the number inside the battery; every other
                 // icon needs it written beside. Printing both would be the
                 // obvious bug.
                 let inside = Preferences.batteryIcon == .iOS
-                guard let icon = batteryImage(battery, showingPercentage: inside,
-                                              darkMenuBar: darkMenuBar) else { return [] }
                 var pieces: [Segment] = []
                 if !caption.isEmpty { pieces.append(.text(caption.trimmingCharacters(in: .whitespaces))) }
-                pieces.append(.drawing(icon, key: batteryKey(battery, showingPercentage: inside,
-                                                              darkMenuBar: darkMenuBar)))
+                pieces.append(.drawing(key: batteryKey(battery, showingPercentage: inside,
+                                                       darkMenuBar: darkMenuBar)) {
+                    batteryImage(battery, showingPercentage: inside, darkMenuBar: darkMenuBar)
+                })
                 if !inside { pieces.append(.text("\(battery.percent) %")) }
                 return pieces
             }
@@ -368,13 +450,16 @@ enum MenuBarComposer {
             case .off: return []
             case .total: return text("\(Int((load.total * 100).rounded()))%")
             case .perThread:
-                guard let bars = threadBars(load.perCore, darkMenuBar: darkMenuBar) else { return [] }
                 // The bars are quantised to whole pixels, so the key is too:
                 // a core wandering between 41.2 % and 41.4 % draws the same
                 // bar and must not count as a change.
-                let key = "bars:" + load.perCore.map { String(Int(($0 * 100).rounded())) }.joined(separator: ",")
-                return caption.isEmpty ? [.drawing(bars, key: key)]
-                    : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(bars, key: key)]
+                let cores = load.perCore
+                let key = "bars:" + cores.map { String(Int(($0 * 100).rounded())) }.joined(separator: ",")
+                let bars = Segment.drawing(key: key) {
+                    threadBars(cores, darkMenuBar: darkMenuBar)
+                }
+                return caption.isEmpty ? [bars]
+                    : [.text(caption.trimmingCharacters(in: .whitespaces)), bars]
             }
 
         case .memory:
@@ -418,7 +503,7 @@ enum MenuBarComposer {
     /// The percent sign sits against its number — "99%", not "99 %". The space
     /// is correct typography and wrong here: six fields each pay for it, and
     /// the menu bar is the one place on the screen with no room to give.
-    private static func layout(_ segments: [Segment], darkMenuBar: Bool) -> NSImage {
+    private static func layout(_ pieces: [Drawn], darkMenuBar: Bool) -> NSImage {
         let height = Height.strip
         let gap: CGFloat = 7
         // Monospaced digits so a changing number does not shove everything
@@ -428,28 +513,28 @@ enum MenuBarComposer {
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colour]
 
         var widths: [CGFloat] = []
-        for segment in segments {
-            switch segment {
+        for piece in pieces {
+            switch piece {
             case .text(let value, _):
                 widths.append((value as NSString).size(withAttributes: attributes).width)
-            case .drawing(let image, _):
+            case .image(let image):
                 widths.append(image.size.width)
             }
         }
-        let total = widths.reduce(0, +) + gap * CGFloat(max(0, segments.count - 1))
+        let total = widths.reduce(0, +) + gap * CGFloat(max(0, pieces.count - 1))
 
         let canvas = NSImage(size: NSSize(width: max(1, total), height: height))
         canvas.lockFocus()
         var x: CGFloat = 0
-        for (index, segment) in segments.enumerated() {
-            switch segment {
+        for (index, piece) in pieces.enumerated() {
+            switch piece {
             case .text(let value, let tint):
                 var own = attributes
                 if let tint = tint { own[.foregroundColor] = tint }
                 let size = (value as NSString).size(withAttributes: own)
                 (value as NSString).draw(at: NSPoint(x: x, y: (height - size.height) / 2),
                                          withAttributes: own)
-            case .drawing(let image, _):
+            case .image(let image):
                 image.draw(in: NSRect(x: x, y: (height - image.size.height) / 2,
                                       width: image.size.width, height: image.size.height),
                            from: .zero, operation: .sourceOver, fraction: 1)

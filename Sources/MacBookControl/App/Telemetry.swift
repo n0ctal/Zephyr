@@ -113,11 +113,21 @@ final class Telemetry: ObservableObject {
         var cpuSensor = false
         var fans = false
         var battery = false
+        /// The two SMC registers behind the power readout — what the system is
+        /// drawing and what the adapter is supplying.
+        ///
+        /// Apart from `battery` because they are the expensive half of it. The
+        /// charge, the health and the flow all come out of one registry fetch;
+        /// these are two SMC round trips at about 350 us each, which on this
+        /// machine was most of what an idle tick cost while the field that
+        /// shows them was switched off.
+        var supplyWatts = false
         var load = false
         var network = false
 
         static let everything = Needs(full: true, oneSensor: true, cpuSensor: true,
-                                      fans: true, battery: true, load: true, network: true)
+                                      fans: true, battery: true, supplyWatts: true,
+                                      load: true, network: true)
 
         func union(_ other: Needs) -> Needs {
             Needs(full: full || other.full,
@@ -125,6 +135,7 @@ final class Telemetry: ObservableObject {
                   cpuSensor: cpuSensor || other.cpuSensor,
                   fans: fans || other.fans,
                   battery: battery || other.battery,
+                  supplyWatts: supplyWatts || other.supplyWatts,
                   load: load || other.load,
                   network: network || other.network)
         }
@@ -134,6 +145,16 @@ final class Telemetry: ObservableObject {
             items.reduce(Needs()) { $0.union($1.telemetryNeeds) }
         }
     }
+
+    /// Called on the main thread after a reading has been published, and only
+    /// then.
+    ///
+    /// The menu bar used to keep a repeating timer of its own, at the same
+    /// rate as this one: two wake-ups a second to show one line, and the
+    /// second of them could only ever redraw what the first had just read.
+    /// There is nothing to redraw that a reading did not change, so the
+    /// reading says when.
+    var didPublish: () -> Void = {}
 
     /// What the enabled features need whether or not anything is displaying
     /// it — set by whoever builds the registry, since telemetry has no
@@ -356,6 +377,7 @@ final class Telemetry: ObservableObject {
         thermal = reading.thermal
         stats.record(reading.thermal, interval: interval,
                      longestGap: interval * (1 + Telemetry.timerToleranceFraction))
+        didPublish()
     }
 
     private func refresh() {
@@ -400,7 +422,8 @@ final class Telemetry: ObservableObject {
                 temperatures = wanted.isEmpty ? nil : wanted
             }
             let fans = needs.fans ? (self.fanController?.readFans() ?? []) : nil
-            let battery = needs.battery ? self.batteryReader.read() : nil
+            let battery = needs.battery
+                ? self.batteryReader.read(includingSupply: needs.supplyWatts) : nil
             let load = needs.load ? self.systemLoad.read(includeGPU: needs.full) : nil
             let network = needs.network ? self.throughput.read() : nil
             // Never skipped. It is one dictionary from the power-management

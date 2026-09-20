@@ -109,13 +109,26 @@ enum Preferences {
         get { MenuBarComposer.BatteryStyle(rawValue: d.string(forKey: "menubar.batteryStyle") ?? "") ?? .off }
         set { d.set(newValue.rawValue, forKey: "menubar.batteryStyle") }
     }
+    /// Decoded once per distinct stored value.
+    ///
+    /// This is the list the menu bar is built from, so it is read on every
+    /// tick for the life of the process, and allocating a `JSONDecoder` and
+    /// running it that often was the largest thing left on the idle path once
+    /// the drawing had been made conditional. Keyed on the stored bytes rather
+    /// than emptied by hand: a cache that cannot go stale asks nothing of
+    /// whoever adds the next writer, including one in another process.
+    private static var decodedMenuBarItems: (data: Data, items: [MenuBarComposer.Item])?
+
     /// Which fields the status item shows, in the order they appear. A list
     /// rather than a set of switches, because the order is the user's.
     static var menuBarItems: [MenuBarComposer.Item] {
         get {
-            if let data = d.data(forKey: "menubar.items"),
-               let decoded = try? JSONDecoder().decode([MenuBarComposer.Item].self, from: data) {
-                return decoded
+            if let data = d.data(forKey: "menubar.items") {
+                if let cached = decodedMenuBarItems, cached.data == data { return cached.items }
+                if let decoded = try? JSONDecoder().decode([MenuBarComposer.Item].self, from: data) {
+                    decodedMenuBarItems = (data, decoded)
+                    return decoded
+                }
             }
             // Carried forward from the era of individual switches, so an
             // upgrade shows the same things in a sensible order.

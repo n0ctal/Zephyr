@@ -18,12 +18,60 @@ final class BatteryReader {
     /// battery the most expensive thing in it, above the sensor sweep.
     private let smc: SMC?
 
+    /// The registry entry for the battery, kept rather than matched again.
+    ///
+    /// The node does not come and go on a laptop, and finding it costs a
+    /// matching dictionary and a registry search on every tick. A read that
+    /// fails releases it, so a machine that does somehow lose the node picks
+    /// it up again on the next tick instead of never.
+    private var service: io_service_t = 0
+
+    /// Everything the reading below looks at, and nothing else.
+    ///
+    /// The node carries fifty-one properties, nine of them nested structures —
+    /// the IOReport legend, the telemetry blob, the adapter's details — and
+    /// asking for all of them cost 317 us per tick against 110 for these. The
+    /// serialising of the blobs is the whole difference.
+    ///
+    /// A key used by the parsing but missing from this list reads as nil, not
+    /// as wrong, which is invisible. `readWholeNode()` exists so the self-test
+    /// can compare the two and fail when they disagree.
+    private static let wantedKeys = [
+        "CurrentCapacity", "MaxCapacity", "IsCharging", "ExternalConnected", "CycleCount",
+        "AppleRawMaxCapacity", "DesignCapacity", "Temperature", "Amperage", "Voltage",
+        "TimeRemaining", "AvgTimeToEmpty", "InstantTimeToEmpty", "AppleRawCurrentCapacity",
+    ]
+
     init(smc: SMC? = nil) {
         self.smc = smc
     }
 
-    func read() -> BatteryStatus? {
+    deinit {
+        if service != 0 { IOObjectRelease(service) }
+    }
+
+    /// `includingSupply` false leaves out what the system is drawing and what
+    /// the adapter is supplying, which is two SMC round trips and most of the
+    /// cost of a reading. The battery's own flow stays: it is worked out from
+    /// the registry properties that have already been fetched.
+    func read(includingSupply: Bool = true) -> BatteryStatus? {
         guard let props = smartBatteryProperties() else { return nil }
+        return status(from: props, includingSupply: includingSupply)
+    }
+
+    /// The same reading, taken by fetching every property of the node.
+    ///
+    /// Only the self-test calls this: it is the slow way, kept so the fast way
+    /// can be checked against it.
+    func readWholeNode() -> BatteryStatus? {
+        guard let node = batteryService() else { return nil }
+        var raw: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(node, &raw, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+              let props = raw?.takeRetainedValue() as? [String: Any] else { return nil }
+        return status(from: props, includingSupply: true)
+    }
+
+    private func status(from props: [String: Any], includingSupply: Bool) -> BatteryStatus? {
 
         let current = props["CurrentCapacity"] as? Int ?? 0
         let max = props["MaxCapacity"] as? Int ?? 0
@@ -45,7 +93,7 @@ final class BatteryReader {
             // moment. Tenths of a kelvin puts 3002 at 27.05 °C, which is what
             // the sensors beside it say.
             celsius: (props["Temperature"] as? Int).map { Double($0) / 10 - 273.15 },
-            power: power(batteryWatts: batteryWatts(props)),
+            power: power(batteryWatts: batteryWatts(props), includingSupply: includingSupply),
             minutesRemaining: minutesRemaining(props)
         )
     }
@@ -108,7 +156,11 @@ final class BatteryReader {
         return Int((Double(full - charge) / current) * 60)
     }
 
-    private func power(batteryWatts: Double?) -> PowerDraw? {
+    private func power(batteryWatts: Double?, includingSupply: Bool) -> PowerDraw? {
+        guard includingSupply else {
+            guard let batteryWatts = batteryWatts else { return nil }
+            return PowerDraw(systemWatts: nil, adapterWatts: nil, batteryWatts: batteryWatts)
+        }
         if let shared = smc { return power(batteryWatts: batteryWatts, through: shared) }
         // Nobody handed us one — a command-line probe, or a caller that has no
         // telemetry behind it. Open one for the reading and give it back.
@@ -125,13 +177,33 @@ final class BatteryReader {
     }
 
     /// AppleSmartBattery carries the numbers IOPowerSources rounds away.
+    ///
+    /// Asked for by name: see `wantedKeys` for why the whole node is not.
     private func smartBatteryProperties() -> [String: Any]? {
-        let service = IOServiceGetMatchingService(0, IOServiceMatching("AppleSmartBattery"))
-        guard service != 0 else { return nil }
-        defer { IOObjectRelease(service) }
-        var raw: Unmanaged<CFMutableDictionary>?
-        guard IORegistryEntryCreateCFProperties(service, &raw, kCFAllocatorDefault, 0) == KERN_SUCCESS
-        else { return nil }
-        return raw?.takeRetainedValue() as? [String: Any]
+        guard let node = batteryService() else { return nil }
+        var props: [String: Any] = [:]
+        props.reserveCapacity(Self.wantedKeys.count)
+        for key in Self.wantedKeys {
+            guard let value = IORegistryEntryCreateCFProperty(node, key as CFString,
+                                                              kCFAllocatorDefault, 0)
+            else { continue }
+            props[key] = value.takeRetainedValue()
+        }
+        // An empty answer means the node went away under us rather than that
+        // the battery has nothing to say, so let the next tick find it again.
+        guard !props.isEmpty else {
+            IOObjectRelease(node)
+            service = 0
+            return nil
+        }
+        return props
+    }
+
+    private func batteryService() -> io_service_t? {
+        if service != 0 { return service }
+        let found = IOServiceGetMatchingService(0, IOServiceMatching("AppleSmartBattery"))
+        guard found != 0 else { return nil }
+        service = found
+        return found
     }
 }

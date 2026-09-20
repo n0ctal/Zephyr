@@ -18,7 +18,6 @@ final class AppController: NSObject, NSMenuDelegate {
     private let settingsWindow = SettingsWindowController()
     private let registry: FeatureRegistry
 
-    private var refreshTimer: Timer?
     private var previewWindow: NSWindow?
     private var helperState: HelperState = .notInstalled
 
@@ -71,31 +70,32 @@ final class AppController: NSObject, NSMenuDelegate {
         return Date()
     }
 
-    /// The menu bar redraws on its own schedule, separate from the window's.
+    /// When the line was last redrawn.
     ///
-    /// Rebuilt rather than reconfigured because a Timer's interval cannot be
-    /// changed after it is scheduled.
-    func startStatusTimer() {
-        refreshTimer?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: Preferences.menuBarPollSeconds,
-                                         repeats: true) { [weak self] _ in
-            self?.updateStatusTitle()
-        }
-        // A fifth of the period, like every other repeating timer here. This
-        // one is the most frequent and it never stops, so without it the
-        // machine was still woken on the dot twice a second and the slack
-        // given to the telemetry timer only coalesced onto this one — which is
-        // to say it bought nothing at the settings everybody runs.
-        timer.tolerance = Preferences.menuBarPollSeconds * Telemetry.timerToleranceFraction
-        RunLoop.main.add(timer, forMode: .common)
-        refreshTimer = timer
+    /// The menu bar has no timer of its own any more — it is redrawn when a
+    /// reading is published, because a reading is the only thing that can
+    /// change it. What that loses is the rate the user set for the menu bar
+    /// separately, since an open window makes telemetry run at the window's
+    /// rate, which may be the faster of the two. This puts it back.
+    private var lastStatusDraw = Date.distantPast
+
+    private func statusTick() {
+        // A shade under the period rather than the period itself: a repeating
+        // timer with tolerance lands inside a window, not on the dot, and a
+        // reading a millisecond early would otherwise skip a whole turn and
+        // halve the rate.
+        let period = Preferences.menuBarPollSeconds
+        guard Date().timeIntervalSince(lastStatusDraw)
+                >= period * (1 - Telemetry.timerToleranceFraction) else { return }
+        lastStatusDraw = Date()
+        updateStatusTitle()
     }
 
     private func configure() {
         SettingsWindowController.pollingDidChange = { [weak self] in
             self?.telemetry.retune()
-            self?.startStatusTimer()
         }
+        telemetry.didPublish = { [weak self] in self?.statusTick() }
         var t = Date()
         Preferences.migrateLegacyKeys()
         AppearanceControl.apply()
@@ -116,7 +116,6 @@ final class AppController: NSObject, NSMenuDelegate {
 
         updateStatusTitle()
         t = phase("updateStatusTitle", t)
-        startStatusTimer()
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -163,15 +162,18 @@ final class AppController: NSObject, NSMenuDelegate {
         let dark = statusItem.button.map {
             $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         } ?? true
-        let content = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: dark)
-        // Handing the button a fresh image marks the status item for redraw
-        // whether or not a single pixel differs, and this runs twice a second
-        // for as long as the app is open. Most of those ticks change nothing:
-        // a temperature that has not moved, a battery that ticks once every
-        // few minutes. The signature says what the line was drawn from, so an
-        // unchanged one is left entirely alone.
-        guard content.signature != lastLineDrawn else { return }
-        lastLineDrawn = content.signature
+        // Nothing is drawn yet. Handing the button a fresh image marks the
+        // status item for redraw whether or not a single pixel differs, and
+        // this runs twice a second for as long as the app is open — but most
+        // of those ticks change nothing: a temperature that has not moved, a
+        // battery that ticks once every few minutes. The plan says what the
+        // line *would* be drawn from, so an unchanged one costs no drawing at
+        // all, which is where the whole of the idle app's main-thread time was
+        // going when the picture was made first and compared afterwards.
+        let plan = MenuBarComposer.plan(telemetry: telemetry, darkMenuBar: dark)
+        guard plan.signature != lastLineDrawn else { return }
+        lastLineDrawn = plan.signature
+        let content = MenuBarComposer.draw(plan)
         statusItem.button?.image = content.image
         statusItem.button?.imagePosition = content.image == nil ? .noImage
             : (content.title.isEmpty ? .imageOnly : .imageLeading)

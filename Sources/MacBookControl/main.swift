@@ -714,22 +714,31 @@ func runTimingTest() {
     // The other half of a tick. Reading the machine is only part of what
     // happens every two seconds; the menu bar is redrawn as one image, and an
     // idle cost that is not in this list is a cost nobody will find.
-    print("\nand what the menu bar costs to draw, per tick:")
+    print("\nand what the menu bar costs, per tick:")
     let telemetry = Telemetry()
     telemetry.start()
     // Warm: the first draw pays for fonts and colour spaces, which happens
     // once at launch and would otherwise be reported as the per-tick price.
     _ = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: true)
-    var total: TimeInterval = 0
-    let runs = 20
-    for _ in 0..<runs {
-        let start = Date()
-        _ = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: true)
-        total += Date().timeIntervalSince(start)
+
+    /// Microseconds, because the interesting half is now well under a
+    /// millisecond and a figure that reads "0.0 ms" hides whether the work
+    /// went away or merely got smaller.
+    func micros(_ runs: Int, _ body: () -> Void) -> Double {
+        let start = DispatchTime.now().uptimeNanoseconds
+        for _ in 0..<runs { body() }
+        return Double(DispatchTime.now().uptimeNanoseconds - start) / Double(runs) / 1000
     }
+    let runs = 200
+    let planning = micros(runs) { _ = MenuBarComposer.plan(telemetry: telemetry, darkMenuBar: true) }
+    let plan = MenuBarComposer.plan(telemetry: telemetry, darkMenuBar: true)
+    let drawing = micros(runs) { _ = MenuBarComposer.draw(plan) }
     telemetry.stop()
-    print(String(format: "  %6.1f ms  MenuBarComposer.compose (mean of %d)",
-                 total / Double(runs) * 1000, runs))
+    // The two are not halves of one number: planning happens on every tick and
+    // drawing only when the plan says the line has changed, which on an idle
+    // machine is a small fraction of them.
+    print(String(format: "  %6.1f us  MenuBarComposer.plan  (every tick, mean of %d)", planning, runs))
+    print(String(format: "  %6.1f us  MenuBarComposer.draw  (only when it changed)", drawing))
 }
 
 

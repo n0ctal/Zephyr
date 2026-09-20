@@ -50,6 +50,9 @@ enum SelfTest {
         displaySafety()
         menuBarCaptions()
         menuBarOrdering()
+        menuBarPlanning()
+        batteryNamedKeys()
+        readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
         statusAlignment()
@@ -1149,6 +1152,108 @@ enum SelfTest {
                     "the old all-off switch becomes no items")
     }
 
+    // MARK: The menu bar has no clock of its own
+
+    /// The status item used to keep its own repeating timer beside the
+    /// telemetry one, at the same rate, waking the machine a second time to
+    /// redraw what the first wake-up had just read. Now a published reading is
+    /// what drives it — which means a reading that stops being published is a
+    /// menu bar that silently stops moving, and nothing else would notice.
+    private static func readingsDriveTheMenuBar() {
+        let defaults = UserDefaults.standard
+        let savedPoll = defaults.object(forKey: "poll.menuBar")
+        defer { defaults.set(savedPoll, forKey: "poll.menuBar") }
+        // The floor, so this waits a couple of seconds and not a couple of
+        // minutes on a machine set to poll slowly.
+        defaults.set(1.0, forKey: "poll.menuBar")
+
+        let telemetry = Telemetry()
+        var publishes = 0
+        telemetry.didPublish = { publishes += 1 }
+        telemetry.start()
+        defer { telemetry.stop() }
+        expectEqual(publishes, 1, "the reading taken at startup is published as it is taken")
+
+        // Two more periods, plus the slack a timer with tolerance may take.
+        let deadline = Date().addingTimeInterval(2 * 1.0 * (1 + Telemetry.timerToleranceFraction) + 0.5)
+        while publishes < 3 && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        expect(publishes >= 3, "and the ticks after it keep coming")
+    }
+
+    // MARK: The battery is read by name, not by the node
+
+    /// The reading asks the registry for the fourteen properties it uses
+    /// instead of serialising all fifty-one, which is most of what a tick used
+    /// to cost. The hazard is silent: a key the parsing reads and the list
+    /// forgets comes back as nothing, and nothing is a legal answer for most
+    /// of these fields. So both reads are taken and compared.
+    private static func batteryNamedKeys() {
+        let reader = BatteryReader()
+        guard let named = reader.read(), let whole = reader.readWholeNode() else { return }
+        expectEqual(named.percent, whole.percent, "reading by name agrees on the charge")
+        expectEqual(named.isCharging, whole.isCharging, "and on whether it is charging")
+        expectEqual(named.isPluggedIn, whole.isPluggedIn, "and on the charger")
+        expectEqual(named.healthPercent, whole.healthPercent, "and on health")
+        expectEqual(named.cycleCount, whole.cycleCount, "and on the cycle count")
+        expectEqual(named.fullChargeCapacity, whole.fullChargeCapacity, "and on full charge")
+        expectEqual(named.designCapacity, whole.designCapacity, "and on design capacity")
+        // These move between two readings taken a fraction of a millisecond
+        // apart, so it is their presence that is compared: a forgotten key
+        // does not make them wrong, it makes them absent.
+        expectEqual(named.celsius == nil, whole.celsius == nil, "and still has a temperature")
+        expectEqual(named.minutesRemaining == nil, whole.minutesRemaining == nil,
+                    "and still has an estimate of the time left")
+        expectEqual(named.power?.batteryWatts == nil, whole.power?.batteryWatts == nil,
+                    "and still knows which way the watts are going")
+
+        // The reading the menu bar takes when nothing is showing watts.
+        if let lean = reader.read(includingSupply: false) {
+            expect(lean.power?.systemWatts == nil,
+                   "skipping the supply registers leaves no system watts")
+            expect(lean.power?.adapterWatts == nil, "and no adapter watts")
+            expectEqual(lean.power?.batteryWatts == nil, named.power?.batteryWatts == nil,
+                        "but the battery's own flow survives: it is not from the SMC")
+            expectEqual(lean.percent, named.percent, "and the charge is the same reading")
+        }
+    }
+
+    // MARK: A line is planned before it is drawn
+
+    /// The status item is refreshed far more often than it changes, and the
+    /// plan exists so an unchanged line can be recognised without paying for a
+    /// picture of it. Nothing about that is visible in the result — there is
+    /// no picture to look at — so the composer counts the drawings it makes
+    /// and this reads the count.
+    private static func menuBarPlanning() {
+        let defaults = UserDefaults.standard
+        let savedItems = defaults.object(forKey: "menubar.items")
+        let savedStyle = defaults.object(forKey: "menubar.batteryStyle")
+        defer {
+            defaults.set(savedItems, forKey: "menubar.items")
+            defaults.set(savedStyle, forKey: "menubar.batteryStyle")
+        }
+        Preferences.menuBarItems = [.battery]
+        Preferences.batteryStyle = .icon
+
+        let telemetry = Telemetry()
+        telemetry.start()
+        defer { telemetry.stop() }
+        // A desktop has no battery and so no drawing to make.
+        guard telemetry.battery != nil else { return }
+
+        let before = MenuBarComposer.drawingsMade
+        let plan = MenuBarComposer.plan(telemetry: telemetry, darkMenuBar: true)
+        expectEqual(MenuBarComposer.drawingsMade, before, "planning a line draws none of it")
+        expect(!plan.signature.isEmpty, "and still says what the line would be made of")
+        let content = MenuBarComposer.draw(plan)
+        expectEqual(MenuBarComposer.drawingsMade, before + 1, "drawing it makes the picture")
+        expect(content.image != nil, "which is what comes back")
+        expectEqual(content.signature, plan.signature,
+                    "and it keeps the signature it was planned under")
+    }
+
     // MARK: Menu-bar ordering
 
     private static func menuBarOrdering() {
@@ -1292,6 +1397,9 @@ enum SelfTest {
 
         let power = Telemetry.Needs.of(menuBar: [.power])
         expect(power.battery, "watts come from the battery reading")
+        expect(power.supplyWatts, "and from the two SMC registers beside it")
+        expect(!Telemetry.Needs.of(menuBar: [.battery]).supplyWatts,
+               "which the battery icon alone does not pay for")
         let throttle = Telemetry.Needs.of(menuBar: [.throttle])
         expect(!throttle.full && !throttle.load,
                "the throttle mark needs no sensors: the thermal state is read every tick anyway")
