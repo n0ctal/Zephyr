@@ -7,162 +7,72 @@ the bump travelled inside the change it released.
 
 ## Unreleased
 
-- Profiles: a rule can ask whether the CPU is busy, not only whether it is hot.
-  Heat lags the work by a minute, and naming an application only covers the
-  ones you thought of — "on mains, docked, and running something heavy" is
-  what the tab is for and could not be said until now.
-- Cooling: the thermal ceiling that releases a pinned fan is only consulted
-  when a fan is actually pinned. A curve raises the fan by itself, so the
-  reading was bought and thrown away twice a second — and on a machine with no
-  usable CPU sensor key that reading is a sweep of every sensor there is.
-- The daemon's control loop lets the system choose the exact moment inside a
-  fiftieth of a second, so its wake-ups can be shared.
-- A comment described a setting that had been folded into another one and said
-  the opposite of what the code now does: that all fans follow one sensor.
-  They follow their own.
-  The same fix reaches the smart fan curve. A curve whose sensor is left
-  unset — the default — follows "the CPU", and its default range of 55–85 °C
-  is plainly written for a die temperature: TC0P does not reach 85 on this
-  machine at all. At the instant the hottest core read 94 °C, TC0P read 54,
-  which put the curve at zero and the fan at its floor of 1836 rpm instead of
-  its ceiling of 5616. Anyone who had picked a sensor by hand, or "the hottest
-  sensor", was never affected.
+Assembled from one branch of work. Grouped by what it touches rather than by
+the order the commits landed; the history has the order.
+
+**Temperature — which sensor is the processor's**
+
 - The CPU temperature no longer changes by eighteen degrees depending on
   whether the settings window is open. Two preference lists disagreed about
-  which sensor is the CPU's: the reader fetched TC0P, the menu bar and the
-  profile engine preferred TC0F. With the window shut only TC0P was ever read,
-  so the preference could not be honoured — measured at one instant during a
-  build, the app said 69 °C while TC0F read 87.2. There is one list now, and
-  TC0P is its last resort rather than its first choice, and TCMX — the
-  register holding the hottest core — is the first. Across twelve samples from
-  idle through a build, TCMX matched the hottest of the eight per-core sensors
-  exactly ten times and read 2.3 °C above it twice, never below, and it moved
-  the moment the load arrived while TC0F was still catching up.
-- "Held back for" counts fractions of a second. The window can be polled twice
-  a second, and rounding each increment to a whole number made every one of
-  them zero — the panel said the machine had been throttled, for 0 s.
-- The network speed uses the same gap bounds as the CPU load, so the slowest
-  menu-bar setting no longer silences it.
-- Which sensor is the CPU's is decided when it is asked rather than frozen at
-  launch. A machine whose best sensor was asleep when the app started was
-  stuck with the second-best for the life of the process while the full sweep
-  went on preferring the first — the same disagreement the one-list change set
-  out to end, arriving by another door.
-- Three stored numbers are bounded before they become fixed-width ones. A
-  poll interval becomes a timer's period, a power limit becomes fifteen bits
-  and then an MSR write, and a pointer multiplier becomes a HID property —
-  and Swift's conversions trap rather than saturating, on a value that is not
-  a number as much as on one out of range. None of the values are reachable
-  through the interface; all of them are reachable with `defaults write` or in
-  a damaged preferences file. The power limit gains something beyond not
-  crashing: it was masked to fifteen bits afterwards, so a figure above the
-  field wrapped, and a slider left too high would have written a small limit
-  rather than a large one.
-- `scripts/verify-clean-build.sh` builds the committed state in a clone of its
-  own and runs the whole release path through it — build, self-test, bundle,
-  disk image, and the note inside the image. `.build` survives edits, so a
-  tree that builds in the working copy can still be missing a file nobody
-  added to git; the only way to see that is to build somewhere that has never
-  seen the working copy.
-- `--test-pointer` explains an empty device list instead of printing a bare
-  zero. There are two quite different reasons for one — nothing matched, or
-  things matched and none publishes a curve — and the count could not tell
-  them apart. On this machine the built-in trackpad matches, names its curve
-  `HIDTrackpadAcceleration`, and the value behind that name is absent from the
-  service, so the list comes back empty.
-- A reading that was started earlier can no longer land on top of one started
-  later. The blocking read waits for a tick that is already reading, then
-  reads everything and publishes at once — while the tick it waited for is
-  still queued to publish its own, narrower result. That one arrived second
-  and replaced a full sweep with a single sensor, for one cycle, at the moment
-  the window opened.
-- Whether the Mac has a processor sensor at all is decided by one having
-  answered, not by a name being in the key list. That list deliberately keeps
-  keys which read nothing, so a Mac publishing a permanently zero stub among
-  the preferred names looked equipped, produced no reading, and was refused
-  the fallback — leaving a pinned fan with no thermal ceiling at all.
-- "Held back for" no longer throws away the slack the timers were given. Every
-  repeating timer here may fire up to a fifth of its period late, and capping
-  each gap at the bare period discarded that fraction of every one of them.
-- The thermal release only acts on a reading that really came from a CPU
-  sensor. Asking for the CPU temperature falls back to the hottest sensor in
-  the machine when none of the preferred keys answers, and that fallback is
-  both of the things the valve must avoid: a band calibrated on the hottest
-  core compared against an unknown sensor, and a sweep of fifty keys twice a
-  second inside the root control loop.
-- Whether the Mac has a charge ceiling is remembered only for the one status
-  byte that means "no such key" — 0x84, measured by reading a key that cannot
-  exist. Any other status is the asking failing, and the note above that code
-  promised not to remember those.
-- The note inside the disk image said the helper is installed on first use. It
-  is not, and the first correction was wrong too — nothing appears by itself.
-  It now says where the offer actually lives: an "Install helper…" item in the
-  menu, and a banner across the settings window while the helper is missing.
-  Checked by mounting the built image and reading it.
-- `--test-gpu` can fill in the line it has always had for the active card. It
-  asked for the information without requesting it, so that line printed a dash
-  on every machine. It also names the processes holding the discrete card,
-  which is the question the policy alone cannot answer: on this Mac the policy
-  reads "integrated only" while four processes hold a command queue on the
-  other card.
-- The thermal release compares against the processor rather than against the
-  hottest thing in the machine. Its figures were measured on the hottest core,
-  so that is what they have to be held against — applied to the maximum over
-  every sensor they would mean something different on every machine, and on
-  one with a hot regulator would mean a pinned fan is never held at all. It
-  also costs one key again instead of a sweep of fifty every two seconds
-  inside the root control loop.
-- TCGC is out of the CPU preference list, as TCXC is out of the graphics one.
-  It is the integrated GPU's block on the processor die, and a single sensor
-  answering under two headings is how a Mac without the other keys came to
-  show its graphics temperature as the CPU's.
-- The thermal release has a band rather than a single figure: it hands a
-  pinned fan back at 95 °C and does not take it again until 85. With one
-  threshold the firmware would cool the machine just past it, the hold would
-  resume, and the fan would change hands every couple of seconds. The ceiling
-  moved from 90 to 95 for the same reason it had to move at all — against the
-  hottest core, an ordinary build reaches 94, and a ceiling routine work
-  crosses takes the fan away from its owner for nothing. While a fan is held
-  back this way the daemon reports it as "auto", which is what it is.
-- CPU load stopped answering at all for anyone polling slower than 20 seconds.
-  The menu bar offers up to 60, and the guard added earlier this release
-  rejected every gap above 20 — which also meant the new "CPU load above"
-  profile rule could never match. The ceiling is 90 seconds now.
-- Whether the Mac has a charge ceiling is remembered only when the SMC
-  actually answered. A call that failed was being remembered as "no such key",
-  which hid the Battery tab for the rest of the session.
-- The integrated-GPU temperature no longer falls back to TCXC. That is the
-  CPU's own PECI sensor, so on a Mac with TCXC and no TCGC the graphics row
-  showed the processor's temperature under a heading that said GPU.
-- The thermal ceiling that releases a pinned fan back to the firmware was
-  comparing 90 °C against TC0P — a sensor beside the package rather than on
-  it. Measured here under a sustained build, TC0P held 54 °C while the hottest
-  core read 94, so the die would have had to pass 120 °C for the release to
-  fire. It never fired. It reads the processor now — see the entry above for
-  which sensor and which figures ended up being right.
-- TC0P is labelled "CPU Proximity" rather than "CPU", for the same reason.
-- Whether this Mac has a charge ceiling at all is worked out once instead of
-  on every redraw. The question is asked from a view body, and SwiftUI re-runs
-  those on every published change — so with the window open the answer was
-  being fetched by opening a connection to the SMC, reading a key and closing
-  it again, twice a second: 0.68 ms each time, now nothing.
-- CPU load refuses to answer when two samples land too close together, which
-  is what happens when the window opens and reads out of turn. A tenth of a
-  second of scheduler ticks is mostly rounding, and it came out as an idle
-  machine or a pegged one for one refresh — exactly when somebody had just
-  looked. The network reader has held the same bound all along.
-- That out-of-turn read no longer blanks a field whose reader declined to
-  answer. The ordinary tick has always left the last number in place; this
-  path, reached every time the window opens, overwrote it with nothing.
-- `--test-profiles` reads everything, as if a window were open, and waits for
-  two ticks. It claims to try every condition against the machine, and the one
-  about CPU load had nothing to try itself against.
-- "Held back for" counted the time it expected to pass rather than the time
-  that did. Every reading credited a whole poll interval, including the
-  readings taken out of turn when the window opens — twenty-one of those
-  inside one second reported forty-two seconds of throttling. A sample is now
-  credited with the time since the last one, capped at the interval so that
-  the first reading after a night asleep does not claim the night.
+  which sensor is the CPU's: the reader fetched TC0P, while the menu bar and
+  the profile engine preferred TC0F. With the window shut only TC0P was ever
+  read, so the preference could not be honoured — measured at one instant
+  during a build, the app said 69 °C while TC0F read 87.2. There is one list
+  now, and it is walked when it is asked rather than frozen at launch, so a
+  Mac whose best sensor was asleep when the app started is no longer stuck
+  with the second-best for the life of the process.
+- TCMX is the first choice. It is the register holding the hottest core, and
+  it behaves like one: across twelve samples from idle through a build it
+  matched the hottest of the eight per-core sensors exactly ten times and read
+  2.3 °C above it twice, never below, and it moved the moment the load arrived
+  while TC0F was still catching up.
+- TC0P is the last resort, and is labelled "CPU Proximity" rather than "CPU".
+  It sits beside the package rather than on it and lags badly: 54 °C while the
+  hottest core read 94, 69.4 against TC0F's 87.2 later in the same build.
+- TCGC is out of the CPU list and TCXC is out of the graphics one. Each is a
+  single sensor that was answering under two headings, which is how a Mac
+  lacking the other keys came to show its graphics temperature as the
+  processor's, and the other way round.
+- A sensor that is asleep when the app starts is no longer lost for the rest
+  of the session. The list of keys was filtered by plausibility once, so a
+  discrete GPU parked at launch could never be read again; believability is
+  decided on each refresh instead. On this machine that means fifty keys are
+  read and forty-eight answer.
+- The GPU temperature is looked up through a preference list the way the CPU's
+  already was. One key each way meant a dash on any machine that spells the
+  discrete sensor differently.
+- TC1C through TC8C and TCMX are named rather than shown as themselves. The
+  other unnamed keys are left alone — a wrong label reads worse than a raw one.
+
+**Cooling**
+
+- The thermal release — the ceiling that hands a pinned fan back to the
+  firmware — never fired. It compared 90 °C against TC0P, which does not reach
+  85 on this machine under any load: the die would have had to pass 120 °C,
+  and the machine shuts down before that. It reads the processor now, and it
+  has a band rather than a figure: the fan goes back at 95 °C and is not taken
+  again until 85. With one threshold the firmware would cool the machine just
+  past it, the hold would resume, and the fan would change hands every couple
+  of seconds. While a fan is held back this way the daemon reports it as
+  "auto", which is what it is.
+- That release is only consulted when a fan is actually pinned — a curve
+  raises the fan by itself — and only acts on a reading that really came from
+  a processor sensor. Whether the machine has one is decided by one having
+  answered, not by a name being in the key list, because that list deliberately
+  keeps keys which read nothing: a Mac publishing a permanently zero stub
+  would otherwise look equipped, produce no reading, be refused the fallback,
+  and hold a pinned fan with no ceiling at all. Where there is genuinely no
+  processor sensor it falls back to the hottest thing in the machine, because a
+  ceiling measured elsewhere is worse than an exact one but better than none.
+- The smart fan curve followed the same wrong sensor. A curve with no sensor
+  chosen follows "the CPU", and its default range of 55–85 °C is written for a
+  die temperature. At the instant the hottest core read 94 °C the curve was
+  handed 54, which is below its own floor: the fan sat at 1836 rpm when the
+  same curve fed the die reading would have called for 5616. Anyone who had
+  picked a sensor by hand, or "the hottest sensor", was never affected.
+
+**Correctness**
+
 - Fixed a data race that has been in the shipped app: opening the settings
   window reads the hardware on the main thread while a tick may already be
   reading it on the telemetry queue. The readers are not stateless — the load
@@ -170,43 +80,111 @@ the bump travelled inside the change it released.
   is at stake is a corrupted array rather than a stale number. Both paths now
   read on the one queue. `--test-telemetry-race`, run under the thread
   sanitizer, reported it five times in four seconds before and none after.
-- The throttle reading asks the system for its dictionary once instead of
-  once per field. Three fields meant three trips to configd on every tick,
-  each opening a session of its own first: 0.4 ms became 0.1.
+- Readings are published in the order they were started. The blocking read
+  waits for a tick already in flight, reads everything, and publishes at once
+  — while the tick it waited for is still queued to publish its own, narrower
+  result, which landed second and replaced a full sweep with a single sensor
+  for one cycle, at the moment the window opened.
+- That same out-of-turn read no longer blanks a field whose reader declined to
+  answer. The ordinary tick has always left the last number in place; this
+  path, reached every time the window opens, overwrote it with nothing.
+- CPU load refuses to answer when two samples land too close together, and
+  answers for gaps up to ninety seconds. A tenth of a second of scheduler
+  ticks is mostly rounding — it came out as an idle machine or a pegged one
+  for one refresh, exactly when somebody had just looked. The old twenty-second
+  ceiling, meanwhile, silenced the load entirely for anyone polling slower than
+  that, which the menu bar offers up to sixty. The network speed uses the same
+  bounds.
+- "Held back for" counts the time that passed rather than the time that was
+  scheduled to. Every reading used to credit a whole poll interval, including
+  the readings taken out of turn when the window opens — twenty-one of those
+  inside one second reported forty-two seconds of throttling. A sample is now
+  credited with the time since the last one, in fractions of a second, capped
+  at the interval plus the slack the timers are allowed so that neither a late
+  tick nor a night asleep is counted wrongly.
+- Whether the Mac has a charge ceiling is worked out once rather than on every
+  redraw, and remembered only when the SMC actually answered "no such key" —
+  status 0x84, measured by reading a key that cannot exist. The question is
+  asked from a view body, which SwiftUI re-runs on every published change, so
+  the answer was being fetched by opening a connection to the SMC, reading a
+  key and closing it again, twice a second: 0.68 ms each time. Remembering a
+  failed call as an answer hid the Battery tab for the rest of the session.
+- Three stored numbers are bounded before they become fixed-width ones: a poll
+  interval that becomes a timer's period, a power limit that becomes fifteen
+  bits and then an MSR write, and a pointer multiplier that becomes a HID
+  property. Swift's conversions trap rather than saturating, on a value that
+  is not a number as much as on one out of range. None are reachable through
+  the interface; all are reachable with `defaults write` or in a damaged
+  preferences file. The power limit gains more than not crashing: its steps
+  were masked to fifteen bits *after* conversion, so a slider left too high
+  wrapped and wrote a small limit rather than a large one.
+
+**What it costs the machine**
+
 - Every SMC read and every SMC write used to ask the chip how big the key is
-  and what type it holds, first, as a round trip of its own. The SMC builds
-  that table when the machine boots and it does not change, so it is now asked
-  once per key. A sweep of the sensors fell from 32 ms to 16, a read of both
-  fans from 7 ms to 3, and the daemon's control loop and everything else with
-  it.
+  and what type it holds, first, as a round trip of its own. That table is
+  built when the machine boots and does not change, so it is asked once per
+  key. A sweep of the sensors fell from 32 ms to 16, a read of both fans from
+  7 ms to 3, and everything else with them.
 - The battery no longer opens a connection to the SMC of its own on every
-  reading and closes it again. It shares the one the rest of telemetry already
-  holds, which is what that type's own note says everything does. The reading
-  went from 1.8 ms to 1.0 — it was the most expensive thing in a tick, above
-  the sensors.
-- Cooling: the root daemon's control loop stopped doing the same work twice.
-  It read each fan, then `setManual` read it again, then asked the SMC what
-  byte layout the target key wants — every half-second, for as long as a fan
-  was under our control. It also wrote a target the fan was already holding.
-  At about 0.8 ms per SMC round trip on this machine that was roughly 19 ms of
-  every tick; the steady state is now about a third of that.
-- Sensors: a sensor that is asleep when the app starts is no longer lost for
-  the rest of the session. The list of keys was filtered by plausibility once,
-  so a discrete GPU that happened to be parked at launch could never be read
-  again; believability is now decided on each refresh instead.
+  reading and closes it again. It shares the one the rest of telemetry holds,
+  which is what that type's own note says everything does: 1.8 ms to 1.0. It
+  was the most expensive thing in a tick, above the sensors.
+- The throttle reading asks the system for its dictionary once instead of once
+  per field. Three fields meant three trips to configd on every tick, each
+  opening a session of its own first: 0.4 ms became 0.1.
+- The root daemon's control loop stopped doing the same work twice. It read
+  each fan, then `setManual` read it again, then asked the SMC what byte
+  layout the target key wants — every half-second, for as long as a fan was
+  under our control — and then wrote a target the fan was already holding. At
+  about 0.8 ms per round trip that was roughly 19 ms of every tick; the steady
+  state is about a third of that.
+- Six repeating timers carry a tolerance of a fifth of their period, so the
+  system can line their wake-ups up with whatever else is waking. The menu
+  bar's redraw was the last one without it, and being the most frequent and
+  never stopping, it had been keeping the others' slack from buying anything.
+
+**Profiles**
+
+- A rule can ask whether the CPU is busy, not only whether it is hot. Heat
+  lags the work by a minute, and naming an application only covers the ones
+  you thought of — "on mains, docked, and running something heavy" is what the
+  tab is for and could not be said until now.
+
+**Probes and documentation**
+
 - `--dump-smc` lists the sensors that are asleep or out of range instead of
   hiding them, which is what you need when a temperature you expected is
   missing.
-- Cooling: the GPU temperature is looked up through a preference list the way
-  the CPU's already was. One key each way meant a dash on any machine that
-  spells the discrete sensor differently.
-- Sensors: TC1C through TC8C and TCMX are named rather than shown as
-  themselves. The other unnamed keys are left alone — a wrong label reads
-  worse than a raw one.
-- Five repeating timers now carry a tolerance, so the system can line their
-  wake-ups up with whatever else is waking.
-- The disk image carries a note about the first-launch refusal, and the README
-  has an install path for someone who downloaded it rather than built it.
+- `--test-gpu` can fill in the line it has always had for the active card: it
+  asked for that information without requesting it, so the line printed a dash
+  on every machine. It also names the processes holding the discrete card,
+  which the policy alone cannot tell you — on this Mac the policy reads
+  "integrated only" while four processes hold a command queue on the other one.
+- `--test-pointer` explains an empty device list instead of printing a bare
+  zero. Nothing matching and nothing publishing a curve want different
+  answers. On this machine the built-in trackpad matches, names its curve
+  `HIDTrackpadAcceleration`, and the value behind that name is absent from the
+  service, so the list comes back empty.
+- `--test-profiles` reads everything, as if a window were open, and waits for
+  two ticks: it claims to try every condition against the machine, and the one
+  about CPU load had nothing to try itself against. It also names the sensor
+  each temperature came from.
+- `--test-telemetry-race` drives the two paths that read the hardware into
+  each other, for use under the thread sanitizer.
+- `scripts/verify-clean-build.sh` builds the committed state in a clone of its
+  own and runs the whole release path through it — build, self-test, bundle,
+  disk image, and the note inside the image. `.build` survives edits, so a
+  tree that builds in the working copy can still be missing a file nobody
+  added to git.
+- The note inside the disk image said the helper is installed on first use. It
+  is not: the offer lives in an "Install helper…" menu item and in a banner
+  across the settings window. Its claim that there is no network code was also
+  untrue — there are no connections of any kind, but the interface counters
+  and the current Wi-Fi name are read locally, and it now says so.
+- A comment described a setting that had been folded into another one and said
+  the opposite of what the code does: that all fans follow one sensor. They
+  follow their own.
 - Eight releases that shipped without a changelog entry have one.
 
 ## 1.9.57 — 2026-08-28
