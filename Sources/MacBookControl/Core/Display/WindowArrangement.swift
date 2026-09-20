@@ -116,12 +116,24 @@ enum WindowArrangement {
     }
 
     private static func frame(of window: AXUIElement) -> CGRect? {
+        // The type is checked rather than asserted. These attributes come back
+        // from another application's process and this runs over every window
+        // of every one of them; `as!` to a CoreFoundation type does not trap
+        // on the wrong thing, it hands back something that answers nothing,
+        // which is worse than a crash because it looks like an answer.
         guard let positionValue = attribute(window, kAXPositionAttribute),
-              let sizeValue = attribute(window, kAXSizeAttribute) else { return nil }
+              let sizeValue = attribute(window, kAXSizeAttribute),
+              CFGetTypeID(positionValue as CFTypeRef) == AXValueGetTypeID(),
+              CFGetTypeID(sizeValue as CFTypeRef) == AXValueGetTypeID() else { return nil }
         var origin = CGPoint.zero
         var size = CGSize.zero
-        AXValueGetValue(positionValue as! AXValue, .cgPoint, &origin)
-        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+        // And both results are checked, which they were not. They are the
+        // difference between "this window sits at the origin with no size" and
+        // "the answer did not arrive" — and the first of those, written back
+        // when the display returns, shrinks somebody's window to nothing in
+        // the corner of the screen.
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &origin),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else { return nil }
         return CGRect(origin: origin, size: size)
     }
 

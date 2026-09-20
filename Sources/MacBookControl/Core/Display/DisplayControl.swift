@@ -510,13 +510,18 @@ final class DisplayControl {
 
         func span(_ coordinate: (Cell) -> Int) -> ClosedRange<Int> {
             let anchored = anchor.map(coordinate)
-            let reachable = (anchored.min()! - 1)...(anchored.max()! + 1)
+            // No screens at all is a real state on this machine — the rescue
+            // further down exists because it can be left with none — and
+            // min() of nothing is nil rather than zero.
+            guard let anchorLow = anchored.min(), let anchorHigh = anchored.max() else {
+                return 0...0
+            }
             // A screen that has been put far out stays on the grid whatever
             // the ring says — losing a screen off the edge would be worse
             // than a wide grid, and the grid scrolls sideways.
             let placed = cells.map(coordinate)
-            let low = min(reachable.lowerBound, placed.min()!)
-            let high = max(reachable.upperBound, placed.max()!)
+            let low = min(anchorLow - 1, placed.min() ?? anchorLow)
+            let high = max(anchorHigh + 1, placed.max() ?? anchorHigh)
             return low...high
         }
         return (span { $0.row }, span { $0.column })

@@ -109,6 +109,16 @@ the order the commits landed; the history has the order.
   the answer was being fetched by opening a connection to the SMC, reading a
   key and closing it again, twice a second: 0.68 ms each time. Remembering a
   failed call as an answer hid the Battery tab for the rest of the session.
+- A window whose position or size could not be read is left alone rather than
+  recorded as sitting at the origin with no size. The accessibility call's
+  result was ignored and its output left at zero, so a window that declined to
+  answer was remembered as 0×0 in the corner — and written back there when the
+  display came home. The type is checked too: these answers come from other
+  applications' processes, and a forced cast to a CoreFoundation type does not
+  trap on the wrong thing, it returns something that answers nothing.
+- The screen grid no longer needs there to be a screen. Its extent was taken
+  from the minimum and maximum of the arrangement with a forced unwrap, and a
+  machine with no display at all is a state this app has a rescue path for.
 - Putting the windows back no longer puts two of them in the same place. A
   display switched off and on again restores the arrangement by matching each
   window to its title, and two windows of one application can share one — two
