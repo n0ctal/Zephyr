@@ -48,6 +48,12 @@ the bump travelled inside the change it released.
   stuck with the second-best for the life of the process while the full sweep
   went on preferring the first — the same disagreement the one-list change set
   out to end, arriving by another door.
+- `--test-gpu` can fill in the line it has always had for the active card. It
+  asked for the information without requesting it, so that line printed a dash
+  on every machine. It also names the processes holding the discrete card,
+  which is the question the policy alone cannot answer: on this Mac the policy
+  reads "integrated only" while four processes hold a command queue on the
+  other card.
 - The thermal release compares against the processor rather than against the
   hottest thing in the machine. Its figures were measured on the hottest core,
   so that is what they have to be held against — applied to the maximum over

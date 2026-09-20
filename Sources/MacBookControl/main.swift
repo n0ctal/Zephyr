@@ -412,9 +412,22 @@ func runGPUTest() {
     print("Dual-GPU: \(gpu.isDualGPU)")
     print("  Integrated: \(gpu.integratedName ?? "—")")
     print("  Discrete:   \(gpu.discreteName ?? "—")")
-    let info = gpu.info()
+    // Asking for the active card as well. Without this the line below can
+    // never be filled, and the probe printed a dash where its most useful
+    // answer goes. It is read through CGDirectDisplayCopyCurrentMetalDevice,
+    // which reports the card driving the display rather than creating a
+    // system-default device — the latter answers "AMD" on this machine and
+    // wakes it to do so.
+    let info = gpu.info(includeActive: true)
     print("  Policy (gpuswitch): \(info.mode.map { "\($0.rawValue) (\($0.label))" } ?? "unknown")")
     print("  Currently active:   \(info.activeName ?? "—")\(info.activeIsLowPower == true ? " [integrated]" : info.activeIsLowPower == false ? " [discrete]" : "")")
+    // And who is keeping the discrete card awake, which is the question the
+    // policy alone cannot answer: on this machine the policy reads "integrated
+    // only" while four processes hold a command queue on the other card.
+    let holders = AcceleratorClients.discreteHolders()
+    print("  Discrete held by:   " + (holders.isEmpty
+        ? "nobody"
+        : holders.map { "\($0.name) (\($0.pid))" }.joined(separator: ", ")))
 }
 
 
