@@ -33,7 +33,11 @@ the bump travelled inside the change it released.
   profile engine preferred TC0F. With the window shut only TC0P was ever read,
   so the preference could not be honoured — measured at one instant during a
   build, the app said 69 °C while TC0F read 87.2. There is one list now, and
-  TC0P is its last resort rather than its first choice.
+  TC0P is its last resort rather than its first choice, and TCMX — the
+  register holding the hottest core — is the first. Across twelve samples from
+  idle through a build, TCMX matched the hottest of the eight per-core sensors
+  exactly ten times and read 2.3 °C above it twice, never below, and it moved
+  the moment the load arrived while TC0F was still catching up.
 - The thermal ceiling that releases a pinned fan back to the firmware was
   comparing 90 °C against TC0P — a sensor beside the package rather than on
   it. Measured here under a sustained build, TC0P held 54 °C while the hottest

@@ -493,8 +493,17 @@ enum SelfTest {
         }
         // The readings this machine gave during a build, at one instant.
         let sweep = [reading("TC0P", 69.4), reading("TC0F", 87.2), reading("TCMX", 77.0)]
-        expectEqual(Telemetry.cpuTemperature(in: sweep)?.key, "TC0F",
-                    "the die is preferred over the sensor beside the package")
+        expectEqual(Telemetry.cpuTemperature(in: sweep)?.key, "TCMX",
+                    "the hottest-core register is preferred, even when it reads lower")
+        // Deliberately, and this is the case that shows why: TCMX reads 77
+        // here while TC0F reads 87. TC0F carries the heatspreader's lag in
+        // both directions — at the start of a load it was still reading 63
+        // while the cores were at 78. Never reading below the cores is what
+        // a cooling decision needs; reading high after the fact is not.
+        expectEqual(Telemetry.cpuTemperature(in: [reading("TC0P", 69.4), reading("TC0F", 87.2)])?.key,
+                    "TC0F", "without it, the die sensor is next")
+        expectEqual(Telemetry.cpuTemperature(in: [reading("TC0P", 69.4)])?.key, "TC0P",
+                    "and the one beside the package is better than nothing")
 
         // The defect this guards: the reader fetches by one list, the consumer
         // picks by another, and with the window shut only the fetched key is

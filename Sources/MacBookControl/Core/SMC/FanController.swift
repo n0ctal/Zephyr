@@ -27,11 +27,22 @@ final class SensorReader {
     /// window shut the preferred key was simply never read, and the number
     /// fell through to whatever had been.
     ///
+    /// TCMX first: it is the register the firmware keeps the hottest core in,
+    /// and it behaves like one. Measured across twelve samples from idle
+    /// through a build, it matched the hottest of the eight per-core sensors
+    /// exactly ten times and read 2.3 °C above it twice — never below. It also
+    /// moves at once when the load arrives (64 → 69 → 78 °C) while TC0F, which
+    /// carries the heatspreader's lag, was still reading 63 → 65 → 67.
+    ///
+    /// Never reading low is the property that matters. Everything downstream
+    /// is a decision about cooling: the fan curve's ramp, and the ceiling at
+    /// which a pinned fan is handed back to the firmware.
+    ///
     /// TC0P last, though it used to be first. It sits beside the package
     /// rather than on it and lags badly: measured under a sustained build it
     /// read 69.4 °C against TC0F's 87.2 at the same instant, and earlier in
     /// the same build 54 °C against a hottest core of 94.
-    static let cpuKeyPreference = ["TC0F", "TC0E", "TCXC", "TCGC", "TC0D", "TC0H", "TC0P"]
+    static let cpuKeyPreference = ["TCMX", "TC0F", "TC0E", "TCXC", "TCGC", "TC0D", "TC0H", "TC0P"]
 
     /// The CPU sensor key chosen at startup (nil if none of the preferred keys exist).
     private(set) var cpuKey: String?
