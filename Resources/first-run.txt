@@ -35,5 +35,8 @@ it; paste it into Terminal and it asks for your password once. The
 settings window carries the same offer in a banner across the top while
 the helper is missing.
 
-Nothing leaves the machine: there is no network code in the application
-at all.
+Nothing leaves the machine. Zephyr opens no connections of any kind —
+there is no URLSession, no socket, nothing that could send anywhere. It
+does read two local things the system already knows: the byte counters
+of your network interfaces, so the menu bar can show a speed, and the
+name of the Wi-Fi network you are on, so a rule can say "at home".

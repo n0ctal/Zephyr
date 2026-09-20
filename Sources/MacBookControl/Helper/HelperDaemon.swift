@@ -313,7 +313,14 @@ final class HelperService: NSObject, HelperProtocol {
     /// a decision made here, once, rather than a sweep of fifty sensors paid
     /// on every tick and then discarded.
     private func valveTemperature() -> Double? {
-        if let cpu = sensors?.cpuDieTemperature() { return cpu.celsius }
+        guard let sensors else { return nil }
+        if let cpu = sensors.cpuDieTemperature() { return cpu.celsius }
+        // A machine with no processor sensor at all is not the same as a
+        // processor sensor that missed one read. The first wants the fallback;
+        // the second wants to be left alone until the next tick, because
+        // moving the band onto another sensor for one tick is enough — the
+        // hysteresis then holds that release until 85 °C.
+        guard SensorReader.preferredCPUKey(among: sensors.temperatureKeys) == nil else { return nil }
         return curveTemperature(FanCurve.hottestSensorKey)
     }
 

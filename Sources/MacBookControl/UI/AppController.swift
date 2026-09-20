@@ -81,6 +81,12 @@ final class AppController: NSObject, NSMenuDelegate {
                                          repeats: true) { [weak self] _ in
             self?.updateStatusTitle()
         }
+        // A fifth of the period, like every other repeating timer here. This
+        // one is the most frequent and it never stops, so without it the
+        // machine was still woken on the dot twice a second and the slack
+        // given to the telemetry timer only coalesced onto this one — which is
+        // to say it bought nothing at the settings everybody runs.
+        timer.tolerance = Preferences.menuBarPollSeconds / 5
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
     }
