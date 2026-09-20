@@ -24,6 +24,10 @@ final class BatteryReader {
     /// matching dictionary and a registry search on every tick. A read that
     /// fails releases it, so a machine that does somehow lose the node picks
     /// it up again on the next tick instead of never.
+    ///
+    /// Mutable, so this reader is bound to one queue like the SMC connection
+    /// beside it — which is the contract telemetry already keeps for it, and
+    /// why the blocking read goes through the same queue as the ticks.
     private var service: io_service_t = 0
 
     /// What the charge is worked out from, and what the menu bar's icon
@@ -82,7 +86,6 @@ final class BatteryReader {
     }
 
     private func status(from props: [String: Any], includingSupply: Bool) -> BatteryStatus? {
-
         let current = props["CurrentCapacity"] as? Int ?? 0
         let max = props["MaxCapacity"] as? Int ?? 0
         let percent = max > 0 ? Int((Double(current) / Double(max) * 100).rounded()) : 0

@@ -80,10 +80,11 @@ final class AppController: NSObject, NSMenuDelegate {
     private var lastStatusDraw = Date.distantPast
 
     private func statusTick() {
-        // A shade under the period rather than the period itself: a repeating
-        // timer with tolerance lands inside a window, not on the dot, and a
-        // reading a millisecond early would otherwise skip a whole turn and
-        // halve the rate.
+        // A shade under the period rather than the period itself. Readings do
+        // not only arrive on the tick: opening the window takes one straight
+        // away, and a tick that landed late leaves the next one closer than a
+        // period behind it. Compared strictly, either would be turned away and
+        // the line would then wait a whole further period.
         let period = Preferences.menuBarPollSeconds
         guard Date().timeIntervalSince(lastStatusDraw)
                 >= period * (1 - Telemetry.timerToleranceFraction) else { return }

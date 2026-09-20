@@ -7,6 +7,38 @@ the bump travelled inside the change it released.
 
 ## Unreleased
 
+- Idle cost is down about three times again, and about fifteen times against
+  1.9.57. A sample of the running app found its entire main-thread cost inside
+  a drawing that was thrown away: the line was composed first and compared
+  afterwards, so every tick that changed nothing still paid for an offscreen
+  bitmap nobody saw. The line is now planned — values and signature, no
+  pixels — and drawn only when the plan is new. 163 us a tick to 17.
+- The battery is read at the size it is being looked at. One reading served
+  everything, so a menu bar with a battery icon in it paid once a second for
+  health, cycles, capacities, temperature, watts and the estimate of the time
+  left, none of which is shown outside the window. The charge is four registry
+  properties; the rest is ten more and two SMC round trips at about 350 us
+  each. 0.76 ms a reading to 0.05.
+- And the whole node is no longer serialised to get at them. Asking IOKit for
+  an entry's properties hands back all fifty-one, nine of them nested
+  structures — the IOReport legend, the telemetry blob, the adapter's details.
+  Named fetches instead: 317 us to 110 for the full reading, 35 for the
+  charge. The entry itself is kept rather than matched again every tick, and
+  released if a reading ever comes back empty.
+- The menu bar has lost its own timer. It kept one beside telemetry's, at the
+  same rate, waking the machine a second time to redraw what the first wake-up
+  had just read. A published reading is the only thing that can change the
+  line, so the reading says when — still no faster than the rate set for the
+  menu bar, since an open window makes telemetry run at the window's.
+- The list of menu-bar fields is decoded once per stored value instead of on
+  every tick. It is JSON in user defaults and was allocating a decoder twice a
+  second for the life of the process. Keyed on the stored bytes, so it cannot
+  go stale whoever writes it next.
+- The shipped binary carries no local symbols: 4.5 MB to 2.1, and the bundle
+  4.7 to 2.3. Nothing reads them at run time — Swift's metadata, which
+  reflection and Codable need, lives elsewhere and is untouched — and the
+  unstripped binary stays in the build directory for symbolicating a crash.
+
 - The battery in the menu bar shows a bolt whenever the machine is on mains.
   Colour alone could not say it: green means a battery that is filling, and a
   Mac sitting at 100 % on the charger, or held at a charge limit, is not

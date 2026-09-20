@@ -208,15 +208,12 @@ enum MenuBarComposer {
     struct Content {
         var image: NSImage?
         var title: String
-        /// What the line was drawn from, as a string.
+        /// The signature of the `Plan` this was drawn from, carried through
+        /// so a caller holding only the picture can still say what made it.
         ///
-        /// Two contents with the same signature are the same pixels. The menu
-        /// bar is redrawn twice a second whether or not anything moved, and
-        /// handing `button.image` a fresh image marks the item dirty even when
-        /// it is identical — so the caller compares this and leaves the item
-        /// alone when it matches. Built from the values rather than from the
-        /// pixels: comparing the drawn bytes costs 0.29 ms, which is more than
-        /// drawing them.
+        /// The comparison itself happens a step earlier, on the plan, which is
+        /// the point: two lines with one signature are the same pixels, so an
+        /// unchanged one need never be drawn at all.
         var signature: String = ""
     }
 
@@ -292,8 +289,7 @@ enum MenuBarComposer {
             if !pieces.isEmpty { fields.append(pieces) }
         }
         return Plan(fields: fields, darkMenuBar: darkMenuBar,
-                    signature: fields.isEmpty ? ""
-                        : signature(of: fields.flatMap { $0 }, darkMenuBar: darkMenuBar))
+                    signature: fields.isEmpty ? "" : signature(of: fields, darkMenuBar: darkMenuBar))
     }
 
     /// Makes the drawings and lays them out. The expensive half.
@@ -339,10 +335,12 @@ enum MenuBarComposer {
         draw(plan(telemetry: telemetry, darkMenuBar: darkMenuBar))
     }
 
-    /// What the line is made of, as a string. Cheap: a few short pieces joined.
-    private static func signature(of segments: [Segment], darkMenuBar: Bool) -> String {
+    /// What the line is made of, as a string. Cheap: a few short pieces
+    /// joined, and no drawing looked at — only the key that says what it would
+    /// have been made from.
+    private static func signature(of fields: [[Segment]], darkMenuBar: Bool) -> String {
         var parts: [String] = [darkMenuBar ? "dark" : "light"]
-        for segment in segments {
+        for segment in fields.joined() {
             switch segment {
             case .text(let value, let colour):
                 parts.append("t:" + value + (colour.map { ":\($0.hashValue)" } ?? ""))
