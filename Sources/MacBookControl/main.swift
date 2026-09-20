@@ -538,6 +538,14 @@ func runProfilesTest() {
     print("  cpu: \(context.cpuCelsius.map { String(format: "%.0f °C", $0) } ?? "unknown")")
     print("  cpu load: \(context.cpuLoadPercent.map { String(format: "%.0f %%", $0) } ?? "unknown")")
     print("  cpu clock: \(telemetry.load?.cpuHertz.map { String(format: "%.2f GHz", $0 / 1e9) } ?? "unknown")")
+    if let load = telemetry.load {
+        print(String(format: "  memory: %.2f of %.2f GB used",
+                     Double(load.memoryUsed) / 1e9, Double(load.memoryTotal) / 1e9))
+        if let disk = load.disk {
+            print(String(format: "  disk: %.1f of %.1f GB used",
+                         Double(disk.usedBytes) / 1e9, Double(disk.totalBytes) / 1e9))
+        }
+    }
     print("  apps running: \(context.runningApps.count)")
 
     let samples: [Condition] = [
