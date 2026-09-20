@@ -5,10 +5,17 @@ that version number. Up to 1.9.43 and again from 1.9.50 the bump is a commit
 of its own named `Release X`, which is why some entries carry one; in between
 the bump travelled inside the change it released.
 
-## Unreleased
+## 1.10.0 — 2026-09-20
 
-Assembled from one branch of work. Grouped by what it touches rather than by
-the order the commits landed; the history has the order.
+One branch of work rather than one change, which is the departure from
+everything above it: 1.9.50 through 1.9.57 were a change each. This is fifty-five
+commits, and a good half of them fix the other half — twelve rounds of review,
+each finding something in what the last one had just written. Bumping per
+commit would have produced fifty-five versions most of which corrected their
+predecessor, so it is bumped once, here.
+
+Grouped by what it touches rather than by the order the commits landed; the
+history has the order.
 
 **Temperature — which sensor is the processor's**
 
