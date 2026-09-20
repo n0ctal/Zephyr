@@ -26,20 +26,29 @@ final class BatteryReader {
     /// it up again on the next tick instead of never.
     private var service: io_service_t = 0
 
-    /// Everything the reading below looks at, and nothing else.
+    /// What the charge is worked out from, and what the menu bar's icon
+    /// therefore needs: how full, and whether it is filling.
     ///
     /// The node carries fifty-one properties, nine of them nested structures —
     /// the IOReport legend, the telemetry blob, the adapter's details — and
-    /// asking for all of them cost 317 us per tick against 110 for these. The
-    /// serialising of the blobs is the whole difference.
+    /// asking for all of them cost 317 us per tick against 110 for the
+    /// fourteen the reading uses, and 35 for these four. The serialising of
+    /// the blobs is the whole difference.
+    private static let chargeKeys = [
+        "CurrentCapacity", "MaxCapacity", "IsCharging", "ExternalConnected",
+    ]
+
+    /// The rest of what the reading uses. Health, cycles, the temperature, the
+    /// flow and the estimate of the time left — all of it shown only inside
+    /// the window.
     ///
-    /// A key used by the parsing but missing from this list reads as nil, not
-    /// as wrong, which is invisible. `readWholeNode()` exists so the self-test
-    /// can compare the two and fail when they disagree.
-    private static let wantedKeys = [
-        "CurrentCapacity", "MaxCapacity", "IsCharging", "ExternalConnected", "CycleCount",
-        "AppleRawMaxCapacity", "DesignCapacity", "Temperature", "Amperage", "Voltage",
-        "TimeRemaining", "AvgTimeToEmpty", "InstantTimeToEmpty", "AppleRawCurrentCapacity",
+    /// A key used by the parsing but missing from these lists reads as nil,
+    /// not as wrong, which is invisible. `readWholeNode()` exists so the
+    /// self-test can compare the two and fail when they disagree.
+    private static let detailKeys = [
+        "CycleCount", "AppleRawMaxCapacity", "DesignCapacity", "Temperature",
+        "Amperage", "Voltage", "TimeRemaining", "AvgTimeToEmpty",
+        "InstantTimeToEmpty", "AppleRawCurrentCapacity",
     ]
 
     init(smc: SMC? = nil) {
@@ -50,13 +59,14 @@ final class BatteryReader {
         if service != 0 { IOObjectRelease(service) }
     }
 
-    /// `includingSupply` false leaves out what the system is drawing and what
-    /// the adapter is supplying, which is two SMC round trips and most of the
-    /// cost of a reading. The battery's own flow stays: it is worked out from
-    /// the registry properties that have already been fetched.
-    func read(includingSupply: Bool = true) -> BatteryStatus? {
-        guard let props = smartBatteryProperties() else { return nil }
-        return status(from: props, includingSupply: includingSupply)
+    /// `inDetail` false reads the charge and nothing else: four registry
+    /// properties instead of fourteen, and neither of the two SMC registers
+    /// behind the power readout. Everything it leaves out — health, cycles,
+    /// temperature, watts, time left — is shown only inside the window, and
+    /// comes back nil.
+    func read(inDetail: Bool = true) -> BatteryStatus? {
+        guard let props = smartBatteryProperties(inDetail: inDetail) else { return nil }
+        return status(from: props, includingSupply: inDetail)
     }
 
     /// The same reading, taken by fetching every property of the node.
@@ -178,12 +188,13 @@ final class BatteryReader {
 
     /// AppleSmartBattery carries the numbers IOPowerSources rounds away.
     ///
-    /// Asked for by name: see `wantedKeys` for why the whole node is not.
-    private func smartBatteryProperties() -> [String: Any]? {
+    /// Asked for by name: see `chargeKeys` for why the whole node is not.
+    private func smartBatteryProperties(inDetail: Bool) -> [String: Any]? {
         guard let node = batteryService() else { return nil }
+        let keys = inDetail ? Self.chargeKeys + Self.detailKeys : Self.chargeKeys
         var props: [String: Any] = [:]
-        props.reserveCapacity(Self.wantedKeys.count)
-        for key in Self.wantedKeys {
+        props.reserveCapacity(keys.count)
+        for key in keys {
             guard let value = IORegistryEntryCreateCFProperty(node, key as CFString,
                                                               kCFAllocatorDefault, 0)
             else { continue }

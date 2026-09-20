@@ -34,6 +34,13 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 cp "$BUILD_DIR/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
+# Local symbols are half the binary — 4.5 MB down to 2.1 — and nothing at run
+# time reads them: Swift's own metadata, which reflection and Codable need,
+# lives in __TEXT and __DATA and is untouched. What they are for is
+# symbolicating a crash, and the unstripped binary stays in $BUILD_DIR for
+# exactly that. Before the signing, because stripping invalidates it.
+strip -x "$APP_DIR/Contents/MacOS/$APP_NAME"
+
 # App icon (generate the .icns if it isn't present yet).
 if [ ! -f "$PROJECT_DIR/Resources/AppIcon.icns" ]; then
     echo "==> Generating app icon"

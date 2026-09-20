@@ -644,19 +644,23 @@ func runTimingTest() {
     // The same reading with and without a connection of its own. Opening one
     // per reading is what this used to do, twice a second, for ever.
     if let smc = smc {
-        func mean(_ reader: BatteryReader) -> Double {
-            _ = reader.read()   // warm
+        func mean(_ reader: BatteryReader, inDetail: Bool = true) -> Double {
+            _ = reader.read(inDetail: inDetail)   // warm
             var total: TimeInterval = 0
-            for _ in 0 ..< 20 {
-                let start = Date()
-                _ = reader.read()
-                total += Date().timeIntervalSince(start)
+            for _ in 0 ..< 50 {
+                let start = DispatchTime.now().uptimeNanoseconds
+                _ = reader.read(inDetail: inDetail)
+                total += Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
             }
-            return total / 20 * 1000
+            return total / 50 * 1000
         }
-        print(String(format: "  %6.1f ms  BatteryReader.read, shared connection (mean of 20)",
+        print(String(format: "  %6.2f ms  BatteryReader.read in detail, shared connection (mean of 50)",
                      mean(BatteryReader(smc: smc))))
-        print(String(format: "  %6.1f ms  BatteryReader.read, opening its own (mean of 20)",
+        // What a menu bar with a battery icon in it actually asks for, once a
+        // second, for as long as the app is open.
+        print(String(format: "  %6.2f ms  BatteryReader.read, charge only (mean of 50)",
+                     mean(BatteryReader(smc: smc), inDetail: false)))
+        print(String(format: "  %6.2f ms  BatteryReader.read in detail, opening its own (mean of 50)",
                      mean(BatteryReader())))
     }
     // Asked from a view body, so SwiftUI pays it again on every redraw — and

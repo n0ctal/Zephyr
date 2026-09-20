@@ -113,20 +113,20 @@ final class Telemetry: ObservableObject {
         var cpuSensor = false
         var fans = false
         var battery = false
-        /// The two SMC registers behind the power readout — what the system is
-        /// drawing and what the adapter is supplying.
+        /// Everything the battery can say beyond its charge: health, cycles,
+        /// capacities, temperature, the flow and the time left.
         ///
-        /// Apart from `battery` because they are the expensive half of it. The
-        /// charge, the health and the flow all come out of one registry fetch;
-        /// these are two SMC round trips at about 350 us each, which on this
-        /// machine was most of what an idle tick cost while the field that
-        /// shows them was switched off.
-        var supplyWatts = false
+        /// Apart from `battery` because it is most of the price. The charge is
+        /// four properties out of the registry; the rest is ten more and two
+        /// SMC round trips at about 350 us each, and nothing outside the
+        /// window shows any of it. A menu bar with a battery icon in it was
+        /// paying for all of it once a second.
+        var batteryInDetail = false
         var load = false
         var network = false
 
         static let everything = Needs(full: true, oneSensor: true, cpuSensor: true,
-                                      fans: true, battery: true, supplyWatts: true,
+                                      fans: true, battery: true, batteryInDetail: true,
                                       load: true, network: true)
 
         func union(_ other: Needs) -> Needs {
@@ -135,7 +135,7 @@ final class Telemetry: ObservableObject {
                   cpuSensor: cpuSensor || other.cpuSensor,
                   fans: fans || other.fans,
                   battery: battery || other.battery,
-                  supplyWatts: supplyWatts || other.supplyWatts,
+                  batteryInDetail: batteryInDetail || other.batteryInDetail,
                   load: load || other.load,
                   network: network || other.network)
         }
@@ -423,7 +423,7 @@ final class Telemetry: ObservableObject {
             }
             let fans = needs.fans ? (self.fanController?.readFans() ?? []) : nil
             let battery = needs.battery
-                ? self.batteryReader.read(includingSupply: needs.supplyWatts) : nil
+                ? self.batteryReader.read(inDetail: needs.batteryInDetail) : nil
             let load = needs.load ? self.systemLoad.read(includeGPU: needs.full) : nil
             let network = needs.network ? self.throughput.read() : nil
             // Never skipped. It is one dictionary from the power-management

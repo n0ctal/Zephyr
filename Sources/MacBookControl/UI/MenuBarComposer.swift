@@ -176,12 +176,13 @@ enum MenuBarComposer {
             // it does not wake the card the way asking Metal would.
             case .graphics: break
             case .fan: needs.fans = true
+            // The icon and the percentage are drawn from the charge alone.
             case .battery: needs.battery = true
-            // The only field that wants the two SMC power registers; the
-            // battery's own flow is worked out from the registry.
+            // Watts are the expensive half: the flow comes from properties the
+            // charge does not need and the supply from two SMC registers.
             case .power:
                 needs.battery = true
-                needs.supplyWatts = true
+                needs.batteryInDetail = true
             // The thermal reading is taken every tick regardless, because the
             // session's throttle history is documented to cover the time
             // nobody was looking.

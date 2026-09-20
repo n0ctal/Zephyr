@@ -1208,14 +1208,17 @@ enum SelfTest {
         expectEqual(named.power?.batteryWatts == nil, whole.power?.batteryWatts == nil,
                     "and still knows which way the watts are going")
 
-        // The reading the menu bar takes when nothing is showing watts.
-        if let lean = reader.read(includingSupply: false) {
-            expect(lean.power?.systemWatts == nil,
-                   "skipping the supply registers leaves no system watts")
-            expect(lean.power?.adapterWatts == nil, "and no adapter watts")
-            expectEqual(lean.power?.batteryWatts == nil, named.power?.batteryWatts == nil,
-                        "but the battery's own flow survives: it is not from the SMC")
-            expectEqual(lean.percent, named.percent, "and the charge is the same reading")
+        // The reading the menu bar takes: the charge, and nothing that only
+        // the window shows.
+        if let charge = reader.read(inDetail: false) {
+            expectEqual(charge.percent, named.percent, "the charge alone is the same charge")
+            expectEqual(charge.isCharging, named.isCharging, "and knows it is charging")
+            expectEqual(charge.isPluggedIn, named.isPluggedIn, "and knows about the charger")
+            expect(charge.celsius == nil, "and leaves the temperature unread")
+            expect(charge.cycleCount == nil, "and the cycles")
+            expect(charge.healthPercent == nil, "and the health")
+            expect(charge.minutesRemaining == nil, "and the time left")
+            expect(charge.power == nil, "and the watts, which are two SMC round trips")
         }
     }
 
@@ -1397,8 +1400,8 @@ enum SelfTest {
 
         let power = Telemetry.Needs.of(menuBar: [.power])
         expect(power.battery, "watts come from the battery reading")
-        expect(power.supplyWatts, "and from the two SMC registers beside it")
-        expect(!Telemetry.Needs.of(menuBar: [.battery]).supplyWatts,
+        expect(power.batteryInDetail, "and from the half of the reading that costs")
+        expect(!Telemetry.Needs.of(menuBar: [.battery]).batteryInDetail,
                "which the battery icon alone does not pay for")
         let throttle = Telemetry.Needs.of(menuBar: [.throttle])
         expect(!throttle.full && !throttle.load,
