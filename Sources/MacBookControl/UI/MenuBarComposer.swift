@@ -202,13 +202,26 @@ enum MenuBarComposer {
     struct Content {
         var image: NSImage?
         var title: String
+        /// What the line was drawn from, as a string.
+        ///
+        /// Two contents with the same signature are the same pixels. The menu
+        /// bar is redrawn twice a second whether or not anything moved, and
+        /// handing `button.image` a fresh image marks the item dirty even when
+        /// it is identical — so the caller compares this and leaves the item
+        /// alone when it matches. Built from the values rather than from the
+        /// pixels: comparing the drawn bytes costs 0.29 ms, which is more than
+        /// drawing them.
+        var signature: String = ""
     }
 
     /// A piece of the line: either text or a drawing.
     private enum Segment {
         /// A colour of its own, for the one field that has something to say.
         case text(String, NSColor? = nil)
-        case drawing(NSImage)
+        /// The key says what the drawing was made from. Two drawings with one
+        /// key are the same pixels, which is what lets the signature above be
+        /// built without looking at them.
+        case drawing(NSImage, key: String)
     }
 
     /// The whole status item is drawn as one image.
@@ -241,7 +254,22 @@ enum MenuBarComposer {
             segments.append(contentsOf: render(item, telemetry: telemetry, darkMenuBar: darkMenuBar))
         }
         guard !segments.isEmpty else { return Content(image: nil, title: "Zephyr") }
-        return Content(image: layout(segments, darkMenuBar: darkMenuBar), title: "")
+        return Content(image: layout(segments, darkMenuBar: darkMenuBar), title: "",
+                       signature: signature(of: segments, darkMenuBar: darkMenuBar))
+    }
+
+    /// What the line is made of, as a string. Cheap: a few short pieces joined.
+    private static func signature(of segments: [Segment], darkMenuBar: Bool) -> String {
+        var parts: [String] = [darkMenuBar ? "dark" : "light"]
+        for segment in segments {
+            switch segment {
+            case .text(let value, let colour):
+                parts.append("t:" + value + (colour.map { ":\($0.hashValue)" } ?? ""))
+            case .drawing(_, let key):
+                parts.append(key)
+            }
+        }
+        return parts.joined(separator: "|")
     }
 
     private static func render(_ item: Item, telemetry: Telemetry, darkMenuBar: Bool) -> [Segment] {
@@ -278,7 +306,9 @@ enum MenuBarComposer {
                 return text("\(battery.percent)%")
             case .icon:
                 guard let icon = batteryImage(battery, darkMenuBar: darkMenuBar) else { return [] }
-                return caption.isEmpty ? [.drawing(icon)] : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(icon)]
+                let key = batteryKey(battery, showingPercentage: false, darkMenuBar: darkMenuBar)
+                return caption.isEmpty ? [.drawing(icon, key: key)]
+                    : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(icon, key: key)]
             case .iconAndPercent:
                 // The iPhone puts the number inside the battery; every other
                 // icon needs it written beside. Printing both would be the
@@ -288,7 +318,8 @@ enum MenuBarComposer {
                                               darkMenuBar: darkMenuBar) else { return [] }
                 var pieces: [Segment] = []
                 if !caption.isEmpty { pieces.append(.text(caption.trimmingCharacters(in: .whitespaces))) }
-                pieces.append(.drawing(icon))
+                pieces.append(.drawing(icon, key: batteryKey(battery, showingPercentage: inside,
+                                                              darkMenuBar: darkMenuBar)))
                 if !inside { pieces.append(.text("\(battery.percent) %")) }
                 return pieces
             }
@@ -338,8 +369,12 @@ enum MenuBarComposer {
             case .total: return text("\(Int((load.total * 100).rounded()))%")
             case .perThread:
                 guard let bars = threadBars(load.perCore, darkMenuBar: darkMenuBar) else { return [] }
-                return caption.isEmpty ? [.drawing(bars)]
-                    : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(bars)]
+                // The bars are quantised to whole pixels, so the key is too:
+                // a core wandering between 41.2 % and 41.4 % draws the same
+                // bar and must not count as a change.
+                let key = "bars:" + load.perCore.map { String(Int(($0 * 100).rounded())) }.joined(separator: ",")
+                return caption.isEmpty ? [.drawing(bars, key: key)]
+                    : [.text(caption.trimmingCharacters(in: .whitespaces)), .drawing(bars, key: key)]
             }
 
         case .memory:
@@ -397,7 +432,7 @@ enum MenuBarComposer {
             switch segment {
             case .text(let value, _):
                 widths.append((value as NSString).size(withAttributes: attributes).width)
-            case .drawing(let image):
+            case .drawing(let image, _):
                 widths.append(image.size.width)
             }
         }
@@ -414,7 +449,7 @@ enum MenuBarComposer {
                 let size = (value as NSString).size(withAttributes: own)
                 (value as NSString).draw(at: NSPoint(x: x, y: (height - size.height) / 2),
                                          withAttributes: own)
-            case .drawing(let image):
+            case .drawing(let image, _):
                 image.draw(in: NSRect(x: x, y: (height - image.size.height) / 2,
                                       width: image.size.width, height: image.size.height),
                            from: .zero, operation: .sourceOver, fraction: 1)
@@ -503,6 +538,21 @@ enum MenuBarComposer {
     /// which at this size is most of what there is.
     static func pixelAligned(_ value: CGFloat) -> CGFloat {
         (value * 2).rounded() / 2
+    }
+
+    /// Everything the battery drawing is made from, and nothing else.
+    ///
+    /// The role rather than the three flags behind it: two states that paint
+    /// the same colour draw the same battery, and saying so here is what keeps
+    /// the menu bar still.
+    static func batteryKey(_ battery: BatteryStatus, showingPercentage: Bool,
+                           darkMenuBar: Bool) -> String {
+        let role = forcedFillRole ?? fillRole(percent: battery.percent,
+                                              isCharging: battery.isCharging,
+                                              isPluggedIn: battery.isPluggedIn,
+                                              lowPower: isLowPowerMode)
+        return "bat:\(battery.percent):\(role):\(battery.isPluggedIn):"
+            + "\(showingPercentage):\(darkMenuBar):\(Preferences.batteryIcon.rawValue)"
     }
 
     /// The iPhone battery, iOS 27 style.

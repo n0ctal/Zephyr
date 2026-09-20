@@ -152,6 +152,10 @@ final class AppController: NSObject, NSMenuDelegate {
 
     // MARK: Status title
 
+    /// The signature of the line currently on screen, so an identical one is
+    /// not drawn over itself.
+    private var lastLineDrawn: String?
+
     private func updateStatusTitle() {
         // The menu bar has its own appearance, which is not always the app's —
         // and the whole line is drawn by us now, so its colour has to be
@@ -160,6 +164,14 @@ final class AppController: NSObject, NSMenuDelegate {
             $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         } ?? true
         let content = MenuBarComposer.compose(telemetry: telemetry, darkMenuBar: dark)
+        // Handing the button a fresh image marks the status item for redraw
+        // whether or not a single pixel differs, and this runs twice a second
+        // for as long as the app is open. Most of those ticks change nothing:
+        // a temperature that has not moved, a battery that ticks once every
+        // few minutes. The signature says what the line was drawn from, so an
+        // unchanged one is left entirely alone.
+        guard content.signature != lastLineDrawn else { return }
+        lastLineDrawn = content.signature
         statusItem.button?.image = content.image
         statusItem.button?.imagePosition = content.image == nil ? .noImage
             : (content.title.isEmpty ? .imageOnly : .imageLeading)

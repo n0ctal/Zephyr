@@ -21,6 +21,14 @@ the bump travelled inside the change it released.
   room for it is counted into the pill whether or not it is drawn, so plugging
   the charger in does not drag the rest of the menu bar sideways.
 
+- The menu bar is not redrawn when nothing in it has changed. It was rebuilt
+  and handed to the status item twice a second for as long as the app runs,
+  and giving `button.image` a fresh image marks the item dirty whether or not
+  a pixel differs — while most ticks change nothing, a temperature that has
+  not moved or a battery that steps once in several minutes. Each line now
+  carries a signature of the values it was drawn from, and an unchanged one is
+  left alone. Built from the values rather than the pixels: comparing the
+  drawn bytes costs 0.29 ms, more than drawing them.
 - The battery is one shape whether or not it shows a number. It was 37 points
   wide with the percentage and 23 without, which at one height reads as two
   different objects rather than one drawn two ways: the short one looks

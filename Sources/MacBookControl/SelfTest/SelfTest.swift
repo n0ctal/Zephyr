@@ -479,6 +479,28 @@ enum SelfTest {
         expectEqual(MenuBarComposer.pixelAligned(3.26), 3.5, "a coordinate is pulled to the nearer half point")
         expectEqual(MenuBarComposer.pixelAligned(3.24), 3.0, "in both directions")
 
+        // The key behind the "has anything changed" check. Two states that
+        // draw the same battery must give one key, and anything that changes a
+        // pixel must change it — a key that misses a difference leaves a stale
+        // menu bar, which is worse than redrawing too often.
+        func key(_ s: BatteryStatus, pct: Bool = true) -> String {
+            MenuBarComposer.batteryKey(s, showingPercentage: pct, darkMenuBar: true)
+        }
+        expectEqual(key(battery(80, mains: true)), key(battery(80, mains: true)),
+                    "the same state gives the same key")
+        expect(key(battery(80, mains: true)) != key(battery(81, mains: true)),
+               "a percent that moved changes it")
+        expect(key(battery(80, mains: true)) != key(battery(80, mains: false)),
+               "and so does the charger, which changes only the bolt")
+        expect(key(battery(80, mains: true)) != key(battery(80, mains: true), pct: false),
+               "and so does hiding the number")
+        expect(key(battery(80, mains: true))
+                != MenuBarComposer.batteryKey(battery(80, mains: true),
+                                              showingPercentage: true, darkMenuBar: false),
+               "and so does the menu bar changing colour under it")
+        expect(key(battery(15, mains: false)) != key(battery(15, mains: false, charging: true)),
+               "two states at one level still differ when their colour does")
+
         // The colour still says what the bolt cannot: whether it is filling.
         expectEqual(MenuBarComposer.fillRole(percent: 80, isCharging: true,
                                              isPluggedIn: true, lowPower: false), .charging,
