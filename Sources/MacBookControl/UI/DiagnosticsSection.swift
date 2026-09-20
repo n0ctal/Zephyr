@@ -16,7 +16,7 @@ struct DiagnosticsSection: View {
     /// The whole sensor set and the fans, which is the screen TG Pro is opened
     /// for. Passed in rather than polled: telemetry is already reading every
     /// sensor while the window is open, and a second reader would be a second
-    /// sweep of forty-eight SMC keys for the same numbers.
+    /// sweep of fifty SMC keys for the same numbers.
     @ObservedObject var telemetry: Telemetry
     @StateObject private var drive = Polled(every: 300) { DriveHealth.read() }
     @StateObject private var sleep = Polled(every: 5) { SleepDiagnostics.assertions() }

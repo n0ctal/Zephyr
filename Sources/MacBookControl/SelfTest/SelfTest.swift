@@ -1123,7 +1123,7 @@ enum SelfTest {
         let temperatureOnly = Telemetry.Needs.of(menuBar: [.temperature])
         expect(temperatureOnly.oneSensor, "a temperature in the menu bar wants one sensor")
         expect(!temperatureOnly.full,
-               "and not the sweep of all forty-eight, which is the whole point")
+               "and not the sweep of all fifty, which is the whole point")
         expect(!temperatureOnly.load && !temperatureOnly.network,
                "nothing else is read for it")
 

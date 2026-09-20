@@ -337,7 +337,15 @@ battery ends up capped at 80 % for a year because an application was deleted.
 **Nothing is read that nobody is looking at.** Telemetry asks the menu bar, the
 open tab and the enabled profiles what they actually need, and reads that. With
 the window shut and one sensor in the menu bar it reads one sensor rather than
-forty-eight: 1.3 % CPU became 0.2 % when this was put in.
+fifty: 1.3 % CPU became 0.2 % when this was put in.
+
+**And what is read is bought once.** The SMC is asked each key's size and type
+once rather than before every read, the battery shares telemetry's connection
+instead of opening its own, and the throttle figures come out of one dictionary
+rather than three. Measured with `--test-timing`: a sweep of the sensors 32 ms
+to 16, both fans 7 ms to 3, a battery reading 1.8 ms to 1.0, the throttle
+reading 0.4 ms to 0.1, and the question "does this Mac have a charge ceiling",
+which SwiftUI was asking on every redraw, from 0.68 ms to nothing.
 
 ## Repository layout
 

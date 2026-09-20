@@ -79,7 +79,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     //
     // Closing is not the only way to stop looking: the window can be
     // minimised, hidden with the application, or simply buried under
-    // something else. Any of those left telemetry reading all forty-eight
+    // something else. Any of those left telemetry reading all fifty
     // sensors and walking the accelerator's registry every two seconds for a
     // window nobody could see — which is the state this whole arrangement
     // exists to avoid.
