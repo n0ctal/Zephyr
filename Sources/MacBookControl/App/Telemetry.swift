@@ -274,15 +274,27 @@ final class Telemetry: ObservableObject {
                     temperatures: self.sensors?.readTemperatures() ?? [],
                     fans: self.fanController?.readFans() ?? [],
                     battery: self.batteryReader.read(),
-                    // With the window open this is the reading the Graphics
-                    // row is about to be drawn from, so the accelerator's
-                    // share is wanted; at launch the window is shut and it is
-                    // the most expensive thing in the load reader. Asking by
-                    // the window's state gets both, and without it the row
-                    // read "—" for a whole polling interval after opening,
-                    // because the immediate follow-up lands inside the gap
-                    // floor and is refused.
-                    load: self.systemLoad.read(includeGPU: self.isWindowOpen),
+                    // Without the accelerator's share, which is the most
+                    // expensive thing in the load reader and which nothing is
+                    // displaying at launch — the only moment this path is
+                    // reliably taken.
+                    //
+                    // Asking for it here by the window's state was tried and
+                    // does not work: opening the window calls retune(), which
+                    // returns without restarting anything when the interval
+                    // has not changed, and at the shipped defaults both poll
+                    // rates are two seconds, so it has not. The read that does
+                    // happen is the refresh() the same didSet issues, and if
+                    // that lands within a fifth of a second of the previous
+                    // tick the load reader refuses it as too close to be a
+                    // rate. So the graphics row can read "—" for one polling
+                    // interval after the window opens. It is a dash while
+                    // nothing has been measured, which is the honest answer;
+                    // the alternatives were to show the previous reading as
+                    // though it were current, or to pay a registry walk on a
+                    // blocking main-thread read that occlusion changes
+                    // re-trigger.
+                    load: self.systemLoad.read(),
                     network: self.throughput.read(),
                     thermal: self.thermalMonitor.read())
         }
