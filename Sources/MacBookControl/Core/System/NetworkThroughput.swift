@@ -90,6 +90,21 @@ final class NetworkThroughput {
     /// speed they wrap between one reading and the next and the difference
     /// stops meaning anything. A number above it is a counter that moved for
     /// some reason other than traffic.
+    ///
+    /// The wrap is a real limit and not one this can escape. Below about
+    /// 48 MB/s sustained the counters come round no more than once between two
+    /// readings, and the subtraction above handles that; above it, twice a
+    /// turn is indistinguishable from none and the speed comes out believable
+    /// and wrong.
+    ///
+    /// `NET_RT_IFLIST2` was tried as a way out, since its `if_data64` carries
+    /// 64-bit counters. It does not work here: measured on this machine, the
+    /// kernel fills that field's high word with zeros for the physical
+    /// interface — `ifi_ibytes` came back as 2,626,178,048 against netstat's
+    /// 6,921,192,549, which is the same figure with the top 32 bits cut off,
+    /// while the packet counters beside it were exact. The wide path returns
+    /// the narrow value, so it buys nothing and costs a hand-written walk over
+    /// the routing table. Do not try it again without checking that first.
     static func isPlausible(_ bytesPerSecond: Double) -> Bool {
         bytesPerSecond >= 0 && bytesPerSecond < 2 * 1024 * 1024 * 1024
     }

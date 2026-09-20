@@ -263,19 +263,25 @@ final class HelperService: NSObject, HelperProtocol {
             // the die would have to pass 120 °C to reach it, and the machine
             // shuts down before that. The valve was doing nothing.
             //
-            // The whole machine rather than the CPU alone, because the
-            // firmware escalates on whatever is hot; a hold that blocks its
-            // escalation should give way to whatever it was reacting to. The
-            // reading is the same cached one the curves use, so asking costs
-            // nothing extra.
+            // The processor, not the hottest thing in the machine. The
+            // figures below were measured against the hottest core, so that
+            // is what they have to be compared against: applied to the
+            // maximum over every sensor they would mean something else on
+            // every machine, and on one with a hot regulator or a hot drive
+            // they would mean a pinned fan is never held at all.
+            //
+            // It is also one key rather than a sweep of fifty. The claim that
+            // this costs nothing was wrong: the cached hottest is recomputed
+            // every two seconds, which put a 15 ms sweep into the root control
+            // loop for as long as any fan was pinned.
             if self.forcedTargets.isEmpty {
                 // Nothing is held, so nothing is held back. Without this the
                 // set outlives the hold that filled it, and the next fan to be
                 // pinned is handed straight to the firmware.
                 self.releasedByHeat.removeAll()
-            } else if let hottest = self.curveTemperature(FanCurve.hottestSensorKey) {
+            } else if let cpu = self.sensors?.cpuTemperature()?.celsius {
                 self.releasedByHeat = HelperService.released(self.releasedByHeat,
-                                                            at: hottest,
+                                                            at: cpu,
                                                             holding: Set(self.forcedTargets.keys))
             }
             for (fan, rpm) in self.forcedTargets {

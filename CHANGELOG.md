@@ -48,6 +48,17 @@ the bump travelled inside the change it released.
   stuck with the second-best for the life of the process while the full sweep
   went on preferring the first — the same disagreement the one-list change set
   out to end, arriving by another door.
+- The thermal release compares against the processor rather than against the
+  hottest thing in the machine. Its figures were measured on the hottest core,
+  so that is what they have to be held against — applied to the maximum over
+  every sensor they would mean something different on every machine, and on
+  one with a hot regulator would mean a pinned fan is never held at all. It
+  also costs one key again instead of a sweep of fifty every two seconds
+  inside the root control loop.
+- TCGC is out of the CPU preference list, as TCXC is out of the graphics one.
+  It is the integrated GPU's block on the processor die, and a single sensor
+  answering under two headings is how a Mac without the other keys came to
+  show its graphics temperature as the CPU's.
 - The thermal release has a band rather than a single figure: it hands a
   pinned fan back at 95 °C and does not take it again until 85. With one
   threshold the firmware would cool the machine just past it, the hold would

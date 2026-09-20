@@ -42,7 +42,11 @@ final class SensorReader {
     /// rather than on it and lags badly: measured under a sustained build it
     /// read 69.4 °C against TC0F's 87.2 at the same instant, and earlier in
     /// the same build 54 °C against a hottest core of 94.
-    static let cpuKeyPreference = ["TCMX", "TC0F", "TC0E", "TCXC", "TCGC", "TC0D", "TC0H", "TC0P"]
+    /// TCGC is deliberately absent, as TCXC now is from the graphics list: it
+    /// is the integrated GPU's block on the CPU die, and one sensor answering
+    /// under two headings is how a machine without the other keys came to show
+    /// its graphics temperature as the processor's.
+    static let cpuKeyPreference = ["TCMX", "TC0F", "TC0E", "TCXC", "TC0D", "TC0H", "TC0P"]
 
     init(smc: SMC) {
         self.smc = smc
