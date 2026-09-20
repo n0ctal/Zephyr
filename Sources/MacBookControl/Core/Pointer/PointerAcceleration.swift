@@ -71,7 +71,20 @@ final class PointerAcceleration {
             // skipped, so `hasUnrestored` reported work outstanding and the
             // next launch put back a device Zephyr had never touched.
             guard let wire = PointerAcceleration.curveValue(multiplier) else { continue }
-            if captured[id] == nil, let current = hid.int(service, key) {
+            // Alter only what can be put back. A device that will not say what
+            // its curve is now gets nothing written to it: `originals` is what
+            // both this run and the next one restore from, so writing without
+            // a record leaves the device carrying our figure with nothing left
+            // that knows the old one.
+            //
+            // This is not hypothetical on the machine this was written on. Its
+            // trackpad publishes `HIDPointerAccelerationType` — the name of
+            // its curve reads fine — while the property that name points at is
+            // absent from the service. `devices()` needs both and so never
+            // lists it; this loop walks the services directly and would have
+            // written to it.
+            if captured[id] == nil {
+                guard let current = hid.int(service, key) else { continue }
                 captured[id] = current
             }
             hid.set(service, key, wire as CFNumber)
