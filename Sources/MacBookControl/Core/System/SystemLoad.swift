@@ -81,6 +81,13 @@ final class SystemLoad {
     func read(includeGPU: Bool = false) -> Snapshot? {
         guard let ticks = coreTicks() else { return nil }
         let elapsed = previousAt.map { Date().timeIntervalSince($0) }
+        // Taken here rather than where it is used, which is past three early
+        // returns. The counter pair has to be replaced on every read — that is
+        // what makes the clock an average over the last interval instead of an
+        // average over however long it has been since a read last got this
+        // far. effectiveHertz()'s own comment says so; the early returns had
+        // quietly made it untrue, and the gap check added above is one more.
+        let hertz = effectiveHertz()
         defer {
             previousTicks = ticks
             previousAt = Date()
@@ -111,7 +118,7 @@ final class SystemLoad {
                         memoryUsed: memoryUsed(), memoryTotal: Self.memoryTotal,
                         gpuFraction: includeGPU ? busiest?.fraction : nil,
                         gpuIsDiscrete: includeGPU ? busiest?.isDiscrete : nil,
-                        cpuHertz: effectiveHertz(),
+                        cpuHertz: hertz,
                         disk: Self.diskUsage())
     }
 

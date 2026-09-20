@@ -537,6 +537,7 @@ func runProfilesTest() {
     print("  clock: \(Condition.clock(context.minutesSinceMidnight))")
     print("  cpu: \(context.cpuCelsius.map { String(format: "%.0f °C", $0) } ?? "unknown")")
     print("  cpu load: \(context.cpuLoadPercent.map { String(format: "%.0f %%", $0) } ?? "unknown")")
+    print("  cpu clock: \(telemetry.load?.cpuHertz.map { String(format: "%.2f GHz", $0 / 1e9) } ?? "unknown")")
     print("  apps running: \(context.runningApps.count)")
 
     let samples: [Condition] = [
