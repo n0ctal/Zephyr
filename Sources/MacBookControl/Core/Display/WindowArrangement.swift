@@ -65,9 +65,12 @@ enum WindowArrangement {
             for (placement, index) in pairings(of: wanted, against: titles) {
                 let window = windows[index]
                 guard frame(of: window) != placement.frame else { continue }
-                set(window, kAXPositionAttribute, placement.frame.origin)
-                set(window, kAXSizeAttribute, placement.frame.size)
-                restored += 1
+                // Position first, then size, and both have to take: a window
+                // moved but not resized is half restored, and saying so is
+                // more use than a number that counts attempts.
+                let moved = set(window, kAXPositionAttribute, placement.frame.origin)
+                let resized = set(window, kAXSizeAttribute, placement.frame.size)
+                if moved && resized { restored += 1 }
             }
         }
         return restored
@@ -137,15 +140,19 @@ enum WindowArrangement {
         return CGRect(origin: origin, size: size)
     }
 
-    private static func set(_ window: AXUIElement, _ name: String, _ point: CGPoint) {
+    /// Both of these say whether the window actually moved. An application can
+    /// refuse — a full-screen window will, and some refuse everything — and
+    /// counting a refusal as a restored window makes the figure this returns a
+    /// guess rather than a count.
+    private static func set(_ window: AXUIElement, _ name: String, _ point: CGPoint) -> Bool {
         var value = point
-        guard let wrapped = AXValueCreate(.cgPoint, &value) else { return }
-        AXUIElementSetAttributeValue(window, name as CFString, wrapped)
+        guard let wrapped = AXValueCreate(.cgPoint, &value) else { return false }
+        return AXUIElementSetAttributeValue(window, name as CFString, wrapped) == .success
     }
 
-    private static func set(_ window: AXUIElement, _ name: String, _ size: CGSize) {
+    private static func set(_ window: AXUIElement, _ name: String, _ size: CGSize) -> Bool {
         var value = size
-        guard let wrapped = AXValueCreate(.cgSize, &value) else { return }
-        AXUIElementSetAttributeValue(window, name as CFString, wrapped)
+        guard let wrapped = AXValueCreate(.cgSize, &value) else { return false }
+        return AXUIElementSetAttributeValue(window, name as CFString, wrapped) == .success
     }
 }
