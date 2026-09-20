@@ -274,7 +274,15 @@ final class Telemetry: ObservableObject {
                     temperatures: self.sensors?.readTemperatures() ?? [],
                     fans: self.fanController?.readFans() ?? [],
                     battery: self.batteryReader.read(),
-                    load: self.systemLoad.read(),
+                    // With the window open this is the reading the Graphics
+                    // row is about to be drawn from, so the accelerator's
+                    // share is wanted; at launch the window is shut and it is
+                    // the most expensive thing in the load reader. Asking by
+                    // the window's state gets both, and without it the row
+                    // read "—" for a whole polling interval after opening,
+                    // because the immediate follow-up lands inside the gap
+                    // floor and is refused.
+                    load: self.systemLoad.read(includeGPU: self.isWindowOpen),
                     network: self.throughput.read(),
                     thermal: self.thermalMonitor.read())
         }

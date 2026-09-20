@@ -122,8 +122,8 @@ the bump travelled inside the change it released.
   comparing 90 °C against TC0P — a sensor beside the package rather than on
   it. Measured here under a sustained build, TC0P held 54 °C while the hottest
   core read 94, so the die would have had to pass 120 °C for the release to
-  fire. It never fired. It now reads the hottest sensor in the machine, which
-  is also what the firmware is reacting to when a manual hold blocks it.
+  fire. It never fired. It reads the processor now — see the entry above for
+  which sensor and which figures ended up being right.
 - TC0P is labelled "CPU Proximity" rather than "CPU", for the same reason.
 - Whether this Mac has a charge ceiling at all is worked out once instead of
   on every redraw. The question is asked from a view body, and SwiftUI re-runs
