@@ -546,16 +546,18 @@ enum MenuBarComposer {
         // whole menu bar shift sideways every time the battery ticks over,
         // which is the sort of movement the eye cannot help following.
         let widest = ("100" as NSString).size(withAttributes: attributes).width
-        let bodyWidth: CGFloat = showingPercentage ? widest + 4 : 23
 
-        // Room for the bolt, kept whether or not the bolt is in it. An item
-        // that changes width when the charger goes in drags everything to the
-        // left of it sideways, which is the same movement the pill is pinned
-        // to one width to avoid.
+        // The bolt sits inside the pill, to the right of the number, and its
+        // room is counted into the pill whether or not it is drawn — for the
+        // same reason the pill is sized for "100" rather than for the figure
+        // it happens to hold. An item that changes width when the charger goes
+        // in drags everything to the left of it sideways.
+        let boltWidth = height * 0.32
         let boltGap: CGFloat = 2
-        let boltWidth: CGFloat = 5.5
-        let size = NSSize(width: bodyWidth + capGap + capWidth + boltGap + boltWidth,
-                          height: height)
+        let bodyWidth: CGFloat = showingPercentage
+            ? widest + boltGap + boltWidth + 5
+            : 23
+        let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
 
         let fill = (Self.forcedFillRole
             ?? fillRole(percent: battery.percent, isCharging: battery.isCharging,
@@ -591,33 +593,46 @@ enum MenuBarComposer {
                                          width: capWidth, height: 5),
                      xRadius: 1, yRadius: 1).fill()
 
-        // Mains or not, which the colour alone could not say. Green means a
-        // battery that is filling; white means one that is not — and a machine
-        // sitting on the charger at 100 %, or held at a charge limit, is not
-        // filling either, so it looked exactly like one running on battery.
-        // That is the state this Mac is in most of the time.
-        if battery.isPluggedIn {
-            paint.setFill()
-            bolt(in: NSRect(x: bodyWidth + capGap + capWidth + boltGap,
-                            y: (height - height * 0.72) / 2,
-                            width: boltWidth, height: height * 0.72)).fill()
-        }
+        // The number and the bolt together, centred as one group.
+        //
+        // Mains or not is what the colour could not say. Green means a battery
+        // that is filling; a machine sitting at 100 % on the charger, or held
+        // at a charge ceiling, is not filling — so it drew exactly like one
+        // running on battery, which is the state this Mac is in most of the
+        // time.
+        let boltShown = battery.isPluggedIn
+        // The gap belongs to the pair, not to the bolt: counting it with no
+        // number beside it put the bolt a point left of centre whenever the
+        // percentage was switched off.
+        let gapBeforeBolt = showingPercentage && boltShown ? boltGap : 0
+        let groupWidth = measured.width + gapBeforeBolt + (boltShown ? boltWidth : 0)
+        let groupX = (bodyWidth - groupWidth) / 2
 
-        if showingPercentage {
-            // Punched through rather than painted on: the digits then read
-            // against the filled part, against the grey remainder, and against
-            // a light or dark menu bar without choosing a colour for each case.
-            // Centred on the cap height, not on the line height. A line box
-            // carries room for descenders that digits never use, so centring
-            // on it pushes the number visibly high and makes it look smaller
-            // than the space it occupies.
-            let capHeight = font.capHeight
-            // `descender` is negative, so it is added: subtracting it pushes
-            // the digits up out of the pill, which is what happened first.
-            let origin = NSPoint(x: (bodyWidth - measured.width) / 2,
-                                 y: (height - capHeight) / 2 + font.descender)
+        if showingPercentage || boltShown {
+            // Punched through rather than painted on: both then read against
+            // the filled part, against the grey remainder, and against a light
+            // or dark menu bar without choosing a colour for each case.
+            NSColor.black.setFill()
             NSGraphicsContext.current?.compositingOperation = .destinationOut
-            text.draw(at: origin, withAttributes: attributes)
+            if showingPercentage {
+                // Centred on the cap height, not on the line height. A line box
+                // carries room for descenders that digits never use, so
+                // centring on it pushes the number visibly high and makes it
+                // look smaller than the space it occupies.
+                let capHeight = font.capHeight
+                // `descender` is negative, so it is added: subtracting it
+                // pushes the digits up out of the pill, which is what happened
+                // first.
+                text.draw(at: NSPoint(x: groupX,
+                                      y: (height - capHeight) / 2 + font.descender),
+                          withAttributes: attributes)
+            }
+            if boltShown {
+                let boltHeight = height * 0.82
+                bolt(in: NSRect(x: groupX + measured.width + gapBeforeBolt,
+                                y: (height - boltHeight) / 2,
+                                width: boltWidth, height: boltHeight)).fill()
+            }
             NSGraphicsContext.current?.compositingOperation = .sourceOver
         }
 
@@ -635,12 +650,12 @@ enum MenuBarComposer {
             NSPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
         }
         let path = NSBezierPath()
-        path.move(to: at(0.62, 1.00))
-        path.line(to: at(0.00, 0.46))
-        path.line(to: at(0.42, 0.46))
-        path.line(to: at(0.38, 0.00))
-        path.line(to: at(1.00, 0.54))
-        path.line(to: at(0.58, 0.54))
+        path.move(to: at(0.70, 1.00))
+        path.line(to: at(0.00, 0.44))
+        path.line(to: at(0.36, 0.44))
+        path.line(to: at(0.30, 0.00))
+        path.line(to: at(1.00, 0.56))
+        path.line(to: at(0.64, 0.56))
         path.close()
         return path
     }
