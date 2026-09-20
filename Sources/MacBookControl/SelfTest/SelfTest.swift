@@ -66,6 +66,7 @@ enum SelfTest {
         fanTargetSkipping()
         throttleAccounting()
         loadSampleGap()
+        thermalReleaseBand()
         cpuLoadCondition()
         sleepAssertionWording()
 
@@ -403,12 +404,39 @@ enum SelfTest {
                     "the rule reads as a sentence")
     }
 
+    private static func thermalReleaseBand() {
+        let held: Set<Int> = [0, 1]
+        let none: Set<Int> = []
+
+        expectEqual(HelperService.released(none, at: 96, holding: held), held,
+                    "past the ceiling, every held fan goes back to the firmware")
+        expectEqual(HelperService.released(held, at: 80, holding: held), none,
+                    "well below it, the hold resumes")
+
+        // The band is the whole point. Between the two figures the previous
+        // answer stands, so a machine sitting near the ceiling is not taken
+        // and given back twice a second.
+        expectEqual(HelperService.released(held, at: 90, holding: held), held,
+                    "inside the band a released fan stays released")
+        expectEqual(HelperService.released(none, at: 90, holding: held), none,
+                    "and a held one stays held")
+        expectEqual(HelperService.released(none, at: 94, holding: held), none,
+                    "an ordinary build reaches 94 and must not cost anybody their setting")
+
+        // A fan that stopped being held is not remembered as released, or the
+        // next fan to take its index would inherit the state.
+        expectEqual(HelperService.released(held, at: 90, holding: [0]), [0],
+                    "only fans still being held can be released ones")
+    }
+
     private static func loadSampleGap() {
         expect(SystemLoad.isUsableGap(2), "the ordinary tick is a usable gap")
         expect(SystemLoad.isUsableGap(0.5), "half a second still says something")
         expect(!SystemLoad.isUsableGap(0.05),
                "a reading taken moments after the last one is mostly rounding")
         expect(!SystemLoad.isUsableGap(0), "and one taken at the same instant is nothing at all")
+        expect(SystemLoad.isUsableGap(60),
+               "the slowest reading anybody can ask for is still a reading")
         expect(!SystemLoad.isUsableGap(8 * 3600),
                "a night asleep describes the night, not now")
         // The lower bound is the one the network reader has always used; they

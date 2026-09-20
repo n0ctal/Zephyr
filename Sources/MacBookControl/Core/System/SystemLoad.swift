@@ -71,8 +71,12 @@ final class SystemLoad {
     /// Whether two samples are far enough apart to divide one by the other,
     /// and near enough for the answer to describe now. Separate from the read
     /// so both bounds can be stated rather than inferred.
+    /// The ceiling sits above the slowest reading anybody can ask for. The
+    /// menu bar's interval goes up to 60 seconds, and at 20 every gap was
+    /// rejected — which left `load` nil for ever, and with it the profile rule
+    /// that asks whether the CPU is busy, silently never matching.
     static func isUsableGap(_ seconds: TimeInterval) -> Bool {
-        seconds > 0.2 && seconds < 20
+        seconds > 0.2 && seconds < 90
     }
 
     /// `includeGPU` is off by default because finding the accelerator's busy

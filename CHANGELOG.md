@@ -38,6 +38,24 @@ the bump travelled inside the change it released.
   idle through a build, TCMX matched the hottest of the eight per-core sensors
   exactly ten times and read 2.3 °C above it twice, never below, and it moved
   the moment the load arrived while TC0F was still catching up.
+- The thermal release has a band rather than a single figure: it hands a
+  pinned fan back at 95 °C and does not take it again until 85. With one
+  threshold the firmware would cool the machine just past it, the hold would
+  resume, and the fan would change hands every couple of seconds. The ceiling
+  moved from 90 to 95 for the same reason it had to move at all — against the
+  hottest core, an ordinary build reaches 94, and a ceiling routine work
+  crosses takes the fan away from its owner for nothing. While a fan is held
+  back this way the daemon reports it as "auto", which is what it is.
+- CPU load stopped answering at all for anyone polling slower than 20 seconds.
+  The menu bar offers up to 60, and the guard added earlier this release
+  rejected every gap above 20 — which also meant the new "CPU load above"
+  profile rule could never match. The ceiling is 90 seconds now.
+- Whether the Mac has a charge ceiling is remembered only when the SMC
+  actually answered. A call that failed was being remembered as "no such key",
+  which hid the Battery tab for the rest of the session.
+- The integrated-GPU temperature no longer falls back to TCXC. That is the
+  CPU's own PECI sensor, so on a Mac with TCXC and no TCGC the graphics row
+  showed the processor's temperature under a heading that said GPU.
 - The thermal ceiling that releases a pinned fan back to the firmware was
   comparing 90 °C against TC0P — a sensor beside the package rather than on
   it. Measured here under a sustained build, TC0P held 54 °C while the hottest

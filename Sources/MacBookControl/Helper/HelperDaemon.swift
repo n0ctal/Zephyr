@@ -10,13 +10,28 @@ private let kAuthorizedCDHashPath = "/Library/Application Support/MacBookControl
 
 /// The root-side implementation of `HelperProtocol`. A single shared instance
 /// serves every XPC connection. All SMC/pmset work is serialized on one queue
-/// — every entry point wraps its body in `queue.async` or `queue.sync`, the
-/// control timer is created against the same queue, and the helpers below it
-/// are reached only from inside those. `SMC` is not safe to share across
-/// threads and says so; this is where that is kept true.
+/// — every entry point but `getVersion`, which touches nothing, wraps its body
+/// in `queue.async` or `queue.sync`; the control timer is created against the
+/// same queue; and the helpers below it are reached only from inside those.
+/// `SMC` is not safe to share across threads and says so; this is where that
+/// is kept true. Calls arrive on whatever queue their XPC connection uses, so
+/// the wrapping is what makes that safe, not a convention.
 /// Above this the firmware must be allowed to take the fan back: a manual hold
 /// blocks its escalation, and no user setting is worth a thermal event.
-let kThermalReleaseCelsius: Double = 90
+///
+/// Measured against the hottest sensor in the machine, so the figure has to
+/// suit one. 90 was set when this was compared against TC0P, which never
+/// reaches it; against the hottest core, an ordinary build touches 94, and a
+/// ceiling that routine work crosses is a ceiling that takes the fan away
+/// from its owner for no reason.
+let kThermalReleaseCelsius: Double = 95
+
+/// And the hold does not resume until it has come back down this far.
+///
+/// Without the gap the fan is released, the firmware cools the machine below
+/// the ceiling, the hold resumes, the machine heats again — a full cycle every
+/// couple of seconds, which on this hardware is loud enough to hear.
+let kThermalResumeCelsius: Double = 85
 
 final class HelperService: NSObject, HelperProtocol {
     private let queue = DispatchQueue(label: "com.n0ctal.macbookcontrol.helper.control")
@@ -42,6 +57,14 @@ final class HelperService: NSObject, HelperProtocol {
     /// doing twice a second for a menu bar, not four times a second inside a
     /// control loop that only needs to know roughly how hot the machine is.
     private var cachedHottest: (celsius: Double, at: Date)?
+
+    /// Fans handed back to the firmware because the machine got too hot.
+    ///
+    /// They keep their entry in `forcedTargets`, because the hold is meant to
+    /// resume once it cools — but they are not being held right now, and
+    /// `fanModes` says so rather than reporting a setting that is not in
+    /// effect.
+    private var releasedByHeat: Set<Int> = []
     private var controlTimer: DispatchSourceTimer?
 
     override init() {
@@ -63,6 +86,7 @@ final class HelperService: NSObject, HelperProtocol {
             let count = self.fans?.fanCount ?? 0
             let modes = (0 ..< count).map { fan -> String in
                 if self.curveFans[fan] != nil { return "curve" }
+                if self.releasedByHeat.contains(fan) { return "auto" }
                 if self.forcedTargets[fan] != nil { return "manual" }
                 return "auto"
             }
@@ -177,26 +201,36 @@ final class HelperService: NSObject, HelperProtocol {
     private var desiredChargeLimit: Int?
 
     func chargeLimit(reply: @escaping (Int) -> Void) {
-        reply(BatteryLimit.current() ?? -1)
+        queue.async { reply(BatteryLimit.current() ?? -1) }
     }
 
     func setChargeLimit(_ percent: Int, reply: @escaping (Bool) -> Void) {
-        desiredChargeLimit = percent
-        reply(BatteryLimit.apply(percent))
+        // On the queue like everything else. These four arrive on whatever
+        // queue their XPC connection uses, and `desiredChargeLimit` is read by
+        // the wake handler from another one.
+        queue.async {
+            self.desiredChargeLimit = percent
+            reply(BatteryLimit.apply(percent))
+        }
     }
 
     func setPowerLimit(_ raw: UInt64, reply: @escaping (Bool) -> Void) {
-        // Absent sysctl means the power kext is not loaded, which is a normal
-        // state rather than an error — the caller shows it as unavailable.
-        var value = raw
-        let result = sysctlbyname("kern.zephyr_power_limit", nil, nil,
-                                  &value, MemoryLayout<UInt64>.size)
-        reply(result == 0)
+        queue.async {
+            // Absent sysctl means the power kext is not loaded, which is a
+            // normal state rather than an error — the caller shows it as
+            // unavailable.
+            var value = raw
+            let result = sysctlbyname("kern.zephyr_power_limit", nil, nil,
+                                      &value, MemoryLayout<UInt64>.size)
+            reply(result == 0)
+        }
     }
 
     func reapplyChargeLimitAfterWake(reply: @escaping (Bool) -> Void) {
-        guard let wanted = desiredChargeLimit else { reply(true); return }
-        reply(BatteryLimit.apply(wanted))
+        queue.async {
+            guard let wanted = self.desiredChargeLimit else { reply(true); return }
+            reply(BatteryLimit.apply(wanted))
+        }
     }
 
     private func startControlLoopIfNeeded() {
@@ -225,10 +259,14 @@ final class HelperService: NSObject, HelperProtocol {
             // escalation should give way to whatever it was reacting to. The
             // reading is the same cached one the curves use, so asking costs
             // nothing extra.
-            let tooHot = !self.forcedTargets.isEmpty
-                && (self.curveTemperature(FanCurve.hottestSensorKey) ?? 0) >= kThermalReleaseCelsius
+            if !self.forcedTargets.isEmpty,
+               let hottest = self.curveTemperature(FanCurve.hottestSensorKey) {
+                self.releasedByHeat = HelperService.released(self.releasedByHeat,
+                                                            at: hottest,
+                                                            holding: Set(self.forcedTargets.keys))
+            }
             for (fan, rpm) in self.forcedTargets {
-                if tooHot {
+                if self.releasedByHeat.contains(fan) {
                     try? self.fans?.setAuto(fan: fan)
                     continue
                 }
@@ -248,6 +286,19 @@ final class HelperService: NSObject, HelperProtocol {
         }
         timer.resume()
         controlTimer = timer
+    }
+
+    /// Which held fans are currently given back to the firmware.
+    ///
+    /// A function of the previous answer and the temperature, so the band
+    /// between the two thresholds can be checked without a hot machine: inside
+    /// it, whatever was true stays true, which is what stops the fan being
+    /// taken and given back twice a second.
+    static func released(_ current: Set<Int>, at celsius: Double,
+                         holding: Set<Int>) -> Set<Int> {
+        if celsius >= kThermalReleaseCelsius { return holding }
+        if celsius <= kThermalResumeCelsius { return [] }
+        return current.intersection(holding)
     }
 
     /// Whatever the curve has been told to follow.

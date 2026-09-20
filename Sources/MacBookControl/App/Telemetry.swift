@@ -211,11 +211,16 @@ final class Telemetry: ObservableObject {
 
     /// The choice itself, apart from the readings it is made against, so the
     /// order can be checked without a machine that has the sensors.
+    /// The integrated list has one entry on purpose. TCXC used to follow it,
+    /// but that is the CPU's own PECI sensor — it sits in `cpuKeyPreference`
+    /// too — so on a machine with TCXC and no TCGC the graphics row printed
+    /// the processor's temperature under a heading that said GPU. A dash is
+    /// the better answer.
     static func gpuTemperature(in readings: [TemperatureReading],
                                discrete: Bool) -> TemperatureReading? {
         let preference = discrete
             ? ["TG0P", "TG1P", "TGDD", "TGVP"]
-            : ["TCGC", "TCXC"]
+            : ["TCGC"]   // and nothing else: see below
         for key in preference {
             if let reading = readings.first(where: { $0.key == key }) { return reading }
         }
