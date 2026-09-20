@@ -21,6 +21,19 @@ the bump travelled inside the change it released.
   room for it is counted into the pill whether or not it is drawn, so plugging
   the charger in does not drag the rest of the menu bar sideways.
 
+- The battery is one shape whether or not it shows a number. It was 37 points
+  wide with the percentage and 23 without, which at one height reads as two
+  different objects rather than one drawn two ways: the short one looks
+  rounder and stubbier. The pill is sized for everything it can hold and what
+  is absent leaves the middle emptier.
+- The three drawing heights come from the menu bar instead of being written
+  down as constants. 18 for the strip, 15 for the battery and 14 for the load
+  graph were measured against a 22-point bar, and a taller one left them where
+  they were. They now follow it, and give back exactly those numbers at 22.
+- Text and glyphs are pulled to half-point boundaries. The menu bar draws at
+  2×, so a coordinate landing between device pixels costs sharpness on things
+  that are mostly small text.
+
 ## 1.10.0 — 2026-09-20
 
 One branch of work rather than one change, which is the departure from

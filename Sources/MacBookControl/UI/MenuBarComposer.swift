@@ -384,7 +384,7 @@ enum MenuBarComposer {
     /// is correct typography and wrong here: six fields each pay for it, and
     /// the menu bar is the one place on the screen with no room to give.
     private static func layout(_ segments: [Segment], darkMenuBar: Bool) -> NSImage {
-        let height: CGFloat = 18
+        let height = Height.strip
         let gap: CGFloat = 7
         // Monospaced digits so a changing number does not shove everything
         // beside it left and right twice a second.
@@ -469,6 +469,42 @@ enum MenuBarComposer {
         return image
     }
 
+    /// How tall the drawn things are, taken from the menu bar rather than
+    /// written down three times.
+    ///
+    /// The three heights were constants — 18 for the strip, 15 for the
+    /// battery, 14 for the load graph — chosen against a 22-point bar, which
+    /// is what a Mac without a notch has. A taller bar left them where they
+    /// were, so the item sat in the middle of a band with room to spare. The
+    /// ratios below reproduce the old numbers exactly at 22 points and follow
+    /// the bar anywhere else.
+    enum Height {
+        /// What the constants were measured against.
+        static let referenceThickness: CGFloat = 22
+
+        static var bar: CGFloat {
+            let thickness = NSStatusBar.system.thickness
+            return thickness > 0 ? thickness : referenceThickness
+        }
+
+        /// The thickness is a parameter so the arithmetic can be checked on a
+        /// machine whose menu bar is whatever it happens to be.
+        static func scaled(_ atReference: CGFloat, thickness: CGFloat = bar) -> CGFloat {
+            (thickness * atReference / referenceThickness).rounded()
+        }
+
+        static var strip: CGFloat { scaled(18) }
+        static var battery: CGFloat { scaled(15) }
+        static var graph: CGFloat { scaled(14) }
+    }
+
+    /// Half-point alignment. The menu bar draws at 2×, so a coordinate landing
+    /// between device pixels costs sharpness on text and on small glyphs —
+    /// which at this size is most of what there is.
+    static func pixelAligned(_ value: CGFloat) -> CGFloat {
+        (value * 2).rounded() / 2
+    }
+
     /// The iPhone battery, iOS 27 style.
     ///
     /// The shape changed with that release and the difference matters when
@@ -527,7 +563,7 @@ enum MenuBarComposer {
     /// width whatever the charger is doing.
     static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool,
                                    darkMenuBar: Bool) -> NSImage {
-        let height: CGFloat = 15
+        let height = Self.Height.battery
         let capWidth: CGFloat = 2
         let capGap: CGFloat = 1.2
         let fraction = max(0, min(1, Double(battery.percent) / 100))
@@ -559,9 +595,13 @@ enum MenuBarComposer {
         let boltHeight = height * 0.72
         let boltWidth = boltHeight * Self.boltAspect
         let boltGap: CGFloat = 2
-        let bodyWidth: CGFloat = showingPercentage
-            ? widest + boltGap + boltWidth + 5
-            : 23
+        // One width, whatever is inside it. With the number it was 37 points
+        // and without it 23, which is not one battery drawn two ways but two
+        // different objects: at the same height the short one reads rounder
+        // and stubbier. The pill is sized for everything it can ever hold —
+        // three digits, the gap and the bolt — and what is not there simply
+        // leaves the middle emptier.
+        let bodyWidth = widest + boltGap + boltWidth + 5
         let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
 
         let fill = (Self.forcedFillRole
@@ -628,13 +668,13 @@ enum MenuBarComposer {
                 // `descender` is negative, so it is added: subtracting it
                 // pushes the digits up out of the pill, which is what happened
                 // first.
-                text.draw(at: NSPoint(x: groupX,
-                                      y: (height - capHeight) / 2 + font.descender),
+                text.draw(at: NSPoint(x: Self.pixelAligned(groupX),
+                                      y: Self.pixelAligned((height - capHeight) / 2 + font.descender)),
                           withAttributes: attributes)
             }
             if boltShown {
-                let box = NSRect(x: groupX + measured.width + gapBeforeBolt,
-                                 y: (height - boltHeight) / 2,
+                let box = NSRect(x: Self.pixelAligned(groupX + measured.width + gapBeforeBolt),
+                                 y: Self.pixelAligned((height - boltHeight) / 2),
                                  width: boltWidth, height: boltHeight)
                 if let symbol = Self.boltSymbol {
                     symbol.draw(in: box, from: .zero, operation: .destinationOut, fraction: 1)
@@ -787,7 +827,7 @@ enum MenuBarComposer {
         guard !load.isEmpty else { return nil }
         let barWidth: CGFloat = 2
         let gap: CGFloat = 1
-        let height: CGFloat = 14
+        let height = Height.graph
         let width = CGFloat(load.count) * (barWidth + gap)
         let image = NSImage(size: NSSize(width: width, height: height))
         image.lockFocus()

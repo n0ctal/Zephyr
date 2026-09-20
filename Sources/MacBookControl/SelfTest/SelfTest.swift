@@ -458,6 +458,27 @@ enum SelfTest {
                    "on mains looks different from on battery (percentage: \(percentage))")
         }
 
+        // One battery drawn two ways, not two different objects. The pill used
+        // to be 37 points wide with a number in it and 23 without, and at one
+        // height the short one reads rounder and stubbier than the long one.
+        expectEqual(drawn(battery(80, mains: false), percentage: true).size.width,
+                    drawn(battery(80, mains: false), percentage: false).size.width,
+                    "the pill is the same shape whether or not the number is shown")
+
+        // The heights come from the bar rather than from three constants, and
+        // an ordinary bar has to give back exactly what those constants were.
+        expectEqual(MenuBarComposer.Height.scaled(18, thickness: 22), 18, "the strip at an ordinary bar")
+        expectEqual(MenuBarComposer.Height.scaled(15, thickness: 22), 15, "the battery at an ordinary bar")
+        expectEqual(MenuBarComposer.Height.scaled(14, thickness: 22), 14, "the graph at an ordinary bar")
+        expectEqual(MenuBarComposer.Height.scaled(15, thickness: 26), 18, "and it follows a taller one")
+        expectEqual(MenuBarComposer.Height.scaled(15, thickness: 0), 0,
+                    "a bar of no thickness is arithmetic, not a crash — the caller substitutes")
+
+        // Half-point alignment: the menu bar draws at 2x, so anything landing
+        // between device pixels is softness paid for nothing.
+        expectEqual(MenuBarComposer.pixelAligned(3.26), 3.5, "a coordinate is pulled to the nearer half point")
+        expectEqual(MenuBarComposer.pixelAligned(3.24), 3.0, "in both directions")
+
         // The colour still says what the bolt cannot: whether it is filling.
         expectEqual(MenuBarComposer.fillRole(percent: 80, isCharging: true,
                                              isPluggedIn: true, lowPower: false), .charging,
