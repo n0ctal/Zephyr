@@ -1162,10 +1162,21 @@ enum SelfTest {
     private static func readingsDriveTheMenuBar() {
         let defaults = UserDefaults.standard
         let savedPoll = defaults.object(forKey: "poll.menuBar")
-        defer { defaults.set(savedPoll, forKey: "poll.menuBar") }
+        let savedItems = defaults.object(forKey: "menubar.items")
+        defer {
+            defaults.set(savedPoll, forKey: "poll.menuBar")
+            defaults.set(savedItems, forKey: "menubar.items")
+        }
         // The floor, so this waits a couple of seconds and not a couple of
         // minutes on a machine set to poll slowly.
         defaults.set(1.0, forKey: "poll.menuBar")
+        // Named rather than inherited: what a tick reads follows what the menu
+        // bar shows, and a line that happens not to show a battery makes the
+        // check below assert nothing. This is also why it is worth saying that
+        // these defaults are not the app's — a bare executable has no bundle
+        // identifier, so the suite writes to a domain of its own and cannot
+        // disturb what is on screen.
+        Preferences.menuBarItems = [.battery]
 
         let telemetry = Telemetry()
         var publishes = 0
@@ -1180,6 +1191,23 @@ enum SelfTest {
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
         expect(publishes >= 3, "and the ticks after it keep coming")
+
+        // And what a tick brings back follows what is being looked at. With
+        // the window shut the battery is read for its charge alone; opening it
+        // has to fill the fields the tab shows, or they stay blank for as long
+        // as it is open.
+        guard telemetry.battery != nil else { return }   // no battery, nothing to say
+        // The reading taken at startup is deliberately the full one — features
+        // ask the hardware what it has before the first tick — so this is a
+        // statement about the ticks that followed it.
+        expect(telemetry.battery?.cycleCount == nil,
+               "the ticks after it read the battery for its charge alone")
+        telemetry.isWindowOpen = true
+        let filled = Date().addingTimeInterval(2)
+        while telemetry.battery?.cycleCount == nil && Date() < filled {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        expect(telemetry.battery?.cycleCount != nil, "and opening it fills them in")
     }
 
     // MARK: The battery is read by name, not by the node

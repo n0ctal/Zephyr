@@ -284,8 +284,13 @@ enum MenuBarComposer {
 
     static func plan(telemetry: Telemetry, darkMenuBar: Bool) -> Plan {
         var fields: [[Segment]] = []
+        // Read once for the whole line rather than once per field: the answer
+        // is a set built out of user defaults, and a six-field menu bar was
+        // building it six times a tick to ask six questions of it.
+        let captioned = Preferences.captionedMenuBarItems
         for item in Preferences.menuBarItems {
-            let pieces = render(item, telemetry: telemetry, darkMenuBar: darkMenuBar)
+            let pieces = render(item, telemetry: telemetry, darkMenuBar: darkMenuBar,
+                                captioned: captioned)
             if !pieces.isEmpty { fields.append(pieces) }
         }
         return Plan(fields: fields, darkMenuBar: darkMenuBar,
@@ -351,8 +356,9 @@ enum MenuBarComposer {
         return parts.joined(separator: "|")
     }
 
-    private static func render(_ item: Item, telemetry: Telemetry, darkMenuBar: Bool) -> [Segment] {
-        let caption = Preferences.menuBarItemIsCaptioned(item) && !item.caption.isEmpty
+    private static func render(_ item: Item, telemetry: Telemetry, darkMenuBar: Bool,
+                               captioned: Set<String>) -> [Segment] {
+        let caption = captioned.contains(item.rawValue) && !item.caption.isEmpty
             ? item.caption + " " : ""
         func text(_ value: String) -> [Segment] { [.text(caption + value, nil)] }
 
