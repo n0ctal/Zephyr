@@ -297,8 +297,14 @@ enum Preferences {
     /// none of that is reachable through the interface, but all of it is
     /// reachable through `defaults write` and through a preferences file that
     /// got damaged.
+    /// Only a value that is not a number takes the short way out. Infinity is
+    /// not finite either, and sending it down the same path answered with the
+    /// *fastest* rate on offer — which is the opposite of what a figure too
+    /// large to hold should mean. `min` and `max` deal with infinities
+    /// correctly; it is only NaN they cannot, since every comparison with it
+    /// is false.
     static func poll(_ value: Double, within range: ClosedRange<Double>) -> Double {
-        guard value.isFinite else { return range.lowerBound }
+        guard !value.isNaN else { return range.lowerBound }
         return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
     }
 

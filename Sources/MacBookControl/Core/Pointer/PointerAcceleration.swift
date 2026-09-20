@@ -66,10 +66,14 @@ final class PointerAcceleration {
             guard let key = hid.string(service, "HIDPointerAccelerationType") else { continue }
             let id = hid.identity(service)
             guard let multiplier = multiplierFor(id) else { continue }
+            // Decided before anything is written down. Capturing first left a
+            // record saying "we altered this device" for one that was then
+            // skipped, so `hasUnrestored` reported work outstanding and the
+            // next launch put back a device Zephyr had never touched.
+            guard let wire = PointerAcceleration.curveValue(multiplier) else { continue }
             if captured[id] == nil, let current = hid.int(service, key) {
                 captured[id] = current
             }
-            guard let wire = PointerAcceleration.curveValue(multiplier) else { continue }
             hid.set(service, key, wire as CFNumber)
         }
         originals = captured

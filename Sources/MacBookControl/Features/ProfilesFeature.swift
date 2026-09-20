@@ -435,8 +435,11 @@ private struct TimeField: View {
 /// rather than saturating — on a value that is not a number as much as on one
 /// past its range. A view body is a poor place to find that out. The field's
 /// own range is the natural bound and is right there at every call.
+/// Infinity clamps to the end it is nearest, as any other large figure does.
+/// Only NaN takes the short way out, because every comparison with it is false
+/// and `min`/`max` would carry it through.
 func fieldValue(_ value: Double, _ range: ClosedRange<Int>) -> Int {
-    guard value.isFinite else { return range.lowerBound }
+    guard !value.isNaN else { return range.lowerBound }
     return Int(Swift.min(Swift.max(value.rounded(), Double(range.lowerBound)),
                          Double(range.upperBound)))
 }

@@ -507,6 +507,10 @@ enum SelfTest {
         expectEqual(Preferences.poll(-5, within: 1 ... 60), 1, "so does a negative one")
         expectEqual(Preferences.poll(.nan, within: 1 ... 60), 1, "and one that is not a number")
         expectEqual(Preferences.poll(1000, within: 1 ... 60), 60, "and past the top comes back as the top")
+        // Infinity is not a number either, but it is a direction, and sending
+        // it down the same path as NaN answered with the fastest rate offered.
+        expectEqual(Preferences.poll(.infinity, within: 1 ... 60), 60, "and so does infinity")
+        expectEqual(Preferences.poll(-.infinity, within: 1 ... 60), 1, "with the other one at the bottom")
 
         // A power limit becomes fifteen bits and then an MSR write.
         expectEqual(PowerLimits.steps(800), 800, "a figure that fits is left alone")
@@ -537,6 +541,8 @@ enum SelfTest {
         expectEqual(fieldValue(-1e300, 40 ... 105), 40, "and below it, its bottom")
         expectEqual(fieldValue(.nan, 40 ... 105), 40, "one that is not a number does not reach Int at all")
         expectEqual(fieldValue(1.4, 0 ... 200), 1, "and it rounds rather than truncating")
+        expectEqual(fieldValue(.infinity, 40 ... 105), 105, "infinity clamps to the end it is nearest")
+        expectEqual(fieldValue(-.infinity, 40 ... 105), 40, "at either end")
     }
 
     private static func loadSampleGap() {
