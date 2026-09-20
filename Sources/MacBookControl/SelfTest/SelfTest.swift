@@ -66,6 +66,7 @@ enum SelfTest {
         fanTargetSkipping()
         throttleAccounting()
         loadSampleGap()
+        storedNumbersAreBounded()
         thermalReleaseBand()
         cpuLoadCondition()
         sleepAssertionWording()
@@ -427,6 +428,45 @@ enum SelfTest {
         // next fan to take its index would inherit the state.
         expectEqual(HelperService.released(held, at: 90, holding: [0]), [0],
                     "only fans still being held can be released ones")
+    }
+
+    private static func storedNumbersAreBounded() {
+        // Three places turn a stored preference into a fixed-width number, and
+        // Swift's conversions trap rather than saturating — on a NaN as much
+        // as on anything out of range. None of these values can be typed into
+        // the interface; all of them can be written with `defaults write` or
+        // arrive in a damaged preferences file. Before this, each line below
+        // was a crash rather than a wrong answer.
+
+        // A poll interval becomes a Timer's period: zero is a run loop
+        // spinning as fast as the machine allows.
+        expectEqual(Preferences.poll(2, within: 1 ... 60), 2, "an ordinary interval is left alone")
+        expectEqual(Preferences.poll(0, within: 1 ... 60), 1, "zero comes back as the shortest offered")
+        expectEqual(Preferences.poll(-5, within: 1 ... 60), 1, "so does a negative one")
+        expectEqual(Preferences.poll(.nan, within: 1 ... 60), 1, "and one that is not a number")
+        expectEqual(Preferences.poll(1000, within: 1 ... 60), 60, "and past the top comes back as the top")
+
+        // A power limit becomes fifteen bits and then an MSR write.
+        expectEqual(PowerLimits.steps(800), 800, "a figure that fits is left alone")
+        expectEqual(PowerLimits.steps(-5), 1, "a negative one cannot be written at all")
+        expectEqual(PowerLimits.steps(1e300), Double(0x7FFF), "and one past the field is the field's width")
+        // Clamping rather than masking matters: 0x8000 steps masks to zero,
+        // so a slider left too high would have written no limit rather than a
+        // high one.
+        expectEqual(PowerLimits.steps(Double(0x8000)), Double(0x7FFF), "the value above the field does not wrap to nothing")
+        // Real numbers from this machine: unit 3 is eight steps per watt, and
+        // the locked bit is clear.
+        expectEqual(PowerLimits.compose(current: 0x004283E800DD8320, unit: 3,
+                                        pl1Watts: .nan, pl2Watts: 125), nil,
+                    "a limit that is not a number is refused rather than written")
+
+        // A pointer curve becomes the HID property's own fixed-point value.
+        expectEqual(PointerAcceleration.curveValue(1), 65536, "1.0 is the shipped curve")
+        expectEqual(PointerAcceleration.curveValue(0), 0, "and zero is no acceleration at all")
+        expectEqual(PointerAcceleration.curveValue(-1), 0, "below zero there is nothing to ask for")
+        expectEqual(PointerAcceleration.curveValue(.nan), 65536,
+                    "and one that is not a number leaves the device as it was shipped")
+        expectEqual(PointerAcceleration.curveValue(1e300), 20 * 65536, "past the top is the top")
     }
 
     private static func loadSampleGap() {

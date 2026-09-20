@@ -48,6 +48,16 @@ the bump travelled inside the change it released.
   stuck with the second-best for the life of the process while the full sweep
   went on preferring the first — the same disagreement the one-list change set
   out to end, arriving by another door.
+- Three stored numbers are bounded before they become fixed-width ones. A
+  poll interval becomes a timer's period, a power limit becomes fifteen bits
+  and then an MSR write, and a pointer multiplier becomes a HID property —
+  and Swift's conversions trap rather than saturating, on a value that is not
+  a number as much as on one out of range. None of the values are reachable
+  through the interface; all of them are reachable with `defaults write` or in
+  a damaged preferences file. The power limit gains something beyond not
+  crashing: it was masked to fifteen bits afterwards, so a figure above the
+  field wrapped, and a slider left too high would have written a small limit
+  rather than a large one.
 - `scripts/verify-clean-build.sh` builds the committed state in a clone of its
   own and runs the whole release path through it — build, self-test, bundle,
   disk image, and the note inside the image. `.build` survives edits, so a

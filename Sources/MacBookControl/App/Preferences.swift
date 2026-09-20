@@ -289,8 +289,21 @@ enum Preferences {
     }
 
     /// How often the sensors are read while the window is open, in seconds.
+    /// A poll interval, kept inside the range its field offers — on the way
+    /// out, not only on the way in.
+    ///
+    /// These become a `Timer`'s interval. A zero or a negative one there is a
+    /// run loop spinning as fast as the machine allows, and a NaN is worse;
+    /// none of that is reachable through the interface, but all of it is
+    /// reachable through `defaults write` and through a preferences file that
+    /// got damaged.
+    static func poll(_ value: Double, within range: ClosedRange<Double>) -> Double {
+        guard value.isFinite else { return range.lowerBound }
+        return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
+    }
+
     static var windowPollSeconds: Double {
-        get { d.object(forKey: "poll.window") as? Double ?? 2 }
+        get { poll(d.object(forKey: "poll.window") as? Double ?? 2, within: 0.5 ... 10) }
         set { d.set(newValue, forKey: "poll.window") }
     }
 
@@ -298,7 +311,7 @@ enum Preferences {
     /// are looked at in different ways: a window is read, a menu bar is
     /// glanced at, and a glance does not need a number a second.
     static var menuBarPollSeconds: Double {
-        get { d.object(forKey: "poll.menuBar") as? Double ?? 2 }
+        get { poll(d.object(forKey: "poll.menuBar") as? Double ?? 2, within: 1 ... 60) }
         set { d.set(newValue, forKey: "poll.menuBar") }
     }
 

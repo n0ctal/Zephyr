@@ -69,7 +69,7 @@ final class PointerAcceleration {
             if captured[id] == nil, let current = hid.int(service, key) {
                 captured[id] = current
             }
-            hid.set(service, key, Int((multiplier * 65536.0).rounded()) as CFNumber)
+            hid.set(service, key, PointerAcceleration.curveValue(multiplier) as CFNumber)
         }
         originals = captured
     }
@@ -92,6 +92,19 @@ final class PointerAcceleration {
 
     private func pointerServices() -> [AnyObject] {
         hid.services(matching: [.mouse, .pointer])
+    }
+
+    /// A multiplier as the HID property wants it: 1.0 is the shipped curve and
+    /// the wire value is that times 65536.
+    ///
+    /// Bounded because the multiplier comes from stored preferences and
+    /// `Int(_:)` traps rather than saturating, on a NaN as well as on anything
+    /// past its range — the same hazard FanController.rpm() names, here on a
+    /// path that writes to an input device.
+    static func curveValue(_ multiplier: Double) -> Int {
+        guard multiplier.isFinite else { return 65536 }
+        let bounded = Swift.min(Swift.max(multiplier, 0), 20)
+        return Int((bounded * 65536.0).rounded())
     }
 
     /// What the device list is made of: every service that matched, and the

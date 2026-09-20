@@ -101,15 +101,31 @@ enum PowerLimits {
         // a value would only produce a UI that lies about what happened.
         guard current & (1 << 63) == 0 else { return nil }
 
+        // Neither figure reaches UInt64 unchecked. Both come from stored
+        // preferences, and `UInt64(_:)` traps rather than saturating — on a
+        // NaN, on anything negative, and on anything past its range. The same
+        // hazard is called out in FanController.rpm(); this one ends in an
+        // MSR write, so it is worth the same care.
+        guard pl1Watts.isFinite, pl2Watts.isFinite else { return nil }
         let stepsPerWatt = Double(1 << (unit & 0xF))
-        let pl1 = UInt64(max(1, (pl1Watts * stepsPerWatt).rounded())) & 0x7FFF
-        let pl2 = UInt64(max(1, (pl2Watts * stepsPerWatt).rounded())) & 0x7FFF
+        // Clamped to the field's own width, which loses nothing: the mask
+        // below would discard anything above it anyway, and silently — a
+        // slider at 5000 W would have come out as some small number.
+        let pl1 = UInt64(steps(pl1Watts * stepsPerWatt)) & 0x7FFF
+        let pl2 = UInt64(steps(pl2Watts * stepsPerWatt)) & 0x7FFF
 
         var value = current
         value = (value & ~0x7FFF) | pl1
         value = (value & ~(0x7FFF << 32)) | (pl2 << 32)
         value |= (1 << 15) | (1 << 47)   // both limits enabled
         return value
+    }
+
+    /// One power-limit field's worth of steps: at least one, never more than
+    /// the fifteen bits it has to live in. Separate so both bounds can be
+    /// checked without a kext.
+    static func steps(_ raw: Double) -> Double {
+        Swift.min(Swift.max(raw.rounded(), 1), Double(0x7FFF))
     }
 
     // MARK: sysctl plumbing
