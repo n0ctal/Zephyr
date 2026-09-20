@@ -44,9 +44,6 @@ final class SensorReader {
     /// the same build 54 °C against a hottest core of 94.
     static let cpuKeyPreference = ["TCMX", "TC0F", "TC0E", "TCXC", "TCGC", "TC0D", "TC0H", "TC0P"]
 
-    /// The CPU sensor key chosen at startup (nil if none of the preferred keys exist).
-    private(set) var cpuKey: String?
-
     init(smc: SMC) {
         self.smc = smc
         discoverTemperatureKeys()
@@ -59,20 +56,18 @@ final class SensorReader {
             guard let value = try? smc.read(key), let celsius = value.double else { continue }
             readings.append((key, celsius))
         }
-        let chosen = SensorReader.select(from: readings)
-        temperatureKeys = chosen.keys
-        cpuKey = chosen.cpuKey
+        temperatureKeys = SensorReader.select(from: readings)
     }
 
     /// The startup decision apart from the machine that answers it: which keys
-    /// are worth re-reading, and which sensor the menu-bar title follows.
-    static func select(from readings: [(key: String, celsius: Double)])
-        -> (keys: [String], cpuKey: String?) {
-        // The title sensor is picked from what is actually answering. A key
-        // that is merely present would leave the menu bar showing nothing
-        // until whatever it measures happens to warm up.
-        let live = Set(readings.filter { plausibleRange.contains($0.celsius) }.map(\.key))
-        return (readings.map(\.key).sorted(), cpuKeyPreference.first(where: live.contains))
+    /// are worth re-reading.
+    ///
+    /// Everything that answered as a number, believable or not. Which of them
+    /// to believe is decided on each refresh instead, and which one is the
+    /// CPU's is decided when it is asked — see `cpuTemperature()` for why
+    /// neither is settled here.
+    static func select(from readings: [(key: String, celsius: Double)]) -> [String] {
+        readings.map(\.key).sorted()
     }
 
     func readTemperatures() -> [TemperatureReading] {
@@ -110,16 +105,30 @@ final class SensorReader {
         return cpuTemperature()
     }
 
-    /// The CPU temperature (reads just the one cached CPU key — cheap, for the
-    /// menu-bar title). Falls back to the hottest sensor if no CPU key exists.
+    /// The CPU temperature, by preference, reading one key in the ordinary
+    /// case — the first choice answers and the walk stops there.
+    ///
+    /// Walked live rather than resolved once at startup. A key frozen in at
+    /// launch is a key chosen from whatever happened to be awake then, and the
+    /// consumer picks from the same list over the full sweep — so the two
+    /// disagreed again whenever a preferred sensor was dormant at launch and
+    /// woke later, which is exactly the divergence this list was unified to
+    /// remove. Falls back to the hottest sensor when none of them answers.
     func cpuTemperature() -> TemperatureReading? {
-        if let key = cpuKey,
-           let value = try? smc.read(key),
-           let celsius = value.double,
-           Self.plausibleRange.contains(celsius) {
-            return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
+        for key in Self.cpuKeyPreference where temperatureKeys.contains(key) {
+            if let value = try? smc.read(key),
+               let celsius = value.double,
+               Self.plausibleRange.contains(celsius) {
+                return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
+            }
         }
         return hottest()
+    }
+
+    /// Which key `cpuTemperature()` will try first on a machine with these
+    /// keys. Separate so the order can be checked without the machine.
+    static func preferredCPUKey(among available: [String]) -> String? {
+        cpuKeyPreference.first(where: available.contains)
     }
 }
 

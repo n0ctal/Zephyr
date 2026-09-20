@@ -38,6 +38,16 @@ the bump travelled inside the change it released.
   idle through a build, TCMX matched the hottest of the eight per-core sensors
   exactly ten times and read 2.3 °C above it twice, never below, and it moved
   the moment the load arrived while TC0F was still catching up.
+- "Held back for" counts fractions of a second. The window can be polled twice
+  a second, and rounding each increment to a whole number made every one of
+  them zero — the panel said the machine had been throttled, for 0 s.
+- The network speed uses the same gap bounds as the CPU load, so the slowest
+  menu-bar setting no longer silences it.
+- Which sensor is the CPU's is decided when it is asked rather than frozen at
+  launch. A machine whose best sensor was asleep when the app started was
+  stuck with the second-best for the life of the process while the full sweep
+  went on preferring the first — the same disagreement the one-list change set
+  out to end, arriving by another door.
 - The thermal release has a band rather than a single figure: it hands a
   pinned fan back at 95 °C and does not take it again until 85. With one
   threshold the firmware would cool the machine just past it, the hold would

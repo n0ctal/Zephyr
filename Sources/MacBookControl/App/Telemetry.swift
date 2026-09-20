@@ -301,7 +301,7 @@ final class Telemetry: ObservableObject {
         if let load = reading.load { self.load = load }
         if let network = reading.network { self.network = network }
         thermal = reading.thermal
-        stats.record(reading.thermal, interval: Int(interval))
+        stats.record(reading.thermal, interval: interval)
     }
 
     private func refresh() {

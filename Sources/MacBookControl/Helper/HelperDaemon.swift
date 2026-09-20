@@ -97,6 +97,10 @@ final class HelperService: NSObject, HelperProtocol {
     func setFanManual(fan: Int, rpm: Int, reply: @escaping (Bool) -> Void) {
         queue.async {
             self.curveFans.removeValue(forKey: fan)   // fixed target overrides curve
+            // A fresh instruction is not a fan we are holding back: obey it
+            // now rather than at the next tick, or the hold arrives already
+            // released.
+            self.releasedByHeat.remove(fan)
             // (try? x?.f()) is Void?? and reads as success when fans is nil, leaving
             // the target latched without a single real SMC write.
             guard let fans = self.fans else { reply(false); return }
@@ -117,6 +121,7 @@ final class HelperService: NSObject, HelperProtocol {
                      reply: @escaping (Bool) -> Void) {
         queue.async {
             self.forcedTargets.removeValue(forKey: fan)
+            self.releasedByHeat.remove(fan)
             guard self.fans != nil else { reply(false); return }
             self.curveFans[fan] = (FanCurve(minTemp: Double(minTemp), maxTemp: Double(maxTemp)),
                                    sensor)
@@ -130,6 +135,7 @@ final class HelperService: NSObject, HelperProtocol {
         queue.async {
             self.forcedTargets.removeValue(forKey: fan)
             self.curveFans.removeValue(forKey: fan)
+            self.releasedByHeat.remove(fan)
             try? self.fans?.setAuto(fan: fan)
             self.stopControlLoopIfIdle()
             reply(true)
@@ -140,6 +146,7 @@ final class HelperService: NSObject, HelperProtocol {
         queue.async {
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
+            self.releasedByHeat.removeAll()
             self.fans?.setAllAuto()
             self.stopControlLoopIfIdle()
             reply(true)
@@ -151,6 +158,7 @@ final class HelperService: NSObject, HelperProtocol {
         queue.sync {
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
+            self.releasedByHeat.removeAll()
             self.fans?.setAllAuto()
             self.controlTimer?.cancel()
             self.controlTimer = nil
@@ -164,6 +172,7 @@ final class HelperService: NSObject, HelperProtocol {
             guard !self.forcedTargets.isEmpty || !self.curveFans.isEmpty else { return }
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
+            self.releasedByHeat.removeAll()
             self.fans?.setAllAuto()
             self.stopControlLoopIfIdle()
             helperLog.info("client gone — fans returned to firmware control")
@@ -259,8 +268,12 @@ final class HelperService: NSObject, HelperProtocol {
             // escalation should give way to whatever it was reacting to. The
             // reading is the same cached one the curves use, so asking costs
             // nothing extra.
-            if !self.forcedTargets.isEmpty,
-               let hottest = self.curveTemperature(FanCurve.hottestSensorKey) {
+            if self.forcedTargets.isEmpty {
+                // Nothing is held, so nothing is held back. Without this the
+                // set outlives the hold that filled it, and the next fan to be
+                // pinned is handed straight to the firmware.
+                self.releasedByHeat.removeAll()
+            } else if let hottest = self.curveTemperature(FanCurve.hottestSensorKey) {
                 self.releasedByHeat = HelperService.released(self.releasedByHeat,
                                                             at: hottest,
                                                             holding: Set(self.forcedTargets.keys))

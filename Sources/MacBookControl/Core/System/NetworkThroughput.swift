@@ -27,7 +27,11 @@ final class NetworkThroughput {
         guard let last = previous else { return nil }
 
         let elapsed = now.timeIntervalSince(last.at)
-        guard elapsed > 0.2, elapsed < 60 else { return nil }
+        // The same bounds the load reader uses, and for the same reason: the
+        // menu bar can be set to 60 seconds, and the timer's tolerance widens
+        // that by a fifth, so a 60 s ceiling rejected the slowest setting's
+        // every reading.
+        guard SystemLoad.isUsableGap(elapsed) else { return nil }
 
         // Wrapping subtraction on purpose. These counters are 32 bits wide, so
         // on a fast link they roll over about every four gigabytes — plain

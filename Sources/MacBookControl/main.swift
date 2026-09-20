@@ -535,7 +535,11 @@ func runProfilesTest() {
     print("  external displays: \(context.externalDisplayCount)")
     print("  wi-fi: \(context.wifiSSID ?? "unknown (needs Location permission)")")
     print("  clock: \(Condition.clock(context.minutesSinceMidnight))")
-    print("  cpu: \(context.cpuCelsius.map { String(format: "%.0f °C", $0) } ?? "unknown")")
+    // Which sensor, not only which number: two of this machine's CPU keys read
+    // twenty degrees apart, so a temperature on its own says very little.
+    let cpuReading = telemetry.cpuTemperature
+    print("  cpu: \(context.cpuCelsius.map { String(format: "%.1f °C", $0) } ?? "unknown")"
+          + (cpuReading.map { " (\($0.key) — \($0.label))" } ?? ""))
     print("  cpu load: \(context.cpuLoadPercent.map { String(format: "%.0f %%", $0) } ?? "unknown")")
     print("  cpu clock: \(telemetry.load?.cpuHertz.map { String(format: "%.2f GHz", $0 / 1e9) } ?? "unknown")")
     if let load = telemetry.load {

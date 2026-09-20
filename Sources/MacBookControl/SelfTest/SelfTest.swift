@@ -463,8 +463,8 @@ enum SelfTest {
         var twitchy = ThermalStats()
         twitchy.record(held(at: 80), interval: 2, at: start)
         for i in 1 ... 20 { twitchy.record(held(at: 80), interval: 2, at: at(Double(i) / 20)) }
-        expectEqual(twitchy.throttledSeconds, 2,
-                    "twenty readings inside one second add nothing; they used to add forty")
+        expectEqual(twitchy.throttledSeconds, 3,
+                    "twenty readings inside one second add that one second, not forty")
 
         // Rounding each gap to whole seconds does not drift: a reading that
         // lands just before a tick takes the time, and the tick then takes
@@ -568,21 +568,22 @@ enum SelfTest {
         let atStartup: [(key: String, celsius: Double)] = [
             ("TC0P", 48), ("TG0P", 0), ("TGDT", 0), ("TC0T", -0.6), ("TB0T", 31),
         ]
-        let chosen = SensorReader.select(from: atStartup)
-        expect(chosen.keys.contains("TG0P"), "a sleeping GPU sensor is kept for later")
-        expect(chosen.keys.contains("TC0T"), "a sensor reading below zero is kept too")
-        expectEqual(chosen.keys.count, 5, "nothing that answered is thrown away")
-        expectEqual(chosen.keys, chosen.keys.sorted(), "the keys come back in order")
+        let keys = SensorReader.select(from: atStartup)
+        expect(keys.contains("TG0P"), "a sleeping GPU sensor is kept for later")
+        expect(keys.contains("TC0T"), "a sensor reading below zero is kept too")
+        expectEqual(keys.count, 5, "nothing that answered is thrown away")
+        expectEqual(keys, keys.sorted(), "the keys come back in order")
 
-        // The title sensor is the one exception: it has to be answering now,
-        // because the menu bar has to show a number now.
-        expectEqual(chosen.cpuKey, "TC0P", "the title follows the first live preferred sensor")
-
-        let coldCPU: [(key: String, celsius: Double)] = [("TC0P", 0), ("TCXC", 51)]
-        expectEqual(SensorReader.select(from: coldCPU).cpuKey, "TCXC",
-                    "a preferred sensor that is asleep is passed over")
-        expectEqual(SensorReader.select(from: [("TB0T", 31)]).cpuKey, nil,
-                    "no preferred sensor means no chosen one")
+        // Which one is the CPU's is settled when it is asked, not here: a
+        // machine whose best sensor was asleep at launch would otherwise be
+        // stuck with the second-best for the life of the process, while the
+        // full sweep went on preferring the first.
+        expectEqual(SensorReader.preferredCPUKey(among: keys), "TC0P",
+                    "with only the proximity sensor present, that is what is tried")
+        expectEqual(SensorReader.preferredCPUKey(among: ["TC0P", "TC0F", "TCMX"]), "TCMX",
+                    "with all three, the hottest-core register wins")
+        expectEqual(SensorReader.preferredCPUKey(among: ["TB0T"]), nil,
+                    "and a machine with none of them has no first choice")
     }
 
     private static func gpuSensorChoice() {
