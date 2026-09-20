@@ -20,6 +20,13 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- The thermal ceiling that releases a pinned fan back to the firmware was
+  comparing 90 °C against TC0P — a sensor beside the package rather than on
+  it. Measured here under a sustained build, TC0P held 54 °C while the hottest
+  core read 94, so the die would have had to pass 120 °C for the release to
+  fire. It never fired. It now reads the hottest sensor in the machine, which
+  is also what the firmware is reacting to when a manual hold blocks it.
+- TC0P is labelled "CPU Proximity" rather than "CPU", for the same reason.
 - Whether this Mac has a charge ceiling at all is worked out once instead of
   on every redraw. The question is asked from a view body, and SwiftUI re-runs
   those on every published change — so with the window open the answer was

@@ -58,7 +58,11 @@ struct FanCurve: Equatable {
 /// Unknown keys fall back to the raw key string.
 enum SensorLabels {
     static let temperature: [String: String] = [
-        "TC0P": "CPU",
+        // Beside the package, not on it, and the difference is not small:
+        // measured here under a sustained build, TC0P held 54 °C while the
+        // hottest core read 94. Calling it "CPU" invited exactly the reading
+        // it cannot give.
+        "TC0P": "CPU Proximity",
         "TC0E": "CPU (TC0E)",
         "TC0F": "CPU (TC0F)",
         "TCXC": "CPU PECI",

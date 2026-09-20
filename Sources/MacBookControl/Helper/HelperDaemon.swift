@@ -211,11 +211,22 @@ final class HelperService: NSObject, HelperProtocol {
             // A fixed target pins the fan against the firmware, which can no
             // longer raise it, so the hold needs a thermal ceiling of its own.
             // Only a fixed target needs it: a curve raises the fan by itself.
-            // Asking anyway cost a round trip every tick of every curve, and
-            // on a machine with no usable CPU key it costs a sweep of every
-            // sensor there is.
+            //
+            // Against the hottest sensor in the machine, not against the one
+            // the menu bar shows. That one is TC0P, which sits beside the
+            // package rather than on it: measured here under a sustained
+            // build, TC0P held 54 °C while the hottest core read 94. A ceiling
+            // of 90 compared against TC0P is a ceiling that never arrives —
+            // the die would have to pass 120 °C to reach it, and the machine
+            // shuts down before that. The valve was doing nothing.
+            //
+            // The whole machine rather than the CPU alone, because the
+            // firmware escalates on whatever is hot; a hold that blocks its
+            // escalation should give way to whatever it was reacting to. The
+            // reading is the same cached one the curves use, so asking costs
+            // nothing extra.
             let tooHot = !self.forcedTargets.isEmpty
-                && (self.sensors?.cpuTemperature()?.celsius ?? 0) >= kThermalReleaseCelsius
+                && (self.curveTemperature(FanCurve.hottestSensorKey) ?? 0) >= kThermalReleaseCelsius
             for (fan, rpm) in self.forcedTargets {
                 if tooHot {
                     try? self.fans?.setAuto(fan: fan)
