@@ -651,7 +651,7 @@ func runTimingTest() {
         print(String(format: "  %6.1f ms  ThermalMonitor.read (mean of 20)", total / 20 * 1000))
     }
     let gpu = GPUController()
-    time("GPUController.info (runs pmset)") { _ = gpu.info() }
+    time("GPUController.info (plist; pmset only as fallback)") { _ = gpu.info() }
     let turbo = TurboBoostController()
     time("TurboBoost.isTurboDisabled (runs kextstat)") { _ = turbo.isTurboDisabled() }
     let display = DisplayControl()

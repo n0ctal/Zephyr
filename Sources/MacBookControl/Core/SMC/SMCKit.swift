@@ -169,6 +169,14 @@ private func ioReturnString(_ code: kern_return_t) -> String {
 
 /// Thin, user-space wrapper around the AppleSMC IOKit user client.
 /// Reading sensors and reading/writing fan keys all work without root.
+///
+/// **One instance belongs to one queue.** It holds a connection and a table of
+/// key shapes it fills in as it goes, and neither is guarded. Two threads
+/// through the same instance is not a wrong reading but a corrupted table.
+/// Both places that own one keep to this: the app reads on the telemetry
+/// queue, the daemon on its control queue — including from the control
+/// timer, which is created against that queue rather than a thread of its
+/// own. A reading path that wants its own thread wants its own SMC.
 final class SMC {
     private var connection: io_connect_t = 0
     private var isOpen = false

@@ -9,7 +9,11 @@ private let helperLog = Logger(subsystem: "com.n0ctal.macbookcontrol.helper", ca
 private let kAuthorizedCDHashPath = "/Library/Application Support/MacBookControl/authorized-cdhash"
 
 /// The root-side implementation of `HelperProtocol`. A single shared instance
-/// serves every XPC connection. All SMC/pmset work is serialized on one queue.
+/// serves every XPC connection. All SMC/pmset work is serialized on one queue
+/// — every entry point wraps its body in `queue.async` or `queue.sync`, the
+/// control timer is created against the same queue, and the helpers below it
+/// are reached only from inside those. `SMC` is not safe to share across
+/// threads and says so; this is where that is kept true.
 /// Above this the firmware must be allowed to take the fan back: a manual hold
 /// blocks its escalation, and no user setting is worth a thermal event.
 let kThermalReleaseCelsius: Double = 90
