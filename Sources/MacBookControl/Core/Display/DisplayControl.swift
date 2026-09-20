@@ -509,19 +509,18 @@ final class DisplayControl {
         let anchor = staying.isEmpty ? cells : staying
 
         func span(_ coordinate: (Cell) -> Int) -> ClosedRange<Int> {
+            // Neither of these can be empty: `cells` is not, by the guard at
+            // the top of this function, and both `anchor` and `placed` come
+            // from it. Said here because an unwrap is only as safe as the
+            // reason for it, and the reason is twenty lines away.
             let anchored = anchor.map(coordinate)
-            // No screens at all is a real state on this machine — the rescue
-            // further down exists because it can be left with none — and
-            // min() of nothing is nil rather than zero.
-            guard let anchorLow = anchored.min(), let anchorHigh = anchored.max() else {
-                return 0...0
-            }
+            let reachable = (anchored.min()! - 1)...(anchored.max()! + 1)
             // A screen that has been put far out stays on the grid whatever
             // the ring says — losing a screen off the edge would be worse
             // than a wide grid, and the grid scrolls sideways.
             let placed = cells.map(coordinate)
-            let low = min(anchorLow - 1, placed.min() ?? anchorLow)
-            let high = max(anchorHigh + 1, placed.max() ?? anchorHigh)
+            let low = min(reachable.lowerBound, placed.min()!)
+            let high = max(reachable.upperBound, placed.max()!)
             return low...high
         }
         return (span { $0.row }, span { $0.column })

@@ -122,20 +122,22 @@ the order the commits landed; the history has the order.
   display came home. The type is checked too: these answers come from other
   applications' processes, and a forced cast to a CoreFoundation type does not
   trap on the wrong thing, it returns something that answers nothing.
-- The screen grid no longer needs there to be a screen. Its extent was taken
-  from the minimum and maximum of the arrangement with a forced unwrap, and a
-  machine with no display at all is a state this app has a rescue path for.
 - Putting the windows back no longer puts two of them in the same place. A
   display switched off and on again restores the arrangement by matching each
   window to its title, and two windows of one application can share one — two
   Finder windows on the same folder, or two with no title at all. Each
   placement took the first window that matched, so both landed on the same
   one: it ended where the second placement said and the other never moved.
-  Each window is now spoken for once.
-- Three stored numbers are bounded before they become fixed-width ones: a poll
+  Each window is now spoken for once, and every title is matched before any
+  placement is allowed to fall back to the position it used to hold: resolving
+  them one at a time let a placement whose window had closed take, by
+  position, the very window a later one matched by name — which then fell back
+  in its turn and moved a window that had never been ours.
+- Stored numbers are bounded before they become fixed-width ones: a poll
   interval that becomes a timer's period, a power limit that becomes fifteen
-  bits and then an MSR write, and a pointer multiplier that becomes a HID
-  property. Swift's conversions trap rather than saturating, on a value that
+  bits and then an MSR write, a pointer multiplier that becomes a HID
+  property, and the five figures the profile editor reads out of a saved rule
+  and hands to `Int(_:)` inside a view body. Swift's conversions trap rather than saturating, on a value that
   is not a number as much as on one out of range. None are reachable through
   the interface; all are reachable with `defaults write` or in a damaged
   preferences file. The power limit gains more than not crashing: its steps

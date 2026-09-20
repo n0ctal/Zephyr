@@ -436,14 +436,20 @@ enum SelfTest {
             WindowArrangement.Placement(pid: 1, title: title, index: index,
                                         frame: CGRect(x: x, y: 0, width: 800, height: 600))
         }
-        func indices(_ pairs: [(WindowArrangement.Placement, Int)]) -> [Int] { pairs.map(\.1) }
+        // The pairs, not only the window indices: a check that says which
+        // window was taken but not by whom passes whoever took it, which is
+        // how the one case covering the title-miss fallback was passing while
+        // that fallback was wrong.
+        func pairs(_ p: [(WindowArrangement.Placement, Int)]) -> [String] {
+            p.map { "\($0.0.title.isEmpty ? "#\($0.0.index)" : $0.0.title)->\($0.1)" }
+        }
 
         // The ordinary case: distinct titles, and the list reordered while the
         // display was away, which is what matching by title is for.
         let reordered = WindowArrangement.pairings(
             of: [placement("Inbox", 0, 100), placement("Drafts", 1, 900)],
             against: ["Drafts", "Inbox"])
-        expectEqual(indices(reordered), [1, 0], "a window found by its title, wherever it moved to")
+        expectEqual(pairs(reordered), ["Inbox->1", "Drafts->0"], "a window found by its title, wherever it moved to")
 
         // The case this exists for. Two windows, one title — two Finder
         // windows on the same folder. Taking the first match for each put both
@@ -451,27 +457,39 @@ enum SelfTest {
         let sameTitle = WindowArrangement.pairings(
             of: [placement("Documents", 0, 100), placement("Documents", 1, 900)],
             against: ["Documents", "Documents"])
-        expectEqual(indices(sameTitle), [0, 1], "two windows with one title get one each")
+        expectEqual(pairs(sameTitle), ["Documents->0", "Documents->1"], "two windows with one title get one each")
 
         // Untitled windows have nothing but their position to go on, and that
         // must not be handed out twice either.
         let untitled = WindowArrangement.pairings(
             of: [placement("", 0, 100), placement("", 1, 900)],
             against: ["", ""])
-        expectEqual(indices(untitled), [0, 1], "untitled windows fall back to where they were")
+        expectEqual(pairs(untitled), ["#0->0", "#1->1"], "untitled windows fall back to where they were")
 
         // More placements than windows: one closed while the display was away.
         let closed = WindowArrangement.pairings(
             of: [placement("Inbox", 0, 100), placement("Drafts", 1, 900)],
             against: ["Inbox"])
-        expectEqual(indices(closed), [0], "a window that closed is passed over rather than guessed at")
+        expectEqual(pairs(closed), ["Inbox->0"], "a window that closed is passed over rather than guessed at")
 
         // And a title that no longer matches anything, whose old position is
         // already spoken for: better to leave it than to move a stranger.
         let stranger = WindowArrangement.pairings(
             of: [placement("Inbox", 0, 100), placement("Gone", 0, 900)],
             against: ["Inbox"])
-        expectEqual(indices(stranger), [0], "nothing is moved on the strength of a position already used")
+        expectEqual(pairs(stranger), ["Inbox->0"],
+                    "the window goes to the placement that names it, not the one that lost its own")
+
+        // The case that made a second pass necessary. One window closed while
+        // the display was away and a new one appeared. Resolving each
+        // placement completely in turn, the first — whose window had gone —
+        // took the second's window by position, and the second then fell back
+        // and moved the brand-new window that was never ours.
+        let shifted = WindowArrangement.pairings(
+            of: [placement("A", 0, 100), placement("B", 1, 900)],
+            against: ["B", "C"])
+        expectEqual(pairs(shifted), ["B->0"],
+                    "a placement whose window closed does not take one that is spoken for")
     }
 
     private static func storedNumbersAreBounded() {
@@ -508,9 +526,17 @@ enum SelfTest {
         expectEqual(PointerAcceleration.curveValue(1), 65536, "1.0 is the shipped curve")
         expectEqual(PointerAcceleration.curveValue(0), 0, "and zero is no acceleration at all")
         expectEqual(PointerAcceleration.curveValue(-1), 0, "below zero there is nothing to ask for")
-        expectEqual(PointerAcceleration.curveValue(.nan), 65536,
-                    "and one that is not a number leaves the device as it was shipped")
+        expectEqual(PointerAcceleration.curveValue(.nan), nil,
+                    "and one that is not a number means leave the device alone, which is not the same as 1.0")
         expectEqual(PointerAcceleration.curveValue(1e300), 20 * 65536, "past the top is the top")
+
+        // And the profile editor's fields, which read figures decoded out of
+        // the same file and hand them straight to Int(_:) inside a view body.
+        expectEqual(fieldValue(80, 40 ... 105), 80, "a temperature in range is shown as it is")
+        expectEqual(fieldValue(1e300, 40 ... 105), 105, "one past the field is the field's top")
+        expectEqual(fieldValue(-1e300, 40 ... 105), 40, "and below it, its bottom")
+        expectEqual(fieldValue(.nan, 40 ... 105), 40, "one that is not a number does not reach Int at all")
+        expectEqual(fieldValue(1.4, 0 ... 200), 1, "and it rounds rather than truncating")
     }
 
     private static func loadSampleGap() {

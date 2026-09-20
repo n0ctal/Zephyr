@@ -328,12 +328,12 @@ private struct ConditionRow: View {
         case .cpuHotterThan(let celsius):
             Text("CPU above").font(.subheadline)
             CompactNumberField(range: 40...105, suffix: "°C", value: Binding(
-                get: { Int(celsius) }, set: { condition = .cpuHotterThan(Double($0)) }
+                get: { fieldValue(celsius, 40...105) }, set: { condition = .cpuHotterThan(Double($0)) }
             ))
         case .cpuLoadAbove(let percent):
             Text("CPU load above").font(.subheadline)
             CompactNumberField(range: 5...100, suffix: "%", value: Binding(
-                get: { Int(percent) }, set: { condition = .cpuLoadAbove(Double($0)) }
+                get: { fieldValue(percent, 5...100) }, set: { condition = .cpuLoadAbove(Double($0)) }
             ))
         }
     }
@@ -363,11 +363,11 @@ private struct ActionRow: View {
         case .fanCurve(let low, let high):
             Text("Curve").font(.subheadline)
             CompactNumberField(range: 40...80, suffix: "°C", value: Binding(
-                get: { Int(low) }, set: { action = .fanCurve(min: Double($0), max: high) }
+                get: { fieldValue(low, 40...80) }, set: { action = .fanCurve(min: Double($0), max: high) }
             ))
             Text("to").font(.subheadline)
             CompactNumberField(range: 60...105, suffix: "°C", value: Binding(
-                get: { Int(high) }, set: { action = .fanCurve(min: low, max: Double($0)) }
+                get: { fieldValue(high, 60...105) }, set: { action = .fanCurve(min: low, max: Double($0)) }
             ))
 
         case .turboDisabled(let off):
@@ -397,7 +397,7 @@ private struct ActionRow: View {
         case .pointerAcceleration(let value):
             Text("Pointer acceleration").font(.subheadline)
             CompactNumberField(range: 0...200, suffix: "%", value: Binding(
-                get: { Int(value * 100) }, set: { action = .pointerAcceleration(Double($0) / 100) }
+                get: { fieldValue(value * 100, 0...200) }, set: { action = .pointerAcceleration(Double($0) / 100) }
             ))
         }
     }
@@ -427,4 +427,16 @@ private struct TimeField: View {
         }
         minutes = hour * 60 + minute
     }
+}
+
+/// A stored figure as a field can show it.
+///
+/// Profiles are decoded out of the preferences file, and `Int(_:)` traps
+/// rather than saturating — on a value that is not a number as much as on one
+/// past its range. A view body is a poor place to find that out. The field's
+/// own range is the natural bound and is right there at every call.
+func fieldValue(_ value: Double, _ range: ClosedRange<Int>) -> Int {
+    guard value.isFinite else { return range.lowerBound }
+    return Int(Swift.min(Swift.max(value.rounded(), Double(range.lowerBound)),
+                         Double(range.upperBound)))
 }

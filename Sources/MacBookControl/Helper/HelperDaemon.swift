@@ -136,9 +136,16 @@ final class HelperService: NSObject, HelperProtocol {
             self.forcedTargets.removeValue(forKey: fan)
             self.curveFans.removeValue(forKey: fan)
             self.releasedByHeat.remove(fan)
-            try? self.fans?.setAuto(fan: fan)
+            // Reported honestly: this is one of the paths that hands the
+            // hardware back, and a caller told the fan is on automatic when it
+            // is still pinned has no way to find out otherwise.
+            var handedBack = true
+            do { try self.fans?.setAuto(fan: fan) } catch {
+                self.reportIfAnyFanStayedPinned([fan])
+                handedBack = false
+            }
             self.stopControlLoopIfIdle()
-            reply(true)
+            reply(handedBack)
         }
     }
 
@@ -173,9 +180,12 @@ final class HelperService: NSObject, HelperProtocol {
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
             self.releasedByHeat.removeAll()
-            self.reportIfAnyFanStayedPinned(self.fans?.setAllAuto())
+            let refused = self.fans?.setAllAuto() ?? []
+            self.reportIfAnyFanStayedPinned(refused)
             self.stopControlLoopIfIdle()
-            helperLog.info("client gone — fans returned to firmware control")
+            if refused.isEmpty {
+                helperLog.info("client gone — fans returned to firmware control")
+            }
         }
     }
 

@@ -85,27 +85,44 @@ enum WindowArrangement {
     /// each placement put both of them on that one window: it ended up where
     /// the second placement said, and the other window never moved.
     ///
-    /// Sorted by the position each window held, so that where the fallback is
-    /// what decides, it decides the same way every time.
+    /// Every title is matched before any placement is allowed to fall back to
+    /// a position. Resolving each placement completely in turn was not enough:
+    /// one whose title had gone took, by position, the very window a later
+    /// placement matched by name, and that later one then fell back in its
+    /// turn and moved something unrelated. Two windows in frames that were
+    /// not theirs, from one window having been closed.
+    ///
+    /// Ordered by position and then by title, so that where the fallback is
+    /// what decides, it decides the same way every time — Swift's sort is not
+    /// promised to be stable, and two placements can share a position.
     ///
     /// Pure, and separate from the accessibility calls, because a wrong answer
     /// here moves somebody's windows to the wrong place and that is not a
     /// thing to find out by trying it.
     static func pairings(of placements: [Placement],
                          against titles: [String]) -> [(Placement, Int)] {
-        var used = Set<Int>()
-        var result: [(Placement, Int)] = []
-        for placement in placements.sorted(by: { $0.index < $1.index }) {
-            let byTitle = titles.indices.first {
-                !used.contains($0) && !placement.title.isEmpty && titles[$0] == placement.title
-            }
-            let byPosition = titles.indices.contains(placement.index)
-                && !used.contains(placement.index) ? placement.index : nil
-            guard let index = byTitle ?? byPosition else { continue }
-            used.insert(index)
-            result.append((placement, index))
+        let ordered = placements.sorted {
+            ($0.index, $0.title) < ($1.index, $1.title)
         }
-        return result
+        var used = Set<Int>()
+        var found: [Int: Int] = [:]
+
+        for (slot, placement) in ordered.enumerated() where !placement.title.isEmpty {
+            guard let index = titles.indices.first(where: {
+                !used.contains($0) && titles[$0] == placement.title
+            }) else { continue }
+            used.insert(index)
+            found[slot] = index
+        }
+        for (slot, placement) in ordered.enumerated() where found[slot] == nil {
+            guard titles.indices.contains(placement.index),
+                  !used.contains(placement.index) else { continue }
+            used.insert(placement.index)
+            found[slot] = placement.index
+        }
+        return ordered.enumerated().compactMap { slot, placement in
+            found[slot].map { (placement, $0) }
+        }
     }
 
     // MARK: The accessibility interface, in three lines

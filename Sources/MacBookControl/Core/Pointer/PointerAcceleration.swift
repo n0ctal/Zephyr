@@ -69,7 +69,8 @@ final class PointerAcceleration {
             if captured[id] == nil, let current = hid.int(service, key) {
                 captured[id] = current
             }
-            hid.set(service, key, PointerAcceleration.curveValue(multiplier) as CFNumber)
+            guard let wire = PointerAcceleration.curveValue(multiplier) else { continue }
+            hid.set(service, key, wire as CFNumber)
         }
         originals = captured
     }
@@ -101,8 +102,12 @@ final class PointerAcceleration {
     /// `Int(_:)` traps rather than saturating, on a NaN as well as on anything
     /// past its range — the same hazard FanController.rpm() names, here on a
     /// path that writes to an input device.
-    static func curveValue(_ multiplier: Double) -> Int {
-        guard multiplier.isFinite else { return 65536 }
+    static func curveValue(_ multiplier: Double) -> Int? {
+        // Nothing rather than 1.0. The note on apply() is explicit that
+        // applying the shipped curve is not the same as leaving a device
+        // alone — this machine's trackpad ships at 45056, not 65536 — so a
+        // figure that is not a number has to mean "leave it", not "reset it".
+        guard multiplier.isFinite else { return nil }
         let bounded = Swift.min(Swift.max(multiplier, 0), 20)
         return Int((bounded * 65536.0).rounded())
     }
