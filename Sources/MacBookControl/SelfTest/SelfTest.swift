@@ -512,6 +512,16 @@ enum SelfTest {
                     "an unfamiliar machine falls back to the hottest sensor it has")
         expectEqual(Telemetry.cpuTemperature(in: [])?.celsius, nil,
                     "and nothing read means nothing shown")
+
+        // What the default curve made of the two readings. A curve whose
+        // sensor is left unset follows "the CPU", and 55–85 °C is plainly
+        // written for a die: TC0P does not reach 85 on this machine at all.
+        // These are the numbers measured at one instant during a build.
+        let curve = FanCurve.default
+        expectEqual(curve.targetRPM(cpuTemp: 54, fanMin: 1836, fanMax: 5616), 1836,
+                    "the sensor beside the package left the fan at its floor")
+        expectEqual(curve.targetRPM(cpuTemp: 94, fanMin: 1836, fanMax: 5616), 5616,
+                    "the hottest core, at that same instant, called for everything")
     }
 
     private static func sensorDiscovery() {

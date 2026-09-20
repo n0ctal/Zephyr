@@ -20,6 +20,13 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+  The same fix reaches the smart fan curve. A curve whose sensor is left
+  unset — the default — follows "the CPU", and its default range of 55–85 °C
+  is plainly written for a die temperature: TC0P does not reach 85 on this
+  machine at all. At the instant the hottest core read 94 °C, TC0P read 54,
+  which put the curve at zero and the fan at its floor of 1836 rpm instead of
+  its ceiling of 5616. Anyone who had picked a sensor by hand, or "the hottest
+  sensor", was never affected.
 - The CPU temperature no longer changes by eighteen degrees depending on
   whether the settings window is open. Two preference lists disagreed about
   which sensor is the CPU's: the reader fetched TC0P, the menu bar and the
