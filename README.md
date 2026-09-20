@@ -295,6 +295,7 @@ real machine before it was written.
 | `--test-profiles` | Evaluate every profile condition against the machine now |
 | `--test-timing` | Where the milliseconds go: what the window touches, and what a tick costs |
 | `--time-phases` | Startup phase timings — **launches the app** and stays running, unlike every other flag here |
+| `scripts/verify-clean-build.sh [ref]` | Build the committed state in a clone of its own — catches anything this working copy supplies that git does not |
 | `--test-telemetry-race` | Drive the two paths that read the hardware into each other; build with `-Xswiftc -sanitize=thread` and let the sanitizer judge |
 | `--measure-sections` | The height of each settings section, menu bar expanded |
 | `--dump-window <path> [--dark\|--darkness]` | Render every layout offscreen to a contact sheet |
