@@ -858,6 +858,14 @@ func runIconDump() {
             at: NSPoint(x: 8, y: barY + 6),
             withAttributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.black])
         if let image = line.image {
+            // The composed line on its own, which is what the status item is
+            // actually handed — the sheet shows it on a black strip, and a
+            // strip is no use for checking where the drawing sits inside it.
+            if let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+               let png = rep.representation(using: .png, properties: [:]) {
+                try? png.write(to: directory.appendingPathComponent(
+                    captions ? "line-with-labels.png" : "line-plain.png"))
+            }
             let target = NSRect(x: 110, y: barY, width: image.size.width, height: image.size.height)
             NSColor.black.setFill()
             target.insetBy(dx: -4, dy: 0).fill()

@@ -624,7 +624,9 @@ enum MenuBarComposer {
         // on the phone it very nearly fills the shape, and that is most of why
         // it reads at a glance.
         let text = "\(battery.percent)" as NSString
-        let font = NSFont.systemFont(ofSize: height * 0.80, weight: .bold)
+        // 0.72 rather than 0.80: against the reference the owner drew from, the
+        // digits were running a little large and taking the pill with them.
+        let font = NSFont.systemFont(ofSize: height * 0.68, weight: .bold)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
         let measured = showingPercentage ? text.size(withAttributes: attributes) : .zero
         // Sized for the widest number it will ever hold, not for the one it is
@@ -642,16 +644,26 @@ enum MenuBarComposer {
         // at five pixels across produced something recognisable only if you
         // were told what it was; this is the glyph the phone uses, so there is
         // nothing to compare unfavourably against.
-        let boltHeight = height * 0.72
-        let boltWidth = boltHeight * Self.boltAspect
-        let boltGap: CGFloat = 2
+        // The slot is the drawing, not the box it is laid out in.
+        //
+        let boltHeight = height * 0.55
+        let boltWidth = boltHeight * Self.boltInk.inkAspect
+        let boltGap: CGFloat = 1
+        let sidePadding: CGFloat = 2.5
         // One width, whatever is inside it. With the number it was 37 points
         // and without it 23, which is not one battery drawn two ways but two
         // different objects: at the same height the short one reads rounder
         // and stubbier. The pill is sized for everything it can ever hold —
         // three digits, the gap and the bolt — and what is not there simply
         // leaves the middle emptier.
-        let bodyWidth = widest + boltGap + boltWidth + 5
+        // Two points of side padding, not five: with three digits and a
+        // bolt the pill was running at about two and a half times its
+        // height, which in a real menu bar reads as a wide slab rather
+        // than as a battery.
+        // Padding on both sides. One point was not enough: the first digit came
+        // out touching the left edge and the bolt ran into the curve on the
+        // right, which cut its corner off.
+        let bodyWidth = widest + boltGap + boltWidth + sidePadding * 2
         let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
 
         let fill = (Self.forcedFillRole
@@ -696,12 +708,17 @@ enum MenuBarComposer {
         // running on battery, which is the state this Mac is in most of the
         // time.
         let boltShown = battery.isPluggedIn
-        // The gap belongs to the pair, not to the bolt: counting it with no
-        // number beside it put the bolt a point left of centre whenever the
-        // percentage was switched off.
-        let gapBeforeBolt = showingPercentage && boltShown ? boltGap : 0
-        let groupWidth = measured.width + gapBeforeBolt + (boltShown ? boltWidth : 0)
-        let groupX = (bodyWidth - groupWidth) / 2
+        // The bolt keeps its place against the right, and the number is
+        // centred in what is left of the pill. Centring the two together as
+        // one group looked right at 100 % and wrong everywhere else: a shorter
+        // number pulled the bolt along with it, so the bolt sat in a different
+        // place at 9 % than at 100 %.
+        let boltX = bodyWidth - sidePadding - boltWidth
+        let textRegion = boltShown && showingPercentage
+            ? sidePadding ... (boltX - boltGap)
+            : sidePadding ... (bodyWidth - sidePadding)
+        let groupX = textRegion.lowerBound
+            + ((textRegion.upperBound - textRegion.lowerBound) - measured.width) / 2
 
         if showingPercentage || boltShown {
             // Punched through rather than painted on: both then read against
@@ -710,24 +727,40 @@ enum MenuBarComposer {
             NSColor.black.setFill()
             NSGraphicsContext.current?.compositingOperation = .destinationOut
             if showingPercentage {
-                // Centred on the cap height, not on the line height. A line box
-                // carries room for descenders that digits never use, so
-                // centring on it pushes the number visibly high and makes it
-                // look smaller than the space it occupies.
-                let capHeight = font.capHeight
-                // `descender` is negative, so it is added: subtracting it
-                // pushes the digits up out of the pill, which is what happened
-                // first.
+                // Centred on where the glyphs actually land, not on the font's
+                // metrics. Cap height and descender describe the typeface, not
+                // this particular string, and centring by them put the digits
+                // 2.5 points below the top of the pill and 5 above the bottom
+                // — measured, by rendering and looking for the ink. The device
+                // metrics give the drawn bounding box, and `minY` says where
+                // it sits relative to the drawing origin.
+                let ink = Self.digitInk(font)
+                // `draw(at:)` places the baseline, and the ink sits above it by
+                // its own bottom bearing; the two together are where the
+                // drawing actually starts. Derived by drawing the string at
+                // three known offsets and measuring where the ink landed,
+                // because the font's own metrics describe the typeface and not
+                // this string: centring by cap height and descender left the
+                // number sitting high in the pill.
                 text.draw(at: NSPoint(x: Self.pixelAligned(groupX),
-                                      y: Self.pixelAligned((height - capHeight) / 2 + font.descender)),
+                                      y: (height - ink.height) / 2 - ink.bottom),
                           withAttributes: attributes)
             }
             if boltShown {
-                let box = NSRect(x: Self.pixelAligned(groupX + measured.width + gapBeforeBolt),
+                // Centred alone when there is no number to sit beside.
+                let x = showingPercentage ? boltX : (bodyWidth - boltWidth) / 2
+                let box = NSRect(x: Self.pixelAligned(x),
                                  y: Self.pixelAligned((height - boltHeight) / 2),
                                  width: boltWidth, height: boltHeight)
                 if let symbol = Self.boltSymbol {
-                    symbol.draw(in: box, from: .zero, operation: .destinationOut, fraction: 1)
+                    // Enlarged and shifted so its drawing — not its box —
+                    // lands exactly in the slot reserved above.
+                    let boxHeight = box.height / Self.boltInk.heightShare
+                    let boxWidth = boxHeight * Self.boltInk.boxAspect
+                    symbol.draw(in: NSRect(x: box.minX - Self.boltInk.leading * boxWidth,
+                                           y: box.midY - boxHeight / 2,
+                                           width: boxWidth, height: boxHeight),
+                                from: .zero, operation: .destinationOut, fraction: 1)
                 } else {
                     bolt(in: box).fill()
                 }
@@ -751,11 +784,90 @@ enum MenuBarComposer {
         return image
     }()
 
-    /// Its own width against its own height, so it is never stretched to fit a
-    /// box chosen for it.
-    private static let boltAspect: CGFloat = {
-        guard let size = boltSymbol?.size, size.height > 0 else { return 0.53 }
-        return size.width / size.height
+    /// Where a digit's ink sits relative to where `draw(at:)` is told to put
+    /// it, and how tall it is — measured once per font size.
+    ///
+    /// The font's own metrics describe the typeface, not the string: centring
+    /// digits by cap height and descender left them a pixel and a half above
+    /// the middle of the pill, which is visible when the pill is fifteen
+    /// points tall and the number is punched through it. Rendering one digit
+    /// and looking for the ink answers exactly, and the answer is the same for
+    /// every digit, so one measurement serves.
+    private static var digitInkCache: [CGFloat: (bottom: CGFloat, height: CGFloat)] = [:]
+
+    static func digitInk(_ font: NSFont) -> (bottom: CGFloat, height: CGFloat) {
+        if let known = digitInkCache[font.pointSize] { return known }
+        let side = 64
+        let measured: (bottom: CGFloat, height: CGFloat)
+        if let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                      isPlanar: false, colorSpaceName: .deviceRGB,
+                                      bytesPerRow: 0, bitsPerPixel: 0) {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            ("0" as NSString).draw(at: NSPoint(x: 4, y: 8),
+                                   withAttributes: [.font: font, .foregroundColor: NSColor.black])
+            NSGraphicsContext.restoreGraphicsState()
+            var top = side, bottom = -1
+            for y in 0 ..< side {
+                for x in 0 ..< side where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.05 {
+                    top = Swift.min(top, y); bottom = Swift.max(bottom, y)
+                }
+            }
+            if bottom >= top {
+                // The bitmap counts down from the top; the drawing origin was
+                // eight points up from the bottom.
+                measured = (CGFloat(side - 1 - bottom) - 8, CGFloat(bottom - top + 1))
+            } else {
+                measured = (-font.descender, font.capHeight)
+            }
+        } else {
+            measured = (-font.descender, font.capHeight)
+        }
+        digitInkCache[font.pointSize] = measured
+        return measured
+    }
+
+    /// Where the bolt actually is inside the symbol's box.
+    ///
+    /// `bolt.fill` is laid out with empty box around the drawing — measured by
+    /// rendering it and looking for the first column that is not transparent:
+    /// 15.7 % of the width at each side and 7.5 % of the height above and
+    /// below. Reserving the box rather than the drawing spent a quarter of the
+    /// pill's width on air, which is most of why it came out too wide.
+    ///
+    /// Measured rather than written down, so a symbol Apple redraws does not
+    /// silently take the layout with it.
+    static let boltInk: (boxAspect: CGFloat, inkAspect: CGFloat,
+                         heightShare: CGFloat, leading: CGFloat) = {
+        let fallback: (CGFloat, CGFloat, CGFloat, CGFloat) = (0.765, 0.618, 0.850, 0.157)
+        guard let symbol = boltSymbol, symbol.size.height > 0 else { return fallback }
+        let boxAspect = symbol.size.width / symbol.size.height
+        let side = 120
+        let width = Int((CGFloat(side) * boxAspect).rounded())
+        guard width > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: side,
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                         isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0)
+        else { return fallback }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.black.setFill()
+        symbol.draw(in: NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(side)),
+                    from: .zero, operation: .sourceOver, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+        var minX = width, maxX = -1, minY = side, maxY = -1
+        for y in 0 ..< side {
+            for x in 0 ..< width where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.05 {
+                minX = Swift.min(minX, x); maxX = Swift.max(maxX, x)
+                minY = Swift.min(minY, y); maxY = Swift.max(maxY, y)
+            }
+        }
+        guard maxX >= minX, maxY >= minY else { return fallback }
+        let inkWidth = CGFloat(maxX - minX + 1), inkHeight = CGFloat(maxY - minY + 1)
+        return (boxAspect, inkWidth / inkHeight, inkHeight / CGFloat(side),
+                CGFloat(minX) / CGFloat(width))
     }()
 
     /// A lightning bolt in the given box, for a system that has no `bolt.fill`.
