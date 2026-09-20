@@ -58,21 +58,51 @@ enum WindowArrangement {
             guard let windows = attribute(element, kAXWindowsAttribute) as? [AXUIElement] else {
                 continue
             }
-            for placement in wanted {
-                // By title first: a window that was second in the list may be
-                // first by the time it comes back, and moving the wrong window
-                // is worse than moving none.
-                let match = windows.first {
-                    !placement.title.isEmpty
-                        && (attribute($0, kAXTitleAttribute) as? String) == placement.title
-                } ?? (windows.indices.contains(placement.index) ? windows[placement.index] : nil)
-                guard let window = match, frame(of: window) != placement.frame else { continue }
+            // Titles read once rather than once per placement: each is a call
+            // across the accessibility interface, and matching walked the list
+            // again for every window being put back.
+            let titles = windows.map { (attribute($0, kAXTitleAttribute) as? String) ?? "" }
+            for (placement, index) in pairings(of: wanted, against: titles) {
+                let window = windows[index]
+                guard frame(of: window) != placement.frame else { continue }
                 set(window, kAXPositionAttribute, placement.frame.origin)
                 set(window, kAXSizeAttribute, placement.frame.size)
                 restored += 1
             }
         }
         return restored
+    }
+
+    /// Which window each placement belongs to: by title first, by the position
+    /// it held second, and never the same window twice.
+    ///
+    /// The last clause is the one that was missing. Two windows of one
+    /// application can carry the same title — two Finder windows on the same
+    /// folder, or two that have none at all — and taking the first match for
+    /// each placement put both of them on that one window: it ended up where
+    /// the second placement said, and the other window never moved.
+    ///
+    /// Sorted by the position each window held, so that where the fallback is
+    /// what decides, it decides the same way every time.
+    ///
+    /// Pure, and separate from the accessibility calls, because a wrong answer
+    /// here moves somebody's windows to the wrong place and that is not a
+    /// thing to find out by trying it.
+    static func pairings(of placements: [Placement],
+                         against titles: [String]) -> [(Placement, Int)] {
+        var used = Set<Int>()
+        var result: [(Placement, Int)] = []
+        for placement in placements.sorted(by: { $0.index < $1.index }) {
+            let byTitle = titles.indices.first {
+                !used.contains($0) && !placement.title.isEmpty && titles[$0] == placement.title
+            }
+            let byPosition = titles.indices.contains(placement.index)
+                && !used.contains(placement.index) ? placement.index : nil
+            guard let index = byTitle ?? byPosition else { continue }
+            used.insert(index)
+            result.append((placement, index))
+        }
+        return result
     }
 
     // MARK: The accessibility interface, in three lines

@@ -109,6 +109,13 @@ the order the commits landed; the history has the order.
   the answer was being fetched by opening a connection to the SMC, reading a
   key and closing it again, twice a second: 0.68 ms each time. Remembering a
   failed call as an answer hid the Battery tab for the rest of the session.
+- Putting the windows back no longer puts two of them in the same place. A
+  display switched off and on again restores the arrangement by matching each
+  window to its title, and two windows of one application can share one — two
+  Finder windows on the same folder, or two with no title at all. Each
+  placement took the first window that matched, so both landed on the same
+  one: it ended where the second placement said and the other never moved.
+  Each window is now spoken for once.
 - Three stored numbers are bounded before they become fixed-width ones: a poll
   interval that becomes a timer's period, a power limit that becomes fifteen
   bits and then an MSR write, and a pointer multiplier that becomes a HID

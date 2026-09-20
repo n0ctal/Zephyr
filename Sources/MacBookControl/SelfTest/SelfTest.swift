@@ -67,6 +67,7 @@ enum SelfTest {
         throttleAccounting()
         loadSampleGap()
         storedNumbersAreBounded()
+        windowPairing()
         thermalReleaseBand()
         cpuLoadCondition()
         sleepAssertionWording()
@@ -428,6 +429,49 @@ enum SelfTest {
         // next fan to take its index would inherit the state.
         expectEqual(HelperService.released(held, at: 90, holding: [0]), [0],
                     "only fans still being held can be released ones")
+    }
+
+    private static func windowPairing() {
+        func placement(_ title: String, _ index: Int, _ x: CGFloat) -> WindowArrangement.Placement {
+            WindowArrangement.Placement(pid: 1, title: title, index: index,
+                                        frame: CGRect(x: x, y: 0, width: 800, height: 600))
+        }
+        func indices(_ pairs: [(WindowArrangement.Placement, Int)]) -> [Int] { pairs.map(\.1) }
+
+        // The ordinary case: distinct titles, and the list reordered while the
+        // display was away, which is what matching by title is for.
+        let reordered = WindowArrangement.pairings(
+            of: [placement("Inbox", 0, 100), placement("Drafts", 1, 900)],
+            against: ["Drafts", "Inbox"])
+        expectEqual(indices(reordered), [1, 0], "a window found by its title, wherever it moved to")
+
+        // The case this exists for. Two windows, one title — two Finder
+        // windows on the same folder. Taking the first match for each put both
+        // placements on the same window.
+        let sameTitle = WindowArrangement.pairings(
+            of: [placement("Documents", 0, 100), placement("Documents", 1, 900)],
+            against: ["Documents", "Documents"])
+        expectEqual(indices(sameTitle), [0, 1], "two windows with one title get one each")
+
+        // Untitled windows have nothing but their position to go on, and that
+        // must not be handed out twice either.
+        let untitled = WindowArrangement.pairings(
+            of: [placement("", 0, 100), placement("", 1, 900)],
+            against: ["", ""])
+        expectEqual(indices(untitled), [0, 1], "untitled windows fall back to where they were")
+
+        // More placements than windows: one closed while the display was away.
+        let closed = WindowArrangement.pairings(
+            of: [placement("Inbox", 0, 100), placement("Drafts", 1, 900)],
+            against: ["Inbox"])
+        expectEqual(indices(closed), [0], "a window that closed is passed over rather than guessed at")
+
+        // And a title that no longer matches anything, whose old position is
+        // already spoken for: better to leave it than to move a stranger.
+        let stranger = WindowArrangement.pairings(
+            of: [placement("Inbox", 0, 100), placement("Gone", 0, 900)],
+            against: ["Inbox"])
+        expectEqual(indices(stranger), [0], "nothing is moved on the strength of a position already used")
     }
 
     private static func storedNumbersAreBounded() {
