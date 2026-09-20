@@ -691,6 +691,17 @@ func runTimingTest() {
     time("TurboBoost.isTurboDisabled (runs kextstat)") { _ = turbo.isTurboDisabled() }
     let display = DisplayControl()
     time("DisplayControl.screens") { _ = display.screens() }
+    // The Display tab re-enumerates every five seconds on the main thread, so
+    // what a repeat costs is the figure that matters, not the first one.
+    do {
+        var total: TimeInterval = 0
+        for _ in 0 ..< 10 {
+            let start = Date()
+            _ = display.screens()
+            total += Date().timeIntervalSince(start)
+        }
+        print(String(format: "  %6.1f ms  DisplayControl.screens (mean of 10 more)", total / 10 * 1000))
+    }
     time("DisplayControl.modes for main display") { _ = display.modes(for: CGMainDisplayID()) }
     let remapper = KeyRemapper()
     time("KeyRemapper.keyboards") { _ = remapper.keyboards() }
