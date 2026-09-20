@@ -62,6 +62,7 @@ enum SelfTest {
         acceleratorClientKinds()
         gpuSensorChoice()
         sensorDiscovery()
+        cpuSensorAgreement()
         fanTargetSkipping()
         throttleAccounting()
         loadSampleGap()
@@ -484,6 +485,33 @@ enum SelfTest {
         let atFloor = fan(target: 1836, manual: true)
         expect(FanController.isAlreadySet(atFloor, to: FanController.clamp(900, to: atFloor)),
                "asking for less than the floor, again, changes nothing")
+    }
+
+    private static func cpuSensorAgreement() {
+        func reading(_ key: String, _ celsius: Double) -> TemperatureReading {
+            TemperatureReading(key: key, label: key, celsius: celsius)
+        }
+        // The readings this machine gave during a build, at one instant.
+        let sweep = [reading("TC0P", 69.4), reading("TC0F", 87.2), reading("TCMX", 77.0)]
+        expectEqual(Telemetry.cpuTemperature(in: sweep)?.key, "TC0F",
+                    "the die is preferred over the sensor beside the package")
+
+        // The defect this guards: the reader fetches by one list, the consumer
+        // picks by another, and with the window shut only the fetched key is
+        // there to pick from. They have to be the same list.
+        let narrow = [reading(SensorReader.cpuKeyPreference[0], 87.2)]
+        expectEqual(Telemetry.cpuTemperature(in: narrow)?.key, SensorReader.cpuKeyPreference[0],
+                    "what the reader fetches is what the consumer would have asked for")
+        expectEqual(SensorReader.cpuKeyPreference.last, "TC0P",
+                    "and the lagging one is the last resort, not the first choice")
+
+        // A machine without any of them still answers, with the hottest thing
+        // that did — better than a dash where a temperature goes.
+        let foreign = [reading("TB0T", 31), reading("TM0P", 50)]
+        expectEqual(Telemetry.cpuTemperature(in: foreign)?.key, "TM0P",
+                    "an unfamiliar machine falls back to the hottest sensor it has")
+        expectEqual(Telemetry.cpuTemperature(in: [])?.celsius, nil,
+                    "and nothing read means nothing shown")
     }
 
     private static func sensorDiscovery() {

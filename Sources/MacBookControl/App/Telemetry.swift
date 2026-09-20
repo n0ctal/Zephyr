@@ -225,8 +225,21 @@ final class Telemetry: ObservableObject {
     /// Served from the last poll rather than read on demand: callers are view
     /// bodies and the menu-bar title, both of which ask often.
     var cpuTemperature: TemperatureReading? {
-        temperatures.first { $0.key == "TC0F" || $0.key == "TC0P" || $0.key == "TC0D" }
-            ?? temperatures.max { $0.celsius < $1.celsius }
+        Telemetry.cpuTemperature(in: temperatures)
+    }
+
+    /// The choice apart from the readings, so the order can be checked, and
+    /// so it can be checked against the order the reader fetches by. They are
+    /// the same list now; when they were two lists that disagreed, the menu
+    /// bar read eighteen degrees low with the window shut and corrected itself
+    /// when it was opened.
+    static func cpuTemperature(in readings: [TemperatureReading]) -> TemperatureReading? {
+        for key in SensorReader.cpuKeyPreference {
+            if let reading = readings.first(where: { $0.key == key }) { return reading }
+        }
+        // Nothing preferred came back — a sensor can decline — so the hottest
+        // thing that did is a better answer than none.
+        return readings.max { $0.celsius < $1.celsius }
     }
 
     /// Blocking read, for the one moment where a wrong answer is permanent.

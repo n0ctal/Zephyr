@@ -20,6 +20,13 @@ the bump travelled inside the change it released.
 - A comment described a setting that had been folded into another one and said
   the opposite of what the code now does: that all fans follow one sensor.
   They follow their own.
+- The CPU temperature no longer changes by eighteen degrees depending on
+  whether the settings window is open. Two preference lists disagreed about
+  which sensor is the CPU's: the reader fetched TC0P, the menu bar and the
+  profile engine preferred TC0F. With the window shut only TC0P was ever read,
+  so the preference could not be honoured — measured at one instant during a
+  build, the app said 69 °C while TC0F read 87.2. There is one list now, and
+  TC0P is its last resort rather than its first choice.
 - The thermal ceiling that releases a pinned fan back to the firmware was
   comparing 90 °C against TC0P — a sensor beside the package rather than on
   it. Measured here under a sustained build, TC0P held 54 °C while the hottest

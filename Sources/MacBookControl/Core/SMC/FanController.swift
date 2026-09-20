@@ -19,7 +19,19 @@ final class SensorReader {
     static let plausibleRange = 1.0 ... 125.0
 
     /// Preferred CPU sensor keys, best first; first one that exists is used.
-    static let cpuKeyPreference = ["TC0P", "TC0E", "TC0F", "TCXC", "TCGC", "TC0D", "TC0H"]
+    ///
+    /// The one list, for everything that asks "how hot is the CPU". There used
+    /// to be two — this one, and a shorter one in `Telemetry` — and they
+    /// disagreed about the first key, so the narrow read fetched one sensor
+    /// while the reader that consumed it preferred another. With the settings
+    /// window shut the preferred key was simply never read, and the number
+    /// fell through to whatever had been.
+    ///
+    /// TC0P last, though it used to be first. It sits beside the package
+    /// rather than on it and lags badly: measured under a sustained build it
+    /// read 69.4 °C against TC0F's 87.2 at the same instant, and earlier in
+    /// the same build 54 °C against a hottest core of 94.
+    static let cpuKeyPreference = ["TC0F", "TC0E", "TCXC", "TCGC", "TC0D", "TC0H", "TC0P"]
 
     /// The CPU sensor key chosen at startup (nil if none of the preferred keys exist).
     private(set) var cpuKey: String?
