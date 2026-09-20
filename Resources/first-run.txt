@@ -24,6 +24,12 @@ reproducible from it.
 
 What it needs from the system
 
-Zephyr reads the sensors and controls the fans through a small helper
-that is installed on first use and asks for your password once. Nothing
-leaves the machine: there is no network code in the application at all.
+Zephyr reads the sensors without any privilege at all. Controlling the
+fans needs a small helper running as root, and Zephyr does not install
+that for you: the first time you ask for something that needs it, a
+window appears with the exact command and a button that copies it. You
+paste it into Terminal, it asks for your password, and that is the only
+time it is wanted. Until then the readings work and the controls do not.
+
+Nothing leaves the machine: there is no network code in the application
+at all.

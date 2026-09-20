@@ -262,8 +262,10 @@ final class Telemetry: ObservableObject {
     /// The wait is one tick's worth of reads, on a path that already accepts
     /// about 45 ms of one.
     private func readNow() {
+        let generation = nextGeneration()
         let reading = queue.sync {
-            Reading(temperatures: self.sensors?.readTemperatures() ?? [],
+            Reading(generation: generation,
+                    temperatures: self.sensors?.readTemperatures() ?? [],
                     fans: self.fanController?.readFans() ?? [],
                     battery: self.batteryReader.read(),
                     load: self.systemLoad.read(),
@@ -279,6 +281,9 @@ final class Telemetry: ObservableObject {
     /// answer", and the fields do not need to tell those apart: both mean
     /// leave what is there alone.
     private struct Reading {
+        /// Which read this is. Readings are published in the order they were
+        /// started, not the order they finish.
+        var generation: Int
         var temperatures: [TemperatureReading]?
         var fans: [FanReading]?
         var battery: BatteryStatus?
@@ -294,7 +299,29 @@ final class Telemetry: ObservableObject {
     /// and they drifted: the tick left a field alone when its reader said
     /// nothing, and the blocking read — the one that runs every time the
     /// window opens — overwrote it with nothing.
+    /// Counts reads, and remembers the newest one published.
+    ///
+    /// The blocking read waits for a tick that is already reading, then reads
+    /// everything itself and publishes at once — while the tick it waited for
+    /// is still queued to publish its own, narrower result on the run loop.
+    /// That one landed second and replaced a full sweep with a single sensor,
+    /// for one cycle, at the exact moment the window opened and somebody
+    /// looked at the pickers.
+    private var reads = 0
+    private var newestPublished = 0
+
+    /// Both counters are touched only on the main thread: refresh() and
+    /// readNow() are both called there, and apply() runs there.
+    private func nextGeneration() -> Int {
+        reads += 1
+        return reads
+    }
+
     private func apply(_ reading: Reading) {
+        // A reading that was started before one already published describes an
+        // older moment, whatever order they finished in.
+        guard reading.generation > newestPublished else { return }
+        newestPublished = reading.generation
         if let temperatures = reading.temperatures { self.temperatures = temperatures }
         if let fans = reading.fans { self.fans = fans }
         if let battery = reading.battery { self.battery = battery }
@@ -312,6 +339,7 @@ final class Telemetry: ObservableObject {
             return
         }
         isReading = true
+        let generation = nextGeneration()
         let needs = currentNeeds
         let sensorKey = currentSensorKey
         queue.async { [weak self] in
@@ -361,7 +389,8 @@ final class Telemetry: ObservableObject {
             // is not delivered at all inside a nested run loop, which is how
             // the offscreen renders came to draw dashes where the numbers go.
             RunLoop.main.perform(inModes: [.common]) {
-                self.apply(Reading(temperatures: temperatures, fans: fans, battery: battery,
+                self.apply(Reading(generation: generation,
+                                   temperatures: temperatures, fans: fans, battery: battery,
                                    load: load, network: network, thermal: status))
                 self.isReading = false
                 if self.needsAnotherRead {

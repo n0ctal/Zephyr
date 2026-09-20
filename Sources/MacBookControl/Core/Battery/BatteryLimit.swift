@@ -46,16 +46,18 @@ enum BatteryLimit {
             _ = try smc.read(key)
             known = true
             return true
-        } catch SMCError.smcError {
+        } catch SMCError.smcError(kSMCKeyNotFound) {
             // The chip answered, and what it said is that there is no such
             // key. That will not change while the machine is running.
             known = false
             return false
         } catch {
-            // Everything else is the call failing rather than the key being
-            // absent. Remembering it would hide the feature for the rest of
-            // the session over one bad moment, which is what the note above
-            // promises not to do.
+            // Everything else — a failed call, a connection that went away,
+            // any other status byte — is the asking failing rather than the
+            // key being absent. Remembering it would hide the feature for the
+            // rest of the session over one bad moment, which is what the note
+            // above promises not to do. Matching every status byte, as this
+            // did, made that promise false for all but one of them.
             return false
         }
     }

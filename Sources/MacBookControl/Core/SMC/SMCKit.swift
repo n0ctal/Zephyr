@@ -141,6 +141,14 @@ struct SMCValue {
 
 // MARK: - SMC errors
 
+/// The status byte the SMC returns for a key it does not have.
+///
+/// Measured rather than taken from a header: reading "ZZZZ" on this machine
+/// comes back as result 0x84. It matters because it is the one status that
+/// means "the answer is no" — every other one means the asking failed, and
+/// those must not be remembered.
+let kSMCKeyNotFound: UInt8 = 0x84
+
 enum SMCError: Error, CustomStringConvertible {
     case serviceNotFound
     case openFailed(kern_return_t)

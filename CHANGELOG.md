@@ -54,6 +54,26 @@ the bump travelled inside the change it released.
   them apart. On this machine the built-in trackpad matches, names its curve
   `HIDTrackpadAcceleration`, and the value behind that name is absent from the
   service, so the list comes back empty.
+- A reading that was started earlier can no longer land on top of one started
+  later. The blocking read waits for a tick that is already reading, then
+  reads everything and publishes at once — while the tick it waited for is
+  still queued to publish its own, narrower result. That one arrived second
+  and replaced a full sweep with a single sensor, for one cycle, at the moment
+  the window opened.
+- The thermal release only acts on a reading that really came from a CPU
+  sensor. Asking for the CPU temperature falls back to the hottest sensor in
+  the machine when none of the preferred keys answers, and that fallback is
+  both of the things the valve must avoid: a band calibrated on the hottest
+  core compared against an unknown sensor, and a sweep of fifty keys twice a
+  second inside the root control loop.
+- Whether the Mac has a charge ceiling is remembered only for the one status
+  byte that means "no such key" — 0x84, measured by reading a key that cannot
+  exist. Any other status is the asking failing, and the note above that code
+  promised not to remember those.
+- The note inside the disk image said the helper is installed on first use. It
+  is not: the app shows the command and a button that copies it, and the
+  controls do nothing until it has been run. Somebody following only that file
+  would have had an application whose switches did nothing.
 - `--test-gpu` can fill in the line it has always had for the active card. It
   asked for the information without requesting it, so that line printed a dash
   on every machine. It also names the processes holding the discrete card,

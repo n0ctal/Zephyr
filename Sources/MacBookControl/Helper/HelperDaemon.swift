@@ -255,14 +255,6 @@ final class HelperService: NSObject, HelperProtocol {
             // longer raise it, so the hold needs a thermal ceiling of its own.
             // Only a fixed target needs it: a curve raises the fan by itself.
             //
-            // Against the hottest sensor in the machine, not against the one
-            // the menu bar shows. That one is TC0P, which sits beside the
-            // package rather than on it: measured here under a sustained
-            // build, TC0P held 54 °C while the hottest core read 94. A ceiling
-            // of 90 compared against TC0P is a ceiling that never arrives —
-            // the die would have to pass 120 °C to reach it, and the machine
-            // shuts down before that. The valve was doing nothing.
-            //
             // The processor, not the hottest thing in the machine. The
             // figures below were measured against the hottest core, so that
             // is what they have to be compared against: applied to the
@@ -279,9 +271,17 @@ final class HelperService: NSObject, HelperProtocol {
                 // set outlives the hold that filled it, and the next fan to be
                 // pinned is handed straight to the firmware.
                 self.releasedByHeat.removeAll()
-            } else if let cpu = self.sensors?.cpuTemperature()?.celsius {
+            } else if let cpu = self.sensors?.cpuTemperature(),
+                      SensorReader.cpuKeyPreference.contains(cpu.key) {
+                // The key is checked because cpuTemperature() falls back to
+                // the hottest sensor in the machine when none of the preferred
+                // ones answers — and that fallback is both of the things the
+                // paragraph above says must not happen: the band compared
+                // against an unknown sensor, and a sweep of fifty keys twice a
+                // second in the root loop. Without a CPU reading the set is
+                // left as it is, which is what a failed read already does.
                 self.releasedByHeat = HelperService.released(self.releasedByHeat,
-                                                            at: cpu,
+                                                            at: cpu.celsius,
                                                             holding: Set(self.forcedTargets.keys))
             }
             for (fan, rpm) in self.forcedTargets {
