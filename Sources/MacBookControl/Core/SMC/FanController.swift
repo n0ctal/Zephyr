@@ -119,6 +119,19 @@ final class SensorReader {
     /// woke later, which is exactly the divergence this list was unified to
     /// remove. Falls back to the hottest sensor when none of them answers.
     func cpuTemperature() -> TemperatureReading? {
+        cpuDieTemperature() ?? hottest()
+    }
+
+    /// The CPU temperature, or nothing — never the hottest sensor instead.
+    ///
+    /// For decisions that were calibrated on a processor sensor. The menu bar
+    /// would rather show a number measured somewhere else than a dash, which
+    /// is why `cpuTemperature()` falls back; a thermal ceiling would rather
+    /// have nothing to compare against than something it was not measured
+    /// against. Reading stops at the first key that answers, so the ordinary
+    /// case is one round trip and the fallback's fifty-key sweep is not paid
+    /// by callers that would only discard it.
+    func cpuDieTemperature() -> TemperatureReading? {
         for key in Self.cpuKeyPreference where temperatureKeys.contains(key) {
             if let value = try? smc.read(key),
                let celsius = value.double,
@@ -126,7 +139,7 @@ final class SensorReader {
                 return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
             }
         }
-        return hottest()
+        return nil
     }
 
     /// Which key `cpuTemperature()` will try first on a machine with these

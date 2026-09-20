@@ -71,9 +71,10 @@ the bump travelled inside the change it released.
   exist. Any other status is the asking failing, and the note above that code
   promised not to remember those.
 - The note inside the disk image said the helper is installed on first use. It
-  is not: the app shows the command and a button that copies it, and the
-  controls do nothing until it has been run. Somebody following only that file
-  would have had an application whose switches did nothing.
+  is not, and the first correction was wrong too — nothing appears by itself.
+  It now says where the offer actually lives: an "Install helper…" item in the
+  menu, and a banner across the settings window while the helper is missing.
+  Checked by mounting the built image and reading it.
 - `--test-gpu` can fill in the line it has always had for the active card. It
   asked for the information without requesting it, so that line printed a dash
   on every machine. It also names the processes holding the discrete card,

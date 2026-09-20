@@ -8,22 +8,14 @@ private let helperLog = Logger(subsystem: "com.n0ctal.macbookcontrol.helper", ca
 /// Written by install-helper.sh from the installed /Applications/Zephyr.app.
 private let kAuthorizedCDHashPath = "/Library/Application Support/MacBookControl/authorized-cdhash"
 
-/// The root-side implementation of `HelperProtocol`. A single shared instance
-/// serves every XPC connection. All SMC/pmset work is serialized on one queue
-/// — every entry point but `getVersion`, which touches nothing, wraps its body
-/// in `queue.async` or `queue.sync`; the control timer is created against the
-/// same queue; and the helpers below it are reached only from inside those.
-/// `SMC` is not safe to share across threads and says so; this is where that
-/// is kept true. Calls arrive on whatever queue their XPC connection uses, so
-/// the wrapping is what makes that safe, not a convention.
 /// Above this the firmware must be allowed to take the fan back: a manual hold
 /// blocks its escalation, and no user setting is worth a thermal event.
 ///
-/// Measured against the hottest sensor in the machine, so the figure has to
-/// suit one. 90 was set when this was compared against TC0P, which never
-/// reaches it; against the hottest core, an ordinary build touches 94, and a
-/// ceiling that routine work crosses is a ceiling that takes the fan away
-/// from its owner for no reason.
+/// Measured on the hottest core, so that is what it is held against. 90 was
+/// set when this was compared against TC0P, which never reaches it; against
+/// the hottest core an ordinary build touches 94, and a ceiling that routine
+/// work crosses is a ceiling that takes the fan away from its owner for no
+/// reason.
 let kThermalReleaseCelsius: Double = 95
 
 /// And the hold does not resume until it has come back down this far.
@@ -33,6 +25,14 @@ let kThermalReleaseCelsius: Double = 95
 /// couple of seconds, which on this hardware is loud enough to hear.
 let kThermalResumeCelsius: Double = 85
 
+/// The root-side implementation of `HelperProtocol`. A single shared instance
+/// serves every XPC connection. All SMC/pmset work is serialized on one queue
+/// — every entry point but `getVersion`, which touches nothing, wraps its body
+/// in `queue.async` or `queue.sync`; the control timer is created against the
+/// same queue; and the helpers below it are reached only from inside those.
+/// `SMC` is not safe to share across threads and says so; this is where that
+/// is kept true. Calls arrive on whatever queue their XPC connection uses, so
+/// the wrapping is what makes that safe, not a convention.
 final class HelperService: NSObject, HelperProtocol {
     private let queue = DispatchQueue(label: "com.n0ctal.macbookcontrol.helper.control")
     private let smc: SMC?
@@ -271,17 +271,9 @@ final class HelperService: NSObject, HelperProtocol {
                 // set outlives the hold that filled it, and the next fan to be
                 // pinned is handed straight to the firmware.
                 self.releasedByHeat.removeAll()
-            } else if let cpu = self.sensors?.cpuTemperature(),
-                      SensorReader.cpuKeyPreference.contains(cpu.key) {
-                // The key is checked because cpuTemperature() falls back to
-                // the hottest sensor in the machine when none of the preferred
-                // ones answers — and that fallback is both of the things the
-                // paragraph above says must not happen: the band compared
-                // against an unknown sensor, and a sweep of fifty keys twice a
-                // second in the root loop. Without a CPU reading the set is
-                // left as it is, which is what a failed read already does.
+            } else if let celsius = self.valveTemperature() {
                 self.releasedByHeat = HelperService.released(self.releasedByHeat,
-                                                            at: cpu.celsius,
+                                                            at: celsius,
                                                             holding: Set(self.forcedTargets.keys))
             }
             for (fan, rpm) in self.forcedTargets {
@@ -305,6 +297,24 @@ final class HelperService: NSObject, HelperProtocol {
         }
         timer.resume()
         controlTimer = timer
+    }
+
+    /// What the ceiling is compared against.
+    ///
+    /// The processor, when the machine has a sensor for it: the figures were
+    /// measured on the hottest core and mean nothing held against anything
+    /// else. Where there is no such sensor — none of the seven preferred keys
+    /// answering — the hottest thing in the machine, because a ceiling
+    /// measured somewhere else is worse than an exact one but a hold with no
+    /// ceiling at all is worse than both, and refusing the fallback outright
+    /// left exactly that on such a machine.
+    ///
+    /// `cpuDieTemperature()` rather than `cpuTemperature()` so the fallback is
+    /// a decision made here, once, rather than a sweep of fifty sensors paid
+    /// on every tick and then discarded.
+    private func valveTemperature() -> Double? {
+        if let cpu = sensors?.cpuDieTemperature() { return cpu.celsius }
+        return curveTemperature(FanCurve.hottestSensorKey)
     }
 
     /// Which held fans are currently given back to the firmware.

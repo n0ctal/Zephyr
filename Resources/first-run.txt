@@ -26,10 +26,14 @@ What it needs from the system
 
 Zephyr reads the sensors without any privilege at all. Controlling the
 fans needs a small helper running as root, and Zephyr does not install
-that for you: the first time you ask for something that needs it, a
-window appears with the exact command and a button that copies it. You
-paste it into Terminal, it asks for your password, and that is the only
-time it is wanted. Until then the readings work and the controls do not.
+that for you. Until it is installed, the readings work and the controls
+do nothing.
+
+To install it: open Zephyr's menu in the menu bar and choose "Install
+helper…". A window gives you the exact command and a button that copies
+it; paste it into Terminal and it asks for your password once. The
+settings window carries the same offer in a banner across the top while
+the helper is missing.
 
 Nothing leaves the machine: there is no network code in the application
 at all.
