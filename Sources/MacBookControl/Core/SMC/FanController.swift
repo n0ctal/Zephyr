@@ -136,11 +136,21 @@ final class SensorReader {
             if let value = try? smc.read(key),
                let celsius = value.double,
                Self.plausibleRange.contains(celsius) {
+                hasReadCPUSensor = true
                 return TemperatureReading(key: key, label: SensorLabels.label(for: key), celsius: celsius)
             }
         }
         return nil
     }
+
+    /// Whether a preferred CPU key has ever given a believable reading.
+    ///
+    /// The question "does this machine have a processor sensor" cannot be
+    /// answered by looking for one in `temperatureKeys`: that list deliberately
+    /// keeps keys which read nothing, so a Mac publishing a permanently zero
+    /// stub would look equipped and never produce a reading. Having answered
+    /// once is the test that cannot be fooled that way.
+    private(set) var hasReadCPUSensor = false
 
     /// Which key `cpuTemperature()` will try first on a machine with these
     /// keys. Separate so the order can be checked without the machine.

@@ -211,7 +211,13 @@ struct ThermalStats {
 
     /// `now` is a parameter so the arithmetic can be checked against a clock
     /// that does not move on its own.
-    mutating func record(_ status: ThermalStatus, interval: TimeInterval, at now: Date = Date()) {
+    /// `longestGap` is how far apart two readings can legitimately fall. It
+    /// defaults to the interval, but every repeating timer here is given slack
+    /// as a fraction of its period, so the real answer is larger — and capping
+    /// at the bare interval threw away that fraction of every gap, which is a
+    /// systematic undercount of the figure this type exists to keep honest.
+    mutating func record(_ status: ThermalStatus, interval: TimeInterval,
+                         longestGap: TimeInterval? = nil, at now: Date = Date()) {
         samples += 1
         // Ticks arrive on the interval, but a window opening reads out of turn
         // — and crediting every reading with a whole interval let a few
@@ -222,7 +228,7 @@ struct ThermalStats {
         lastRecordedAt = now
         guard let limit = status.speedLimitPercent else { return }
         lowestSpeedLimit = min(lowestSpeedLimit, limit)
-        if limit < 100 { throttledAccumulated += min(max(elapsed, 0), interval) }
+        if limit < 100 { throttledAccumulated += min(max(elapsed, 0), longestGap ?? interval) }
     }
 
     var everThrottled: Bool { lowestSpeedLimit < 100 }

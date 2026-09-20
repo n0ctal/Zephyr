@@ -3,8 +3,15 @@ import Foundation
 /// Mach service name the privileged daemon registers and the app connects to.
 let kHelperMachServiceName = "com.n0ctal.macbookcontrol.helper"
 
-/// Bumped when the XPC contract changes; the app compares this against the
-/// running daemon to detect a stale installed helper.
+/// Returned by `getVersion`, which the app calls to find out whether a daemon
+/// is there at all — nothing compares this string, and the comment that said
+/// otherwise described a check that has never existed.
+///
+/// A stale helper is caught by something stronger: the daemon accepts only the
+/// cdhash recorded at install time, so an app replaced without re-running
+/// install-helper.sh is refused outright and the menu offers to re-authorise.
+/// A version that agreed while the binaries did not would tell nobody
+/// anything, which is why the check was never worth writing.
 let kHelperVersion = "5"
 
 /// XPC contract between the unprivileged app and the root daemon.

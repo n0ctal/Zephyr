@@ -483,6 +483,19 @@ enum SelfTest {
         overnight.record(held(at: 80), interval: 2, at: at(8 * 3600))
         expectEqual(overnight.throttledSeconds, 4, "the night the machine slept is not throttling")
 
+        // A tick that arrives late because its timer was given slack is still
+        // a tick. Capping at the bare interval threw that slack away on every
+        // gap, which is a systematic undercount of the very figure this keeps.
+        var slack = ThermalStats()
+        let cap = 2 * (1 + Telemetry.timerToleranceFraction)
+        slack.record(held(at: 80), interval: 2, longestGap: cap, at: start)
+        slack.record(held(at: 80), interval: 2, longestGap: cap, at: at(2.4))
+        expectEqual(slack.throttledSeconds, 4, "a tick 2.4 s late counts the 2.4 s, not 2")
+        // 2 for the first sample, 2.4 for the late tick, and the six-and-a-half
+        // second gap capped back to 2.4: 6.8, which rounds to 7.
+        slack.record(held(at: 80), interval: 2, longestGap: cap, at: at(9))
+        expectEqual(slack.throttledSeconds, 7, "and a gap past the slack is still capped at it")
+
         var healthy = ThermalStats()
         healthy.record(held(at: 100), interval: 2, at: start)
         healthy.record(held(at: 100), interval: 2, at: at(2))

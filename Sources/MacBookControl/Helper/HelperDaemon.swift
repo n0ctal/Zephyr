@@ -320,7 +320,13 @@ final class HelperService: NSObject, HelperProtocol {
         // the second wants to be left alone until the next tick, because
         // moving the band onto another sensor for one tick is enough — the
         // hysteresis then holds that release until 85 °C.
-        guard SensorReader.preferredCPUKey(among: sensors.temperatureKeys) == nil else { return nil }
+        //
+        // Having answered once, rather than being listed: `temperatureKeys`
+        // keeps keys that never read anything, so a Mac with a permanently
+        // zero stub among the preferred names would look equipped, produce no
+        // reading, refuse the fallback, and hold a pinned fan with no ceiling
+        // at all.
+        guard !sensors.hasReadCPUSensor else { return nil }
         return curveTemperature(FanCurve.hottestSensorKey)
     }
 

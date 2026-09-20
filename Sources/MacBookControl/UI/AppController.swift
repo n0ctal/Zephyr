@@ -86,7 +86,7 @@ final class AppController: NSObject, NSMenuDelegate {
         // machine was still woken on the dot twice a second and the slack
         // given to the telemetry timer only coalesced onto this one — which is
         // to say it bought nothing at the settings everybody runs.
-        timer.tolerance = Preferences.menuBarPollSeconds / 5
+        timer.tolerance = Preferences.menuBarPollSeconds * Telemetry.timerToleranceFraction
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
     }

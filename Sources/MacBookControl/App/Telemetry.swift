@@ -53,6 +53,12 @@ final class Telemetry: ObservableObject {
     /// The default, and the floor the pickers offer.
     static let interval: TimeInterval = 2
 
+    /// The slack every repeating timer here is given, as a fraction of its
+    /// period. Named because two things have to agree about it: the timers,
+    /// and the arithmetic deciding how far apart two readings may legitimately
+    /// fall.
+    static let timerToleranceFraction: Double = 0.2
+
     /// How often to actually read.
     ///
     /// One timer serves both the window and the menu bar, running at whichever
@@ -185,7 +191,7 @@ final class Telemetry: ObservableObject {
         // others. At the two-second floor that is 400 ms of slack, which no one
         // watching a temperature can see, and with the window shut the period is
         // the menu bar's and the slack grows with it.
-        timer.tolerance = interval / 5
+        timer.tolerance = interval * Telemetry.timerToleranceFraction
         // Keep ticking while a menu is open or a slider is being dragged —
         // otherwise the readings freeze exactly when someone is looking.
         RunLoop.main.add(timer, forMode: .common)
@@ -328,7 +334,8 @@ final class Telemetry: ObservableObject {
         if let load = reading.load { self.load = load }
         if let network = reading.network { self.network = network }
         thermal = reading.thermal
-        stats.record(reading.thermal, interval: interval)
+        stats.record(reading.thermal, interval: interval,
+                     longestGap: interval * (1 + Telemetry.timerToleranceFraction))
     }
 
     private func refresh() {

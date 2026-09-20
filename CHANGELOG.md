@@ -60,6 +60,14 @@ the bump travelled inside the change it released.
   still queued to publish its own, narrower result. That one arrived second
   and replaced a full sweep with a single sensor, for one cycle, at the moment
   the window opened.
+- Whether the Mac has a processor sensor at all is decided by one having
+  answered, not by a name being in the key list. That list deliberately keeps
+  keys which read nothing, so a Mac publishing a permanently zero stub among
+  the preferred names looked equipped, produced no reading, and was refused
+  the fallback — leaving a pinned fan with no thermal ceiling at all.
+- "Held back for" no longer throws away the slack the timers were given. Every
+  repeating timer here may fire up to a fifth of its period late, and capping
+  each gap at the bare period discarded that fraction of every one of them.
 - The thermal release only acts on a reading that really came from a CPU
   sensor. Asking for the CPU temperature falls back to the hottest sensor in
   the machine when none of the preferred keys answers, and that fallback is
