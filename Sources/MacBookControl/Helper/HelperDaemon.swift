@@ -147,7 +147,7 @@ final class HelperService: NSObject, HelperProtocol {
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
             self.releasedByHeat.removeAll()
-            self.fans?.setAllAuto()
+            self.reportIfAnyFanStayedPinned(self.fans?.setAllAuto())
             self.stopControlLoopIfIdle()
             reply(true)
         }
@@ -159,7 +159,7 @@ final class HelperService: NSObject, HelperProtocol {
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
             self.releasedByHeat.removeAll()
-            self.fans?.setAllAuto()
+            self.reportIfAnyFanStayedPinned(self.fans?.setAllAuto())
             self.controlTimer?.cancel()
             self.controlTimer = nil
         }
@@ -173,7 +173,7 @@ final class HelperService: NSObject, HelperProtocol {
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
             self.releasedByHeat.removeAll()
-            self.fans?.setAllAuto()
+            self.reportIfAnyFanStayedPinned(self.fans?.setAllAuto())
             self.stopControlLoopIfIdle()
             helperLog.info("client gone — fans returned to firmware control")
         }
@@ -341,6 +341,18 @@ final class HelperService: NSObject, HelperProtocol {
         if celsius >= kThermalReleaseCelsius { return holding }
         if celsius <= kThermalResumeCelsius { return [] }
         return current.intersection(holding)
+    }
+
+    /// Says so, loudly, when a fan would not go back to the firmware.
+    ///
+    /// Every path that hands the hardware back runs through here. A fan that
+    /// refuses is the one outcome worth a line in the log at root: the process
+    /// that pinned it is on its way out, so nothing else is going to release
+    /// it, and the machine is left cooling to somebody's setting with nobody
+    /// left to change it.
+    private func reportIfAnyFanStayedPinned(_ refused: [Int]?) {
+        guard let refused, !refused.isEmpty else { return }
+        helperLog.error("fans \(refused, privacy: .public) would not return to firmware control")
     }
 
     /// Whatever the curve has been told to follow.

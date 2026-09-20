@@ -276,9 +276,21 @@ final class FanController {
         }
     }
 
-    /// Returns all fans to automatic mode.
-    func setAllAuto() {
-        for i in 0 ..< fanCount { try? setAuto(fan: i) }
+    /// Returns all fans to automatic mode, and says which refused.
+    ///
+    /// Swallowing the error here is right — there is nothing useful to do
+    /// about it at the point this is called, which is on the way out — but
+    /// losing it entirely was not. This is the one failure in the file that
+    /// matters: a fan left pinned by a process that is going away has nothing
+    /// left to release it, and the daemon was writing "fans returned to
+    /// firmware control" into its log either way.
+    @discardableResult
+    func setAllAuto() -> [Int] {
+        var refused: [Int] = []
+        for i in 0 ..< fanCount {
+            do { try setAuto(fan: i) } catch { refused.append(i) }
+        }
+        return refused
     }
 
     /// The clamped target, and whether the fan is already sitting on it. Both

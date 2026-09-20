@@ -109,6 +109,12 @@ the order the commits landed; the history has the order.
   the answer was being fetched by opening a connection to the SMC, reading a
   key and closing it again, twice a second: 0.68 ms each time. Remembering a
   failed call as an answer hid the Battery tab for the rest of the session.
+- A fan that refuses to go back under firmware control now says so in the
+  daemon's log. Every path that hands the hardware back swallowed the error —
+  which is right, there is nothing useful to do about it on the way out — but
+  it then wrote "fans returned to firmware control" whether they had or not.
+  It is the one failure in that file that can leave a machine cooling to a
+  setting with nothing left running that could change it.
 - A window whose position or size could not be read is left alone rather than
   recorded as sitting at the origin with no size. The accessibility call's
   result was ignored and its output left at zero, so a window that declined to
