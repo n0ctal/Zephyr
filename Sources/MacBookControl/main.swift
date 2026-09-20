@@ -749,8 +749,12 @@ func runIconDump() {
     // this Mac is in Low Power Mode, which would paint every row yellow and
     // hide whether the other three colours are right at all.
     let cases: [(String, Int, Bool, Bool, MenuBarComposer.FillRole?)] = [
-        ("100 neutral", 100, false, true, .neutral),
-        ("75 neutral", 75, false, false, .neutral),
+        ("100 on mains", 100, false, true, .neutral),
+        ("75 on battery", 75, false, false, .neutral),
+        // The pair the bolt exists for: the same charge and the same colour,
+        // differing only in whether the charger is in.
+        ("80 on battery", 80, false, false, .neutral),
+        ("80 on mains, full", 80, false, true, .neutral),
         ("50 neutral", 50, false, false, .neutral),
         ("20 critical", 20, false, false, .critical),
         ("5 critical", 5, false, false, .critical),

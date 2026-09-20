@@ -5,6 +5,17 @@ that version number. Up to 1.9.43 and again from 1.9.50 the bump is a commit
 of its own named `Release X`, which is why some entries carry one; in between
 the bump travelled inside the change it released.
 
+## Unreleased
+
+- The battery in the menu bar shows a bolt whenever the machine is on mains.
+  Colour alone could not say it: green means a battery that is filling, and a
+  Mac sitting at 100 % on the charger, or held at a charge limit, is not
+  filling — so it looked exactly like one running on battery, which is the
+  state this machine is in most of the time. Three states now read apart at a
+  glance: no bolt is on battery, bolt and green is charging, bolt and plain is
+  on mains and done. The space for it is reserved whether or not it is there,
+  so plugging the charger in does not drag the rest of the menu bar sideways.
+
 ## 1.10.0 — 2026-09-20
 
 One branch of work rather than one change, which is the departure from

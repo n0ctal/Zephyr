@@ -522,7 +522,10 @@ enum MenuBarComposer {
     /// can still be drawn and compared against a reference.
     static var forcedFillRole: FillRole?
 
-    private static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool,
+    /// Not private so the self-test can render it and hold two states against
+    /// each other, which is the only way to check that the item keeps one
+    /// width whatever the charger is doing.
+    static func iOSBattery(_ battery: BatteryStatus, showingPercentage: Bool,
                                    darkMenuBar: Bool) -> NSImage {
         let height: CGFloat = 15
         let capWidth: CGFloat = 2
@@ -545,7 +548,14 @@ enum MenuBarComposer {
         let widest = ("100" as NSString).size(withAttributes: attributes).width
         let bodyWidth: CGFloat = showingPercentage ? widest + 4 : 23
 
-        let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
+        // Room for the bolt, kept whether or not the bolt is in it. An item
+        // that changes width when the charger goes in drags everything to the
+        // left of it sideways, which is the same movement the pill is pinned
+        // to one width to avoid.
+        let boltGap: CGFloat = 2
+        let boltWidth: CGFloat = 5.5
+        let size = NSSize(width: bodyWidth + capGap + capWidth + boltGap + boltWidth,
+                          height: height)
 
         let fill = (Self.forcedFillRole
             ?? fillRole(percent: battery.percent, isCharging: battery.isCharging,
@@ -581,6 +591,18 @@ enum MenuBarComposer {
                                          width: capWidth, height: 5),
                      xRadius: 1, yRadius: 1).fill()
 
+        // Mains or not, which the colour alone could not say. Green means a
+        // battery that is filling; white means one that is not — and a machine
+        // sitting on the charger at 100 %, or held at a charge limit, is not
+        // filling either, so it looked exactly like one running on battery.
+        // That is the state this Mac is in most of the time.
+        if battery.isPluggedIn {
+            paint.setFill()
+            bolt(in: NSRect(x: bodyWidth + capGap + capWidth + boltGap,
+                            y: (height - height * 0.72) / 2,
+                            width: boltWidth, height: height * 0.72)).fill()
+        }
+
         if showingPercentage {
             // Punched through rather than painted on: the digits then read
             // against the filled part, against the grey remainder, and against
@@ -601,6 +623,26 @@ enum MenuBarComposer {
 
         image.unlockFocus()
         return image
+    }
+
+    /// A lightning bolt in the given box.
+    ///
+    /// Drawn rather than taken from the symbol set: at five points across, the
+    /// stock glyph's strokes come out thinner than a pixel and it reads as a
+    /// smudge rather than as a bolt.
+    private static func bolt(in rect: NSRect) -> NSBezierPath {
+        func at(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            NSPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
+        }
+        let path = NSBezierPath()
+        path.move(to: at(0.62, 1.00))
+        path.line(to: at(0.00, 0.46))
+        path.line(to: at(0.42, 0.46))
+        path.line(to: at(0.38, 0.00))
+        path.line(to: at(1.00, 0.54))
+        path.line(to: at(0.58, 0.54))
+        path.close()
+        return path
     }
 
     /// A battery outline filled to the level, drawn rather than taken from the

@@ -68,6 +68,7 @@ enum SelfTest {
         loadSampleGap()
         storedNumbersAreBounded()
         windowPairing()
+        chargingBolt()
         thermalReleaseBand()
         cpuLoadCondition()
         sleepAssertionWording()
@@ -429,6 +430,41 @@ enum SelfTest {
         // next fan to take its index would inherit the state.
         expectEqual(HelperService.released(held, at: 90, holding: [0]), [0],
                     "only fans still being held can be released ones")
+    }
+
+    private static func chargingBolt() {
+        func battery(_ percent: Int, mains: Bool, charging: Bool = false) -> BatteryStatus {
+            BatteryStatus(percent: percent, isCharging: charging, isPluggedIn: mains,
+                          healthPercent: 82, cycleCount: 401,
+                          power: nil, minutesRemaining: nil)
+        }
+        func drawn(_ status: BatteryStatus, percentage: Bool) -> NSImage {
+            MenuBarComposer.iOSBattery(status, showingPercentage: percentage, darkMenuBar: true)
+        }
+
+        for percentage in [true, false] {
+            let onBattery = drawn(battery(80, mains: false), percentage: percentage)
+            let onMains = drawn(battery(80, mains: true), percentage: percentage)
+
+            // The width is reserved whether the bolt is in it or not. An item
+            // that grows when the charger goes in drags everything to the left
+            // of it sideways, and the eye follows that.
+            expectEqual(onBattery.size.width, onMains.size.width,
+                        "the charger going in does not move the menu bar (percentage: \(percentage))")
+
+            // And it does draw something, which a width check alone would not
+            // notice if the bolt were lost.
+            expect(onBattery.tiffRepresentation != onMains.tiffRepresentation,
+                   "on mains looks different from on battery (percentage: \(percentage))")
+        }
+
+        // The colour still says what the bolt cannot: whether it is filling.
+        expectEqual(MenuBarComposer.fillRole(percent: 80, isCharging: true,
+                                             isPluggedIn: true, lowPower: false), .charging,
+                    "a battery that is filling is green")
+        expectEqual(MenuBarComposer.fillRole(percent: 80, isCharging: false,
+                                             isPluggedIn: true, lowPower: false), .neutral,
+                    "one sitting full on the charger is not — that is what the bolt is for")
     }
 
     private static func windowPairing() {
