@@ -446,6 +446,15 @@ func runPointerTest(write: Bool) {
     probe.stop()
     let devices = acceleration.devices()
     print("devices: \(devices.count)")
+    // Which half came up empty, when it does: what matched, and what each
+    // match publishes. Without this the count above is a dead end.
+    let matched = acceleration.matchedServices()
+    print("matched services: \(matched.count)")
+    for service in matched {
+        print("  \(service.name) — curve \(service.curve ?? "(none published)")"
+              + " = \(service.value.map(String.init) ?? "unreadable")"
+              + " (raw: \(service.raw ?? "absent"))")
+    }
     for device in devices {
         print(String(format: "  %@ — %@ = %d (%.4f)", device.name, device.key, device.value, device.multiplier))
         // The identity is what every per-device setting is filed under, so it

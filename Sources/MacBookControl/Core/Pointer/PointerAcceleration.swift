@@ -93,4 +93,21 @@ final class PointerAcceleration {
     private func pointerServices() -> [AnyObject] {
         hid.services(matching: [.mouse, .pointer])
     }
+
+    /// What the device list is made of: every service that matched, and the
+    /// curve it publishes, if any.
+    ///
+    /// For the probe. An empty device list has two quite different causes —
+    /// nothing matched, or things matched and none of them publishes a curve
+    /// to adjust — and "devices: 0" cannot tell them apart. On this machine it
+    /// is the second: the built-in trackpad matches as a pointer and does not
+    /// answer for `HIDPointerAccelerationType`, although the registry holds
+    /// that property on its event driver.
+    func matchedServices() -> [(name: String, curve: String?, value: Int?, raw: String?)] {
+        pointerServices().map { service in
+            let curve = hid.string(service, "HIDPointerAccelerationType")
+            let raw = curve.flatMap { hid.string(service, $0) }
+            return (hid.name(service), curve, curve.flatMap { hid.int(service, $0) }, raw)
+        }
+    }
 }

@@ -48,6 +48,12 @@ the bump travelled inside the change it released.
   stuck with the second-best for the life of the process while the full sweep
   went on preferring the first — the same disagreement the one-list change set
   out to end, arriving by another door.
+- `--test-pointer` explains an empty device list instead of printing a bare
+  zero. There are two quite different reasons for one — nothing matched, or
+  things matched and none publishes a curve — and the count could not tell
+  them apart. On this machine the built-in trackpad matches, names its curve
+  `HIDTrackpadAcceleration`, and the value behind that name is absent from the
+  service, so the list comes back empty.
 - `--test-gpu` can fill in the line it has always had for the active card. It
   asked for the information without requesting it, so that line printed a dash
   on every machine. It also names the processes holding the discrete card,
