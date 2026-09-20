@@ -14,7 +14,10 @@ the bump travelled inside the change it released.
   state this machine is in most of the time. Three states now read apart at a
   glance: no bolt is on battery, bolt and green is charging, bolt and plain is
   on mains and done. It sits inside the pill, to the right of the number, and
-  is punched through it the way the digits are — the shape the phone uses. The
+  is punched through it the way the digits are. The glyph is the system's own
+  `bolt.fill`, which is the shape being compared against; drawing one by hand
+  at five pixels across gave something recognisable only once you were told
+  what it was. The
   room for it is counted into the pill whether or not it is drawn, so plugging
   the charger in does not drag the rest of the menu bar sideways.
 

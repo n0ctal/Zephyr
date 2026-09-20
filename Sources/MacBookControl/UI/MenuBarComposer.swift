@@ -552,7 +552,12 @@ enum MenuBarComposer {
         // same reason the pill is sized for "100" rather than for the figure
         // it happens to hold. An item that changes width when the charger goes
         // in drags everything to the left of it sideways.
-        let boltWidth = height * 0.32
+        // The system's own bolt, at its own proportions. Drawing one by hand
+        // at five pixels across produced something recognisable only if you
+        // were told what it was; this is the glyph the phone uses, so there is
+        // nothing to compare unfavourably against.
+        let boltHeight = height * 0.72
+        let boltWidth = boltHeight * Self.boltAspect
         let boltGap: CGFloat = 2
         let bodyWidth: CGFloat = showingPercentage
             ? widest + boltGap + boltWidth + 5
@@ -628,10 +633,14 @@ enum MenuBarComposer {
                           withAttributes: attributes)
             }
             if boltShown {
-                let boltHeight = height * 0.82
-                bolt(in: NSRect(x: groupX + measured.width + gapBeforeBolt,
-                                y: (height - boltHeight) / 2,
-                                width: boltWidth, height: boltHeight)).fill()
+                let box = NSRect(x: groupX + measured.width + gapBeforeBolt,
+                                 y: (height - boltHeight) / 2,
+                                 width: boltWidth, height: boltHeight)
+                if let symbol = Self.boltSymbol {
+                    symbol.draw(in: box, from: .zero, operation: .destinationOut, fraction: 1)
+                } else {
+                    bolt(in: box).fill()
+                }
             }
             NSGraphicsContext.current?.compositingOperation = .sourceOver
         }
@@ -640,22 +649,37 @@ enum MenuBarComposer {
         return image
     }
 
-    /// A lightning bolt in the given box.
+    /// The system's filled bolt, kept as a template so it can be punched
+    /// through the pill the way the digits are.
     ///
-    /// Drawn rather than taken from the symbol set: at five points across, the
-    /// stock glyph's strokes come out thinner than a pixel and it reads as a
-    /// smudge rather than as a bolt.
+    /// `bolt.fill` rather than `bolt`: the outline's strokes really do come out
+    /// thinner than a pixel at this size, which is what made the symbol set
+    /// look unusable at first. The filled one has no strokes to lose.
+    private static let boltSymbol: NSImage? = {
+        let image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)
+        image?.isTemplate = true
+        return image
+    }()
+
+    /// Its own width against its own height, so it is never stretched to fit a
+    /// box chosen for it.
+    private static let boltAspect: CGFloat = {
+        guard let size = boltSymbol?.size, size.height > 0 else { return 0.53 }
+        return size.width / size.height
+    }()
+
+    /// A lightning bolt in the given box, for a system that has no `bolt.fill`.
     private static func bolt(in rect: NSRect) -> NSBezierPath {
         func at(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
             NSPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
         }
         let path = NSBezierPath()
-        path.move(to: at(0.70, 1.00))
-        path.line(to: at(0.00, 0.44))
-        path.line(to: at(0.36, 0.44))
-        path.line(to: at(0.30, 0.00))
-        path.line(to: at(1.00, 0.56))
-        path.line(to: at(0.64, 0.56))
+        path.move(to: at(0.58, 1.00))
+        path.line(to: at(0.08, 0.38))
+        path.line(to: at(0.46, 0.38))
+        path.line(to: at(0.42, 0.00))
+        path.line(to: at(0.92, 0.62))
+        path.line(to: at(0.54, 0.62))
         path.close()
         return path
     }
