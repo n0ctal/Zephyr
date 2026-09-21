@@ -57,6 +57,7 @@ enum SelfTest {
         batteryHeatNeedsTheTemperature()
         reloadAppliesWhatChanged()
         theKnockArrivesAndIsCoalesced()
+        dimmingSurvivesTheWindowClosing()
         readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
@@ -1155,6 +1156,40 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: Dimming outlives the window that set it
+
+    /// Dimming is a gamma table, and macOS restores the table when the process
+    /// that wrote it exits — which the settings window does on every close. So
+    /// dimming chosen there vanished with it, and nothing was recorded that
+    /// could put it back. It is written down now, and the process that owns
+    /// the machine is the one that applies it.
+    private static func dimmingSurvivesTheWindowClosing() {
+        let saved = Preferences.extraDimming
+        let wasWindow = ProcessRole.isSettingsWindow
+        defer {
+            Preferences.extraDimming = saved
+            ProcessRole.isSettingsWindow = wasWindow
+        }
+        // As the settings window: it writes the choice down and touches no
+        // gamma table, which is also why this test cannot dim anybody's screen.
+        ProcessRole.isSettingsWindow = true
+
+        let display: UInt32 = 0xDEAD_BEEF   // no such display
+        let window = DisplayFeature()
+        window.setDimming(0.5, on: display)
+        expectEqual(Preferences.extraDimming[display], 0.5,
+                    "the window writes the level down rather than keeping it")
+
+        let menuBar = DisplayFeature()
+        expectEqual(menuBar.dimming[display], 0.5,
+                    "a process starting afterwards finds it")
+
+        Preferences.extraDimming[display] = 0.25
+        menuBar.reloadFromPreferences()
+        expectEqual(menuBar.dimming[display], 0.25,
+                    "and one already running hears about a change")
     }
 
     // MARK: The knock between the processes

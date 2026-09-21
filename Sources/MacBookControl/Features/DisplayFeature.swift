@@ -68,6 +68,7 @@ final class DisplayFeature: Feature {
 
     init() {
         virtualDisplays = Preferences.virtualDisplays
+        dimming = Preferences.extraDimming
         super.init(id: "display",
                    title: "Display",
                    summary: "Dim below the panel's own minimum, and pick from the resolutions the Displays pane declines to list.")
@@ -82,6 +83,10 @@ final class DisplayFeature: Feature {
         if virtualDisplays != Preferences.virtualDisplays {
             virtualDisplays = Preferences.virtualDisplays
         }
+        if dimming != Preferences.extraDimming {
+            dimming = Preferences.extraDimming
+            if isEnabled { applyDimming() }
+        }
     }
 
     override func activate() {
@@ -95,6 +100,9 @@ final class DisplayFeature: Feature {
         control.startWatchingConfiguration()
         fontSmoothing = FontSmoothing.current
         syncVirtualDisplays()
+        // Dimming outlives the session now: it has to, because the process
+        // that sets it is no longer the one that is asked for it.
+        applyDimming()
         refresh()
     }
 
@@ -127,6 +135,9 @@ final class DisplayFeature: Feature {
         // way out would be the app overreaching.
         control.clearAllDimming()
         dimming.removeAll()
+        // And forget it, so switching the feature back on does not bring back
+        // a dimming the user turned off by turning the feature off.
+        Preferences.extraDimming = [:]
         // Font smoothing is a preference rather than hardware, but the promise
         // an unticked feature makes is the same: nothing of ours left behind.
         FontSmoothing.restore()
@@ -168,7 +179,22 @@ final class DisplayFeature: Feature {
 
     func setDimming(_ value: Double, on display: CGDirectDisplayID) {
         dimming[display] = value
-        control.setExtraDimming(value, on: display)
+        Preferences.extraDimming = dimming
+        applyDimming()
+    }
+
+    /// Writes the gamma table, in the process that owns the machine.
+    ///
+    /// Not in the settings window: macOS restores the table when the process
+    /// that set it exits, so dimming applied there would last exactly as long
+    /// as the window. It is written down instead, and the menu bar applies it
+    /// when it hears the knock — which is the same tenth of a second a drag
+    /// already costs.
+    private func applyDimming() {
+        guard !ProcessRole.isSettingsWindow else { return }
+        for (display, value) in dimming {
+            control.setExtraDimming(value, on: display)
+        }
     }
 
     @Published private(set) var cells: [CGDirectDisplayID: DisplayControl.Cell] = [:]

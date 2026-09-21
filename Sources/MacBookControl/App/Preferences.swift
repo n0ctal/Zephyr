@@ -334,6 +334,28 @@ enum Preferences {
         set { d.set(newValue, forKey: "poll.menuBar") }
     }
 
+    /// Extra dimming per display, below what the panel itself will go to.
+    ///
+    /// Written down because the two processes cannot see each other's memory,
+    /// and because the one that sets the gamma table is not the one that keeps
+    /// it: macOS restores the table when the process that wrote it exits, and
+    /// the settings window exits every time it is closed. Dimming set there
+    /// used to vanish with it and there was nothing recorded to put it back.
+    ///
+    /// Keyed by display id as text, because a property list key is a string.
+    static var extraDimming: [UInt32: Double] {
+        get {
+            let raw = d.dictionary(forKey: "display.dimming") as? [String: Double] ?? [:]
+            return raw.reduce(into: [:]) { out, pair in
+                if let id = UInt32(pair.key) { out[id] = pair.value }
+            }
+        }
+        set {
+            d.set(Dictionary(uniqueKeysWithValues: newValue.map { (String($0.key), $0.value) }),
+                  forKey: "display.dimming")
+        }
+    }
+
     /// Virtual displays to bring up while the Display feature is on.
     static var virtualDisplays: [VirtualDisplay.Specification] {
         get {
