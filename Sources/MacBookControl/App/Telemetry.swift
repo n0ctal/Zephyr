@@ -31,6 +31,9 @@ final class Telemetry: ObservableObject {
     private let fanController: FanController?
     private let thermalMonitor = ThermalMonitor()
     private let batteryReader: BatteryReader
+    private let batteryWatcher = BatteryWatcher()
+    /// When the battery was last read, for the floor under the notification.
+    private var batteryReadAt = Date.distantPast
     private let systemLoad = SystemLoad()
     private let throughput = NetworkThroughput()
     private var timer: Timer?
@@ -58,6 +61,15 @@ final class Telemetry: ObservableObject {
     /// and the arithmetic deciding how far apart two readings may legitimately
     /// fall.
     static let timerToleranceFraction: Double = 0.2
+
+    /// How long the charge may go unread when nothing has announced a change.
+    ///
+    /// The floor under `BatteryWatcher`, and the whole of what a missed
+    /// notification costs: fifteen seconds of a stale percentage, rather than
+    /// a wrong one until the app is restarted. Short enough that plugging the
+    /// charger in looks immediate even if IOKit says nothing, long enough that
+    /// fourteen readings out of fifteen are saved.
+    static let batteryFallbackSeconds: TimeInterval = 15
 
     /// How often to actually read.
     ///
@@ -155,6 +167,21 @@ final class Telemetry: ObservableObject {
     /// There is nothing to redraw that a reading did not change, so the
     /// reading says when.
     var didPublish: () -> Void = {}
+
+    /// Whether this tick should read the battery.
+    ///
+    /// Pure, so the rule can be checked without a battery. The detailed
+    /// reading is never paced: it carries the watts and the amperage, which
+    /// move continuously, and the only thing asking for it is a window or a
+    /// menu-bar field showing them. It is the charge — four properties, and a
+    /// number that steps once in several minutes — that is worth waiting for a
+    /// reason to read.
+    static func shouldReadBattery(needs: Needs, watching: Bool, changed: Bool,
+                                  since lastRead: TimeInterval) -> Bool {
+        guard needs.battery else { return false }
+        guard needs.batteryInDetail == false, watching else { return true }
+        return changed || lastRead >= batteryFallbackSeconds
+    }
 
     /// What the enabled features need whether or not anything is displaying
     /// it — set by whoever builds the registry, since telemetry has no
@@ -319,6 +346,9 @@ final class Telemetry: ObservableObject {
                     network: self.throughput.read(),
                     thermal: self.thermalMonitor.read())
         }
+        // This read the battery too, so the floor starts from here rather than
+        // letting the next tick read it again a moment later.
+        batteryReadAt = Date()
         apply(reading)
     }
 
@@ -391,6 +421,13 @@ final class Telemetry: ObservableObject {
         let generation = nextGeneration()
         let needs = currentNeeds
         let sensorKey = currentSensorKey
+        // Decided here, on the main thread, because that is where the
+        // notification lands and where the clock for the floor is kept.
+        let readBattery = Telemetry.shouldReadBattery(
+            needs: needs, watching: batteryWatcher.isWatching,
+            changed: batteryWatcher.takeChange(),
+            since: Date().timeIntervalSince(batteryReadAt))
+        if readBattery { batteryReadAt = Date() }
         queue.async { [weak self] in
             guard let self = self else { return }
 
@@ -422,7 +459,9 @@ final class Telemetry: ObservableObject {
                 temperatures = wanted.isEmpty ? nil : wanted
             }
             let fans = needs.fans ? (self.fanController?.readFans() ?? []) : nil
-            let battery = needs.battery
+            // Nil here means "not read", which apply() takes as "leave what is
+            // there alone" — exactly right for a charge that has not moved.
+            let battery = readBattery
                 ? self.batteryReader.read(inDetail: needs.batteryInDetail) : nil
             let load = needs.load ? self.systemLoad.read(includeGPU: needs.full) : nil
             let network = needs.network ? self.throughput.read() : nil

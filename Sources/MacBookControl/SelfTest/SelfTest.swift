@@ -52,6 +52,7 @@ enum SelfTest {
         menuBarOrdering()
         menuBarPlanning()
         batteryNamedKeys()
+        batteryPacing()
         readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
@@ -1150,6 +1151,47 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: The charge is read when it changes, not when the clock ticks
+
+    /// IOKit says when the battery has something new, and the tick reads then
+    /// instead of 3600 times an hour. The rule has to hold in both directions:
+    /// nothing read when nothing changed, and everything read when the thing
+    /// asking is a window rather than an icon.
+    private static func batteryPacing() {
+        var charge = Telemetry.Needs()
+        charge.battery = true
+        var detail = Telemetry.Needs()
+        detail.battery = true
+        detail.batteryInDetail = true
+        let floor = Telemetry.batteryFallbackSeconds
+
+        expect(!Telemetry.shouldReadBattery(needs: Telemetry.Needs(), watching: true,
+                                            changed: true, since: 999),
+               "a tick that needs no battery reads none, whatever IOKit announces")
+        expect(Telemetry.shouldReadBattery(needs: detail, watching: true, changed: false, since: 0),
+               "the detailed reading is never paced: the watts in it move continuously")
+        expect(Telemetry.shouldReadBattery(needs: charge, watching: false, changed: false, since: 0),
+               "nor is the charge, when the notification could not be registered at all")
+        expect(Telemetry.shouldReadBattery(needs: charge, watching: true, changed: true, since: 0),
+               "a change announced is a change read")
+        expect(!Telemetry.shouldReadBattery(needs: charge, watching: true,
+                                            changed: false, since: floor - 1),
+               "nothing announced and the floor not reached: the charge is left alone")
+        expect(Telemetry.shouldReadBattery(needs: charge, watching: true,
+                                           changed: false, since: floor),
+               "but the floor is always read through, so a missed notification costs "
+               + "seconds of a stale percentage rather than the rest of the session")
+
+        // And the registration itself, which is what decides whether any of
+        // the above is reached on this machine.
+        let watcher = BatteryWatcher()
+        if BatteryReader().read(inDetail: false) != nil {
+            expect(watcher.isWatching, "the battery node raises interest and we are listening")
+        }
+        expect(watcher.takeChange(), "the first ask reports a change, so the first tick reads")
+        expect(!watcher.takeChange(), "and asking clears it")
     }
 
     // MARK: The menu bar has no clock of its own
