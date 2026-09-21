@@ -41,7 +41,16 @@ final class DisplayFeature: Feature {
 
     /// Brings up what is missing and drops what is gone. Only the difference,
     /// so editing one specification does not blink the others off and on.
+    ///
+    /// In the process that owns the machine, and not in the settings window:
+    /// a virtual screen exists for exactly as long as the object holding it,
+    /// and that window's process ends every time it is closed. Adding one
+    /// there made it appear, disappear with the window, and come back when
+    /// the menu bar caught up — a blink for no reason. The list is written
+    /// down, and the knock brings the other process along within a tenth of a
+    /// second.
     private func syncVirtualDisplays() {
+        guard !ProcessRole.isSettingsWindow else { return }
         let wanted = Set(virtualDisplays.map(\.id))
         for (id, _) in live where !wanted.contains(id) { live[id] = nil }
         for specification in virtualDisplays {
