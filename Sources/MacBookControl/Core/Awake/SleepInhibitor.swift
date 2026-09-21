@@ -87,7 +87,7 @@ final class SleepInhibitor {
     /// somebody was looking at the switch. The choice is written down; the
     /// menu bar holds the assertion.
     private func take(_ kind: Kind) {
-        guard !ProcessRole.isSettingsWindow else { return }
+        guard ProcessRole.ownsTheMachine else { return }
         var id: IOPMAssertionID = 0
         let result = IOPMAssertionCreateWithName(
             kind.rawValue as CFString,

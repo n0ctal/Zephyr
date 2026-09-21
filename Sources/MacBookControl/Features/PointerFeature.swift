@@ -110,6 +110,7 @@ final class PointerFeature: Feature {
 
     private func reapply() {
         guard isEnabled, acceleration.isAvailable else { return }
+        guard ProcessRole.ownsTheMachine else { return }
 
         acceleration.apply { [store] identity in
             let profile = store[identity]

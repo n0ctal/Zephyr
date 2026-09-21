@@ -14,6 +14,24 @@ import SwiftUI
 enum ProcessRole {
     /// Set once, in main, before anything is built.
     static var isSettingsWindow = false
+
+    /// Whether this process is allowed to change the machine.
+    ///
+    /// Read it before anything that writes, and especially before anything
+    /// that *keeps* writing. Four kinds of thing broke on this before the rule
+    /// existed, and they broke in two different ways.
+    ///
+    /// What a process holds, it loses: an event tap, a power assertion, a
+    /// gamma table and a virtual screen all end when their process does, and
+    /// the settings window ends every time it is closed. Held there, they
+    /// lasted as long as somebody was looking at the switch.
+    ///
+    /// What a process re-asserts, it duplicates: the graphics watchdog, the
+    /// battery's heat timer and the profile engine all write on a timer, and
+    /// two of each is two writers arguing over one setting.
+    ///
+    /// The window shows and edits; this one owns.
+    static var ownsTheMachine: Bool { !isSettingsWindow }
 }
 
 /// One thing the app is allowed to do to the machine.

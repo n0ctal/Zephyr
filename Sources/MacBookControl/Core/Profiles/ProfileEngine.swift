@@ -49,6 +49,7 @@ final class ProfileEngine {
     // MARK: Applying
 
     private func apply(_ profile: Profile) {
+        guard ProcessRole.ownsTheMachine else { return }
         for action in profile.actions {
             switch action {
             case .coolingMode(let mode):

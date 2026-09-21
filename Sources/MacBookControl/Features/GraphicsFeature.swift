@@ -82,6 +82,8 @@ final class GraphicsFeature: Feature {
 
     private func reassertIfDrifted() {
         guard isEnabled, mode != .automatic else { return }
+        guard ProcessRole.ownsTheMachine else { return }
+
         // Compares the *policy*, not which GPU is rendering. Asking Metal which
         // device is active means creating one, and creating a Metal device can
         // itself wake the discrete GPU — a watchdog that woke the very thing it

@@ -77,6 +77,8 @@ final class BatteryFeature: Feature {
 
     private func checkHeat() {
         guard isEnabled else { return }
+        guard ProcessRole.ownsTheMachine else { return }
+
         let celsius = telemetry.battery?.celsius
         switch Self.heatDecision(celsius: celsius, limit: heatLimitCelsius, isPaused: isPaused) {
         case .hold:

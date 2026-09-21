@@ -50,7 +50,7 @@ final class DisplayFeature: Feature {
     /// down, and the knock brings the other process along within a tenth of a
     /// second.
     private func syncVirtualDisplays() {
-        guard !ProcessRole.isSettingsWindow else { return }
+        guard ProcessRole.ownsTheMachine else { return }
         let wanted = Set(virtualDisplays.map(\.id))
         for (id, _) in live where !wanted.contains(id) { live[id] = nil }
         for specification in virtualDisplays {
@@ -200,7 +200,7 @@ final class DisplayFeature: Feature {
     /// when it hears the knock — which is the same tenth of a second a drag
     /// already costs.
     private func applyDimming() {
-        guard !ProcessRole.isSettingsWindow else { return }
+        guard ProcessRole.ownsTheMachine else { return }
         for (display, value) in dimming {
             control.setExtraDimming(value, on: display)
         }

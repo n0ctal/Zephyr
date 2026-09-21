@@ -74,7 +74,7 @@ final class KeyInterceptor {
     @discardableResult
     func start() -> Bool {
         // One tap, in the process that owns it; see `ProcessRole`.
-        guard !ProcessRole.isSettingsWindow else { return false }
+        guard ProcessRole.ownsTheMachine else { return false }
         guard !rules.isEmpty else { stop(); return false }
         guard tap == nil else { return true }
 
