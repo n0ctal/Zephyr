@@ -7,6 +7,37 @@ the bump travelled inside the change it released.
 
 ## Unreleased
 
+- The settings window can tell the menu bar it changed something. Until now a
+  choice made there reached the process that acts on it when the window closed
+  and not before: dragging the scroll speed did nothing you could feel, and the
+  graphics watchdog spent five seconds arguing with a mode the window had just
+  set. The window announces every write it makes and the menu bar re-reads. It
+  carries no payload — preferences are the message and this is only the knock,
+  which is also why a knock that goes missing costs a late reading rather than
+  a wrong one. Coalesced at a tenth of a second, because a slider writes on
+  every frame, and held only while the window exists, because nothing else can
+  send one.
+- One rule now says which process may touch the machine, and four things that
+  were quietly broken by not having it are fixed. What a process *holds*, it
+  loses when it ends — an event tap, a power assertion, a gamma table, a
+  virtual screen — and the settings window ends every time it is closed, so
+  dimming chosen there vanished with it and "keep this Mac awake" lasted as
+  long as somebody was looking at the switch. What a process *re-asserts*, it
+  duplicates — the graphics watchdog, the battery's heat timer, the profile
+  engine and the pointer's device watch all write on a timer, and two of each
+  is two writers arguing over one setting. The window shows and edits; the menu
+  bar owns.
+- Dimming below the panel's minimum is remembered. It has to be, because the
+  process that sets the gamma is no longer the one that is asked for it. Which
+  means it now lasts until it is changed rather than until the session ends;
+  switching the Display feature off still clears it, as it clears everything
+  else of ours.
+- Reloading a feature's settings applies what changed and only what changed. A
+  fan speed chosen in the window never reached the fans, because the mode was
+  loaded before the values it applies. And anything reloaded unchanged was
+  applied again, which restarted a timed Awake from the beginning and
+  re-asserted a profile nobody had touched.
+
 - Known, and not yet decided: dimming a screen below its hardware minimum is
   lost when the settings window closes. It is done by writing a gamma table,
   and macOS restores the gamma when the process that set it exits — which the
