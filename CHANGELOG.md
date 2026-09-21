@@ -7,6 +7,13 @@ the bump travelled inside the change it released.
 
 ## Unreleased
 
+- Known, and not yet decided: dimming a screen below its hardware minimum is
+  lost when the settings window closes. It is done by writing a gamma table,
+  and macOS restores the gamma when the process that set it exits — which the
+  settings window now does. Nothing can put it back, because the level is only
+  ever held in memory. Virtual screens and the sleep assertion recover on their
+  own, because what they are made of *is* written down.
+
 - The settings window runs in a process of its own. Opening one is permanent:
   SwiftUI, Metal, CoreML and Vision load when a window first draws and a dylib
   cannot be unloaded, so a menu-bar process that has ever shown the window
