@@ -355,6 +355,93 @@ final class AppController: NSObject, NSMenuDelegate {
     /// nobody can see and asks its frame view to draw itself into a bitmap. It
     /// is entirely local: no screen recording, and nothing else on the desktop
     /// is in the picture.
+    /// What this process is actually costing in memory, as the system counts
+    /// it. Resident size is the wrong number — most of it is framework code
+    /// shared with every other application — and this is the one jetsam reads.
+    private static func footprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size
+                                           / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
+    }
+
+    /// Opens the settings window, closes it, and reports the footprint at each
+    /// step.
+    ///
+    /// The only way to learn what closing gives back. SwiftUI, Metal and the
+    /// rest of the rendering stack load when the window first draws and never
+    /// unload — a dylib cannot be — so the recoverable part is the view
+    /// hierarchy, its layers and its backing stores. How much that is, is a
+    /// measurement and not a guess.
+    ///
+    /// The window is parked off every screen, so running this does not put
+    /// anything in front of whoever is using the machine.
+    func reportWindowMemory() {
+        func say(_ label: String) {
+            print(String(format: "  %6.1f MB  %@", AppController.footprintMB(), label))
+        }
+        say("before the window exists")
+        waitForReadings(upTo: 6)
+        say("after the first readings")
+        settingsWindow.show(registry: registry, telemetry: telemetry,
+                            helperState: .working(version: "dev"), alwaysVisible: true)
+        if let window = settingsWindow.windowForTesting {
+            window.setFrameOrigin(NSPoint(x: -9000, y: -9000))
+            window.displayIfNeeded()
+            window.contentView?.display()
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(3.5))
+        say("with the window open and drawn")
+        settingsWindow.windowForTesting?.close()
+        RunLoop.current.run(until: Date().addingTimeInterval(3.0))
+        say("after closing it")
+
+        // And what it costs to go on running afterwards, which turned out to
+        // be the number that mattered. A window that is closed but still held
+        // keeps its layer tree, and Core Animation keeps flushing it on every
+        // turn of the run loop for the rest of the session.
+        print("  windows still alive: \(NSApp.windows.count)"
+              + ", ours: \(settingsWindow.windowForTesting == nil ? "released" : "held")"
+              + ", threads: \(ProcessInfo.processInfo.activeProcessorCount > 0 ? AppController.threadCount() : 0)")
+        let started = Date()
+        let before = AppController.cpuSeconds()
+        RunLoop.current.run(until: started.addingTimeInterval(30))
+        let spent = AppController.cpuSeconds() - before
+        print(String(format: "  %6.3f%% of a core, idling for %.0f s after the window closed",
+                     spent / Date().timeIntervalSince(started) * 100, 30.0))
+    }
+
+    private static func threadCount() -> Int {
+        var list: thread_act_array_t?
+        var count = mach_msg_type_number_t(0)
+        guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS else { return -1 }
+        if let list = list {
+            vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)),
+                          vm_size_t(Int(count) * MemoryLayout<thread_t>.size))
+        }
+        return Int(count)
+    }
+
+    /// Processor time this whole process has used, in seconds.
+    private static func cpuSeconds() -> Double {
+        var info = task_thread_times_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_thread_times_info_data_t>.size
+                                           / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_THREAD_TIMES_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return 0 }
+        return Double(info.user_time.seconds) + Double(info.user_time.microseconds) / 1e6
+             + Double(info.system_time.seconds) + Double(info.system_time.microseconds) / 1e6
+    }
+
     func dumpRealWindow(to path: String, layout: WindowLayout, strip: CGFloat = 170) {
         Preferences.windowLayout = layout
         waitForReadings(upTo: 6)

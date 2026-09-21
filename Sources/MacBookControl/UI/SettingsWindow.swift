@@ -86,6 +86,36 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         context?.telemetry.isWindowOpen = false
+        // And let the window go. Keeping it cost the rest of the session:
+        // opening this once took the footprint from 7.6 MB to 20.3 on this
+        // machine and nothing gave it back, because the view hierarchy, its
+        // layers and its backing stores were all still held by a window
+        // nobody could see. Building it again on the next open costs what it
+        // cost on the first.
+        //
+        // Not here, though — AppKit is still inside the close and still
+        // expects the window to exist. One turn of the run loop later.
+        //
+        // Through the run loop rather than the main queue, for the reason
+        // Telemetry gives for the same choice: a block on the main queue is
+        // not delivered while another one is running, and something driving a
+        // run loop of its own — a menu tracking, a slider being dragged, the
+        // probe that measures this — would never let it through at all.
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.letGoOfWindow() }
+    }
+
+    /// Releases the window and everything hanging off it.
+    ///
+    /// Skipped when a window is already up again: reopening within the same
+    /// turn of the run loop is what the layout picker does, and tearing down
+    /// the one it just built would leave the picker looking at nothing.
+    private func letGoOfWindow() {
+        guard let window = window, !window.isVisible else { return }
+        window.delegate = nil
+        self.window = nil
+        hosting = nil
+        context = nil
+        ignoresVisibilityChanges = false
     }
 
     func windowDidMiniaturize(_ notification: Notification) { updateVisibility() }

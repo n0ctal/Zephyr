@@ -134,6 +134,14 @@ if let index = arguments.firstIndex(of: "--dump-window"), index + 1 < arguments.
     }
 }
 
+if arguments.contains("--test-window-memory") {
+    print("what the settings window costs, and what closing it gives back:")
+    DispatchQueue.main.async {
+        controller.reportWindowMemory()
+        exit(0)
+    }
+}
+
 if let index = arguments.firstIndex(of: "--dump-real-window"), index + 1 < arguments.count {
     let path = arguments[index + 1]
     let layout = arguments.first { $0.hasPrefix("--layout=") }
