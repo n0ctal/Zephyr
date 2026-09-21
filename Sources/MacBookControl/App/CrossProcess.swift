@@ -78,6 +78,12 @@ enum CrossProcess {
     /// later would not know to announce itself, and the failure would be the
     /// quiet kind — one setting, and only that one, no longer taking effect
     /// until the window is closed.
+    ///
+    /// It fires for writes nobody asked for, too: AppKit saves the window's
+    /// position as it is dragged, so dragging knocks. Which costs the other
+    /// process a look at preferences that have not changed, and a reload that
+    /// finds nothing to do — cheaper than the bookkeeping needed to tell the
+    /// two apart, since the notification does not say which key moved.
     static func announceEveryChange() {
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
