@@ -1202,7 +1202,11 @@ enum SelfTest {
     /// than the window it is trying to answer.
     private static func theKnockArrivesAndIsCoalesced() {
         var answered = 0
-        CrossProcess.onChange { answered += 1 }
+        // Held, because listening lasts exactly as long as this does — which
+        // is the point of it: the menu bar pays for the subscription only
+        // while there is a window that could knock.
+        let listening = CrossProcess.onChange { answered += 1 }
+        defer { _ = listening }
 
         // A drag's worth of writes.
         for _ in 0..<12 { CrossProcess.announceChange() }
@@ -1214,6 +1218,17 @@ enum SelfTest {
         // Past the coalescing window, so anything late has landed by now.
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         expectEqual(answered, 1, "and twelve of them are answered once")
+
+        // And letting it go stops the listening, which is what keeps the menu
+        // bar from paying for it while no window exists.
+        var stopped = 0
+        do {
+            let brief = CrossProcess.onChange { stopped += 1 }
+            _ = brief
+        }
+        CrossProcess.announceChange()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        expectEqual(stopped, 0, "a subscription nobody holds hears nothing")
     }
 
     // MARK: Reloading applies what changed, and only what changed

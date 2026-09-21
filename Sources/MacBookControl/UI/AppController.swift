@@ -116,10 +116,7 @@ final class AppController: NSObject, NSMenuDelegate {
             self?.telemetry.retune()
         }
         telemetry.didPublish = { [weak self] in self?.statusTick() }
-        // The settings window is a process of its own and cannot reach into
-        // this one. When it writes a choice down it knocks, and this is the
-        // answer: re-read, and act on what changed.
-        CrossProcess.onChange { [weak self] in self?.adoptSettingsChanges() }
+
         var t = Date()
         Preferences.migrateLegacyKeys()
         AppearanceControl.apply()
@@ -579,6 +576,8 @@ final class AppController: NSObject, NSMenuDelegate {
     /// starts when asked and takes its twelve megabytes with it when the
     /// window closes.
     private var settingsProcess: Process?
+    /// Held only while that process is alive; see `CrossProcess.Listening`.
+    private var settingsKnocks: CrossProcess.Listening?
 
     @objc private func openSettings() {
         if let running = settingsProcess, running.isRunning {
@@ -600,11 +599,18 @@ final class AppController: NSObject, NSMenuDelegate {
         // window closing are one action to whoever did it, and a knock that
         // never arrived has to cost a late reading rather than a permanent one.
         process.terminationHandler = { [weak self] _ in
-            RunLoop.main.perform(inModes: [.common]) { self?.adoptSettingsChanges() }
+            RunLoop.main.perform(inModes: [.common]) {
+                self?.adoptSettingsChanges()
+                self?.settingsKnocks = nil
+            }
         }
         do {
             try process.run()
             settingsProcess = process
+            // Now there is somebody who can knock, and not before.
+            settingsKnocks = CrossProcess.onChange { [weak self] in
+                self?.adoptSettingsChanges()
+            }
         } catch {
             // Could not start it — better the window here than no window.
             helperState = HelperState.current(helper)

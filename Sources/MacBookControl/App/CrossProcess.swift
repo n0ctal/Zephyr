@@ -26,21 +26,50 @@ enum CrossProcess {
             changed, object: nil, userInfo: nil, deliverImmediately: true)
     }
 
-    /// Listens, from the menu-bar process. The handler runs on the main queue.
+    /// Listening, for as long as this is held. The handler runs on the main
+    /// queue.
+    ///
+    /// Lettable-go because a knock can only arrive while the settings window
+    /// exists, so that is exactly how long this is kept.
+    ///
+    /// Not, as a first attempt at measuring it claimed, because subscribing is
+    /// expensive. Four runs of four minutes came back at 0.079, 0.095, 0.096
+    /// and 0.100 percent of a core, which says the difference between having
+    /// this and not having it is somewhere under the noise of an idle laptop
+    /// — the machine's own background work moves the figure further than this
+    /// does. Keeping it is a matter of not subscribing to something that
+    /// cannot happen, not of a saving anybody can see.
     ///
     /// Coalesced: a slider being dragged writes on every frame, and each write
     /// would otherwise ask every feature to re-read itself. A tenth of a
     /// second is under what a hand notices and above what a drag produces.
-    static func onChange(_ handler: @escaping () -> Void) {
-        var pending: DispatchWorkItem?
-        DistributedNotificationCenter.default().addObserver(
-            forName: changed, object: nil, queue: .main
-        ) { _ in
-            pending?.cancel()
-            let item = DispatchWorkItem(block: handler)
-            pending = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
+    final class Listening {
+        private var observer: NSObjectProtocol?
+        private var pending: DispatchWorkItem?
+
+        fileprivate init(_ handler: @escaping () -> Void) {
+            observer = DistributedNotificationCenter.default().addObserver(
+                forName: changed, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let self = self else { return }
+                self.pending?.cancel()
+                let item = DispatchWorkItem(block: handler)
+                self.pending = item
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
+            }
         }
+
+        deinit {
+            pending?.cancel()
+            if let observer = observer {
+                DistributedNotificationCenter.default().removeObserver(observer)
+            }
+        }
+    }
+
+    /// Starts listening. Keep the result for as long as a knock can come.
+    static func onChange(_ handler: @escaping () -> Void) -> Listening {
+        Listening(handler)
     }
 
     /// Announces every write this process makes, for as long as it runs.
