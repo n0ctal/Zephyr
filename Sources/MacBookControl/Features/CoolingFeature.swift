@@ -76,14 +76,59 @@ final class CoolingFeature: Feature {
     }
 
     override func reloadFromPreferences() {
-        mode = Preferences.coolingMode
-        speedInRPM = Preferences.fanSpeedInRPM
-        curveMin = Preferences.curveMinTemp
-        curveMax = Preferences.curveMaxTemp
-        manualRPM = Preferences.manualFanRPM
-        // Read through to preferences whenever it is asked, so emptying
-        // the cache is all there is to do here.
-        curveSensors.removeAll()
+        // Values first and the mode last, because the mode is the one that
+        // applies. Loading it first re-applied with the speeds this process
+        // still remembered, and the new speed then arrived too late to be
+        // written anywhere but preferences: the daemon went on holding the
+        // old one while the settings said otherwise.
+        var changed = false
+        if speedInRPM != Preferences.fanSpeedInRPM {
+            speedInRPM = Preferences.fanSpeedInRPM
+            changed = true
+        }
+        if curveMin != Preferences.curveMinTemp {
+            curveMin = Preferences.curveMinTemp
+            changed = true
+        }
+        if curveMax != Preferences.curveMaxTemp {
+            curveMax = Preferences.curveMaxTemp
+            changed = true
+        }
+        if manualRPM != Preferences.manualFanRPM {
+            manualRPM = Preferences.manualFanRPM
+            changed = true
+        }
+        // Read through to preferences whenever it is asked, so emptying the
+        // cache is all there is to do here.
+        if !curveSensors.isEmpty {
+            curveSensors.removeAll()
+            changed = true
+        }
+        switch CoolingFeature.reloadAction(modeChanged: mode != Preferences.coolingMode,
+                                           valuesChanged: changed, isEnabled: isEnabled) {
+        case .nothing:
+            break
+        case .applyThroughMode:
+            mode = Preferences.coolingMode   // applies, with everything above already in
+        case .applyExplicitly:
+            activate()                       // same mode, different numbers
+        }
+    }
+
+    /// What a reload has to do, given what changed.
+    ///
+    /// Pure, because the alternative is a test that drives real fans. The mode
+    /// is the property that applies — everything else only writes itself down
+    /// — so when the mode changes it does the applying, and when it has not
+    /// but the numbers under it have, the applying has to be asked for. Miss
+    /// that second case and a fan speed chosen in the settings window reaches
+    /// preferences and stops there, while the daemon holds the old one.
+    enum ReloadAction: Equatable { case nothing, applyThroughMode, applyExplicitly }
+
+    static func reloadAction(modeChanged: Bool, valuesChanged: Bool,
+                             isEnabled: Bool) -> ReloadAction {
+        if modeChanged { return .applyThroughMode }
+        return valuesChanged && isEnabled ? .applyExplicitly : .nothing
     }
 
     override func activate() {

@@ -99,6 +99,11 @@ class Feature: ObservableObject, Identifiable {
     ///
     /// Assigning is enough. Every one of these publishes and writes back
     /// through its own `didSet`, which is also what re-applies it.
+    /// Reloading is not editing. These properties apply themselves through
+    /// their own `didSet`, so writing a value back unchanged re-applies it —
+    /// which is how opening and closing the settings window came to restart a
+    /// timed Awake and to re-assert a profile nobody had touched. Every
+    /// override below assigns only what actually differs.
     func reloadFromPreferences() {}
 
     func applyStoredState() {

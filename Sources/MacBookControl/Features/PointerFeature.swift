@@ -49,8 +49,8 @@ final class PointerFeature: Feature {
     }
 
     override func reloadFromPreferences() {
-        store = Preferences.pointerStore
-        appRules = Preferences.appScrollRules
+        if store != Preferences.pointerStore { store = Preferences.pointerStore }
+        if appRules != Preferences.appScrollRules { appRules = Preferences.appScrollRules }
     }
 
     override func activate() {

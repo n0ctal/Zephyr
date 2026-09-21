@@ -5,7 +5,15 @@ final class ProfilesFeature: Feature {
     /// The union of what every rule needs to be decided. A profile the user
     /// has switched off asks for nothing.
     override func reloadFromPreferences() {
-        profiles = Preferences.profiles
+        let stored = Preferences.profiles
+        guard stored != profiles else { return }
+        // What the engine believes is active was built from the old list, and
+        // the re-apply that assigning triggers would apply *that* — an edited
+        // profile's previous actions, after which evaluation sees the same id
+        // and decides there is nothing to do. So the belief goes first.
+        engine?.forget()
+        profiles = stored
+        _ = engine?.evaluate(stored)
     }
 
     override var telemetryNeeds: Telemetry.Needs {

@@ -79,7 +79,9 @@ final class DisplayFeature: Feature {
     }
 
     override func reloadFromPreferences() {
-        virtualDisplays = Preferences.virtualDisplays
+        if virtualDisplays != Preferences.virtualDisplays {
+            virtualDisplays = Preferences.virtualDisplays
+        }
     }
 
     override func activate() {

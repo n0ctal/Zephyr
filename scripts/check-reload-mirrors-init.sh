@@ -32,7 +32,9 @@ for path in sorted(glob.glob("Sources/MacBookControl/Features/*Feature.swift")):
     name = os.path.basename(path)
 
     def preferences_in(block):
-        return set(re.findall(r"Preferences\.([A-Za-z]+)", block))
+        # Digits included: `desiredPL1` and `desiredPL2` came back as one
+        # name without them, so two different settings looked like one.
+        return set(re.findall(r"Preferences\.([A-Za-z0-9]+)", block))
 
     # What init reads. Features assign either `self.x = Preferences.y` or
     # `x = Preferences.y`; both are inside `init`, which ends at the first

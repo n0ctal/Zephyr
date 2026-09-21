@@ -30,6 +30,12 @@ final class KeyboardFeature: Feature {
         if rules.isEmpty { interceptor.stop() } else { interceptor.start() }
     }
 
+    /// Whether the tap is up *in this process*.
+    ///
+    /// Which is not the same question as whether the rules are working: this
+    /// window is a process of its own and is refused a tap on purpose, so a
+    /// false here says nothing about the menu bar's, and the tab used to read
+    /// it as a missing Accessibility permission and say so.
     var rulesAreRunning: Bool { interceptor.isRunning }
 
     @Published var store: DeviceScopedStore<[KeyRemapper.Mapping]> {
@@ -62,8 +68,8 @@ final class KeyboardFeature: Feature {
     }
 
     override func reloadFromPreferences() {
-        store = Preferences.keyboardStore
-        rules = Preferences.keyRules
+        if store != Preferences.keyboardStore { store = Preferences.keyboardStore }
+        if rules != Preferences.keyRules { rules = Preferences.keyRules }
     }
 
     override func activate() {
@@ -220,7 +226,8 @@ private struct KeyboardView: View {
             }
             if !feature.rules.isEmpty {
                 Text("These go through an event tap rather than hidutil, which buys the modifier and costs two things worth knowing: the rule applies to every keyboard, because an event does not say which one produced it, and it stops the moment Zephyr does — including on the login screen, where nothing of ours is running."
-                     + (feature.rulesAreRunning ? "" : " The tap is not running: Accessibility permission is needed, the same one the Pointer section asks for."))
+                     + (feature.rulesAreRunning || ProcessRole.isSettingsWindow ? ""
+                        : " The tap is not running: Accessibility permission is needed, the same one the Pointer section asks for."))
                     .font(.caption)
                     .foregroundColor(feature.rulesAreRunning ? .secondary : .orange)
                     .fixedSize(horizontal: false, vertical: true)

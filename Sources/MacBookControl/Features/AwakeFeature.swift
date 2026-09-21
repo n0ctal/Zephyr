@@ -22,9 +22,17 @@ final class AwakeFeature: Feature {
     }
 
     override func reloadFromPreferences() {
-        keepDisplayOn = Preferences.awakeKeepsDisplayOn
-        throughLidClose = Preferences.awakeWhenLidClosed
-        durationMinutes = Preferences.awakeDurationMinutes
+        // Each of these re-applies, and re-applying cancels the countdown and
+        // starts it again — so an unchanged value must not be written back.
+        if keepDisplayOn != Preferences.awakeKeepsDisplayOn {
+            keepDisplayOn = Preferences.awakeKeepsDisplayOn
+        }
+        if throughLidClose != Preferences.awakeWhenLidClosed {
+            throughLidClose = Preferences.awakeWhenLidClosed
+        }
+        if durationMinutes != Preferences.awakeDurationMinutes {
+            durationMinutes = Preferences.awakeDurationMinutes
+        }
     }
 
     override func activate() { reapply() }

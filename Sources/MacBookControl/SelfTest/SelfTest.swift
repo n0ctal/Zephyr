@@ -55,6 +55,7 @@ enum SelfTest {
         batteryPacing()
         featureReconcile()
         batteryHeatNeedsTheTemperature()
+        reloadAppliesWhatChanged()
         readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
@@ -1153,6 +1154,42 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: Reloading applies what changed, and only what changed
+
+    /// The review found both halves of this broken. A new fan speed chosen in
+    /// the settings window has to reach the fans — the values were loaded
+    /// after the mode that applies them, so the speed landed in preferences
+    /// while the daemon went on holding the old one. And a reload that changes
+    /// nothing must apply nothing, because these properties act through their
+    /// own `didSet`: writing a value back unchanged re-applies it, which is
+    /// how closing the window restarted a timed Awake and re-asserted a
+    /// profile nobody had touched.
+    private static func reloadAppliesWhatChanged() {
+        typealias Action = CoolingFeature.ReloadAction
+        func action(_ mode: Bool, _ values: Bool, _ enabled: Bool) -> Action {
+            CoolingFeature.reloadAction(modeChanged: mode, valuesChanged: values,
+                                        isEnabled: enabled)
+        }
+        expectEqual(action(false, false, true), Action.nothing,
+                    "nothing changed, so nothing is applied")
+        expectEqual(action(true, false, true), Action.applyThroughMode,
+                    "a changed mode applies itself")
+        expectEqual(action(false, true, true), Action.applyExplicitly,
+                    "a changed speed under the same mode has to be asked for")
+        expectEqual(action(false, true, false), Action.nothing,
+                    "but not while the feature is off")
+        expectEqual(action(true, true, true), Action.applyThroughMode,
+                    "and a changed mode applies everything under it, once")
+
+        // And the values really are picked up.
+        let savedRPM = Preferences.manualFanRPM
+        defer { Preferences.manualFanRPM = savedRPM }
+        let feature = CoolingFeature(helper: HelperClient(), telemetry: Telemetry())
+        Preferences.manualFanRPM = [0: 4321]
+        feature.reloadFromPreferences()
+        expectEqual(feature.manualRPM[0], 4321, "the speed chosen elsewhere is picked up")
     }
 
     // MARK: The heat limit needs the temperature it acts on

@@ -41,7 +41,8 @@ final class GraphicsFeature: Feature {
     }
 
     override func reloadFromPreferences() {
-        mode = GPUMode(rawValue: Preferences.gpuMode) ?? .automatic
+        let stored = GPUMode(rawValue: Preferences.gpuMode) ?? .automatic
+        if mode != stored { mode = stored }
     }
 
     override func activate() {
