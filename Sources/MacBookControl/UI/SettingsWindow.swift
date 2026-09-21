@@ -109,7 +109,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// Skipped when a window is already up again: reopening within the same
     /// turn of the run loop is what the layout picker does, and tearing down
     /// the one it just built would leave the picker looking at nothing.
+    /// Off only for `--test-window-memory --keep-window`, so both halves of
+    /// the comparison come out of one build and differ by one flag.
+    static var releasesOnClose = true
+
     private func letGoOfWindow() {
+        guard SettingsWindowController.releasesOnClose else { return }
         guard let window = window, !window.isVisible else { return }
         window.delegate = nil
         self.window = nil

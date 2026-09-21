@@ -108,5 +108,22 @@ final class FeatureRegistry: ObservableObject {
     /// touch the machine must not touch it on the way out either.
     func deactivateAll() { features.filter(\.isEnabled).forEach { $0.deactivate() } }
 
+    /// Brings the enabled flags back in line with what is stored.
+    ///
+    /// The settings window is a process of its own now. It writes the user's
+    /// choices to preferences and applies them to the machine itself, being as
+    /// entitled to the daemon as this process is — what it cannot do is reach
+    /// into these objects. And the flag is the only thing here that goes
+    /// stale: everything else a feature acts on, it reads from preferences at
+    /// the moment it acts, which is why re-applying after a wake works at all.
+    ///
+    /// Safe to call at any time: `setEnabled` does nothing when the answer has
+    /// not changed, and `activate` is required to be safe to call twice.
+    func reconcileEnabledState() {
+        for feature in features {
+            feature.setEnabled(Preferences.featureEnabled(feature.id))
+        }
+    }
+
     func feature(id: String) -> Feature? { features.first { $0.id == id } }
 }

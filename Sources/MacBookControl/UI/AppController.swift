@@ -8,7 +8,15 @@ import SwiftUI
 /// there is exactly one place to look for one, instead of some things being
 /// reachable from the menu and others only from the window.
 final class AppController: NSObject, NSMenuDelegate {
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    /// Nil in the process that exists only to show the settings window.
+    ///
+    /// The window and the menu bar live in separate processes now. Opening a
+    /// window loads SwiftUI, Metal and the rest of the rendering stack, none
+    /// of which can ever be unloaded — measured at 12 MB and about four tenths
+    /// of a percent of a core, for the life of the process, after a single
+    /// open. A process that never opens one never pays it, and a process that
+    /// exists only to show it takes the cost away with it when it closes.
+    private let statusItem: NSStatusItem?
     private let menu = NSMenu()
 
     private let helper = HelperClient()
@@ -21,7 +29,9 @@ final class AppController: NSObject, NSMenuDelegate {
     private var previewWindow: NSWindow?
     private var helperState: HelperState = .notInstalled
 
-    override init() {
+    init(showsStatusItem: Bool = true) {
+        statusItem = showsStatusItem
+            ? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength) : nil
         // Before the registry, not with the other migrations in configure():
         // a feature reads its own enabled state as it is constructed, so a
         // migration that runs afterwards is a migration that runs too late.
@@ -100,9 +110,9 @@ final class AppController: NSObject, NSMenuDelegate {
         var t = Date()
         Preferences.migrateLegacyKeys()
         AppearanceControl.apply()
-        statusItem.button?.title = "…"
+        statusItem?.button?.title = "…"
         menu.delegate = self
-        statusItem.menu = menu
+        statusItem?.menu = menu
 
         t = phase("status item + menu", t)
         telemetry.start()
@@ -157,10 +167,12 @@ final class AppController: NSObject, NSMenuDelegate {
     private var lastLineDrawn: String?
 
     private func updateStatusTitle() {
+        // Nothing to draw into in the settings process.
+        guard statusItem != nil else { return }
         // The menu bar has its own appearance, which is not always the app's —
         // and the whole line is drawn by us now, so its colour has to be
         // chosen rather than left to the system.
-        let dark = statusItem.button.map {
+        let dark = statusItem?.button.map {
             $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         } ?? true
         // Nothing is drawn yet. Handing the button a fresh image marks the
@@ -175,10 +187,10 @@ final class AppController: NSObject, NSMenuDelegate {
         guard plan.signature != lastLineDrawn else { return }
         lastLineDrawn = plan.signature
         let content = MenuBarComposer.draw(plan)
-        statusItem.button?.image = content.image
-        statusItem.button?.imagePosition = content.image == nil ? .noImage
+        statusItem?.button?.image = content.image
+        statusItem?.button?.imagePosition = content.image == nil ? .noImage
             : (content.title.isEmpty ? .imageOnly : .imageLeading)
-        statusItem.button?.title = content.title
+        statusItem?.button?.title = content.title
     }
 
     // MARK: Menu
@@ -227,6 +239,9 @@ final class AppController: NSObject, NSMenuDelegate {
 
     /// See the `--open-settings` flag in main.swift.
     func openSettingsForTesting() { openSettings() }
+
+    /// For the settings process, which has no status item to click.
+    func showSettingsWindow() { openSettings() }
 
     /// Renders the prototype straight to a PNG.
     ///
@@ -428,18 +443,17 @@ final class AppController: NSObject, NSMenuDelegate {
     }
 
     /// Processor time this whole process has used, in seconds.
+    ///
+    /// From `getrusage`, not `TASK_THREAD_TIMES_INFO`. The latter sums the
+    /// threads that are alive at the moment it is asked, so a thread exiting
+    /// between two readings makes the total go *down* — which is how a
+    /// measurement of this came back at minus a tenth of a percent, and it is
+    /// exactly the rendering threads that come and go here.
     private static func cpuSeconds() -> Double {
-        var info = task_thread_times_info_data_t()
-        var count = mach_msg_type_number_t(MemoryLayout<task_thread_times_info_data_t>.size
-                                           / MemoryLayout<natural_t>.size)
-        let result = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(TASK_THREAD_TIMES_INFO), $0, &count)
-            }
-        }
-        guard result == KERN_SUCCESS else { return 0 }
-        return Double(info.user_time.seconds) + Double(info.user_time.microseconds) / 1e6
-             + Double(info.system_time.seconds) + Double(info.system_time.microseconds) / 1e6
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
+        return Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1e6
+             + Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1e6
     }
 
     func dumpRealWindow(to path: String, layout: WindowLayout, strip: CGFloat = 170) {
@@ -534,9 +548,45 @@ final class AppController: NSObject, NSMenuDelegate {
         previewWindow = window
     }
 
+    /// The settings window, running somewhere else.
+    ///
+    /// Launched rather than shown. See the note on `statusItem`: a window
+    /// loads a rendering stack that can never be unloaded, so the process that
+    /// holds the menu bar for months must not be the one to open it. This one
+    /// starts when asked and takes its twelve megabytes with it when the
+    /// window closes.
+    private var settingsProcess: Process?
+
     @objc private func openSettings() {
-        helperState = HelperState.current(helper)
-        settingsWindow.show(registry: registry, telemetry: telemetry, helperState: helperState)
+        if let running = settingsProcess, running.isRunning {
+            NSRunningApplication(processIdentifier: running.processIdentifier)?
+                .activate(options: [.activateAllWindows])
+            return
+        }
+        // A bare development binary has no bundle, so there is no second copy
+        // to launch and the window opens here, the way every dev flag opens it.
+        guard Bundle.main.bundleIdentifier != nil, let executable = Bundle.main.executableURL else {
+            helperState = HelperState.current(helper)
+            settingsWindow.show(registry: registry, telemetry: telemetry, helperState: helperState)
+            return
+        }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = ["--settings-window"]
+        process.terminationHandler = { [weak self] _ in
+            RunLoop.main.perform(inModes: [.common]) {
+                self?.registry.reconcileEnabledState()
+                self?.telemetry.invalidateNeeds()
+            }
+        }
+        do {
+            try process.run()
+            settingsProcess = process
+        } catch {
+            // Could not start it — better the window here than no window.
+            helperState = HelperState.current(helper)
+            settingsWindow.show(registry: registry, telemetry: telemetry, helperState: helperState)
+        }
     }
 
     @objc private func toggleLaunchAtLogin() {
@@ -572,6 +622,10 @@ final class AppController: NSObject, NSMenuDelegate {
     }
 
     @objc private func quit() {
+        // The settings window goes with us. Left behind it is a window of an
+        // application that is no longer running, and it would be the last
+        // client the daemon has — which is what keeps the fans held.
+        if let settings = settingsProcess, settings.isRunning { settings.terminate() }
         // Every feature hands the hardware back before we go. Fans pinned by a
         // process that no longer exists is the one failure that can cook the
         // machine, so this is not merely tidy.

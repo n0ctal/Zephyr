@@ -97,10 +97,15 @@ if arguments.contains("--test-pointer") {
     exit(0)
 }
 
+// The settings window runs as a process of its own — see AppController's note
+// on `statusItem` for what a window costs the process that opens one — so this
+// copy is a second instance on purpose and the guard below must let it through.
+let isSettingsProcess = arguments.contains("--settings-window")
+
 // Single-instance guard: if another copy (e.g. the login item) is already
 // running, exit so we don't add a second menu-bar icon. (bundleIdentifier is
 // nil for the bare dev binary, so this only applies to the .app.)
-if let bundleID = Bundle.main.bundleIdentifier {
+if !isSettingsProcess, let bundleID = Bundle.main.bundleIdentifier {
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
         .filter { $0 != NSRunningApplication.current }
     if !others.isEmpty { exit(0) }
@@ -110,8 +115,21 @@ if let bundleID = Bundle.main.bundleIdentifier {
 // AppController sets up its status item in init() and is retained here.
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
-let controller = AppController()
+let controller = AppController(showsStatusItem: !isSettingsProcess)
 _ = controller
+
+// Nothing but the window, and nothing after it. Quitting is the point: the
+// rendering stack cannot be unloaded, so the only way to give its memory back
+// is for the process holding it to end.
+if isSettingsProcess {
+    DispatchQueue.main.async {
+        controller.showSettingsWindow()
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
+                                               object: nil, queue: .main) { _ in
+            RunLoop.main.perform(inModes: [.common]) { exit(0) }
+        }
+    }
+}
 // Dev affordance: the Settings window is only reachable by clicking the status
 // item, which nothing automated can do — so a broken tab would only ever be
 // found by hand. This opens it at launch so the build can prove it constructs.
@@ -135,7 +153,9 @@ if let index = arguments.firstIndex(of: "--dump-window"), index + 1 < arguments.
 }
 
 if arguments.contains("--test-window-memory") {
-    print("what the settings window costs, and what closing it gives back:")
+    SettingsWindowController.releasesOnClose = !arguments.contains("--keep-window")
+    print("what the settings window costs, and what closing it gives back"
+          + (arguments.contains("--keep-window") ? " (holding it)" : " (releasing it)") + ":")
     DispatchQueue.main.async {
         controller.reportWindowMemory()
         exit(0)

@@ -410,6 +410,31 @@ final class HelperService: NSObject, HelperProtocol {
 final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
     private let service = HelperService()
 
+    /// The connections that are still up.
+    ///
+    /// Firmware control comes back when the *last* one goes, not when any one
+    /// does. The app is two processes now — the menu bar and, while somebody
+    /// is looking at it, the settings window — and the second ends every time
+    /// that window is closed. Restoring on any drop meant closing the window
+    /// handed the fans back and undid what the first process was holding.
+    ///
+    /// The guarantee this exists for is unchanged: fans pinned by a process
+    /// that no longer exists is the failure that can cook the machine, and an
+    /// empty set still means exactly that. What it costs is that an app which
+    /// crashes while its settings window is open keeps its hold until that
+    /// window closes too.
+    private var liveConnections = Set<ObjectIdentifier>()
+    private let connectionLock = NSLock()
+
+    private func connectionDropped(_ id: ObjectIdentifier) {
+        connectionLock.lock()
+        liveConnections.remove(id)
+        let lastOneGone = liveConnections.isEmpty
+        connectionLock.unlock()
+        guard lastOneGone else { return }
+        service.restoreFirmwareControl()
+    }
+
     /// Blocks until the fans are back under firmware control, for use on the
     /// exit path where the process will not be around to finish an async call.
     func restoreFirmwareControlSynchronously() {
@@ -426,9 +451,16 @@ final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
         newConnection.exportedObject = service
         // quit() was the only path that ever restored firmware control, so a
         // crash or logout left the loop re-asserting a manual target forever.
-        let restore = { [service] in service.restoreFirmwareControl() }
-        newConnection.invalidationHandler = restore
-        newConnection.interruptionHandler = restore
+        let id = ObjectIdentifier(newConnection)
+        connectionLock.lock()
+        liveConnections.insert(id)
+        connectionLock.unlock()
+        // Identity only — never dereferenced, so holding it past the
+        // connection's own life is safe, and holding the connection itself
+        // would keep it alive for ever.
+        let drop: () -> Void = { [weak self] in self?.connectionDropped(id) }
+        newConnection.invalidationHandler = drop
+        newConnection.interruptionHandler = drop
         newConnection.resume()
         return true
     }

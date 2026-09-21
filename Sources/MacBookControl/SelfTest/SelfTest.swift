@@ -53,6 +53,7 @@ enum SelfTest {
         menuBarPlanning()
         batteryNamedKeys()
         batteryPacing()
+        featureReconcile()
         readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
@@ -1151,6 +1152,49 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: What the other process decided
+
+    /// Counts what it was asked to do instead of doing it, so the rule can be
+    /// checked without a machine to do it to.
+    private final class CountingFeature: Feature {
+        var activations = 0
+        var deactivations = 0
+        override func activate() { activations += 1 }
+        override func deactivate() { deactivations += 1 }
+    }
+
+    /// The settings window runs in its own process and writes the user's
+    /// choices to preferences. This process finds out by looking, and what it
+    /// must not do is act twice or miss one: a feature left believing it is on
+    /// keeps reading sensors nobody wants, and one left believing it is off
+    /// hands back hardware somebody is using.
+    private static func featureReconcile() {
+        let id = "selftest.reconcile"
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "feature.\(id).enabled")
+        defer { defaults.set(saved, forKey: "feature.\(id).enabled") }
+
+        Preferences.setFeatureEnabled(id, false)
+        let feature = CountingFeature(id: id, title: "Self-test", summary: "")
+        let registry = FeatureRegistry(features: [feature])
+        expect(!feature.isEnabled, "a feature starts from what is stored")
+
+        // The other process turns it on.
+        Preferences.setFeatureEnabled(id, true)
+        registry.reconcileEnabledState()
+        expect(feature.isEnabled, "and follows the store when it changes underneath")
+        expectEqual(feature.activations, 1, "activating once")
+
+        registry.reconcileEnabledState()
+        expectEqual(feature.activations, 1, "and not again when nothing has changed")
+
+        // And off.
+        Preferences.setFeatureEnabled(id, false)
+        registry.reconcileEnabledState()
+        expect(!feature.isEnabled, "the same in the other direction")
+        expectEqual(feature.deactivations, 1, "handing the hardware back exactly once")
     }
 
     // MARK: The charge is read when it changes, not when the clock ticks
