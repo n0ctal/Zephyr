@@ -102,11 +102,24 @@ final class AppController: NSObject, NSMenuDelegate {
         updateStatusTitle()
     }
 
+    /// Takes on what the other process decided.
+    private func adoptSettingsChanges() {
+        registry.reconcileEnabledState()
+        telemetry.invalidateNeeds()
+        // The polling rates are settings like any other, and the timer here
+        // was started with the old ones.
+        telemetry.retune()
+    }
+
     private func configure() {
         SettingsWindowController.pollingDidChange = { [weak self] in
             self?.telemetry.retune()
         }
         telemetry.didPublish = { [weak self] in self?.statusTick() }
+        // The settings window is a process of its own and cannot reach into
+        // this one. When it writes a choice down it knocks, and this is the
+        // answer: re-read, and act on what changed.
+        CrossProcess.onChange { [weak self] in self?.adoptSettingsChanges() }
         var t = Date()
         Preferences.migrateLegacyKeys()
         AppearanceControl.apply()
@@ -583,14 +596,11 @@ final class AppController: NSObject, NSMenuDelegate {
         let process = Process()
         process.executableURL = executable
         process.arguments = ["--settings-window"]
+        // Also on the way out: the last write before a window closes and the
+        // window closing are one action to whoever did it, and a knock that
+        // never arrived has to cost a late reading rather than a permanent one.
         process.terminationHandler = { [weak self] _ in
-            RunLoop.main.perform(inModes: [.common]) {
-                self?.registry.reconcileEnabledState()
-                self?.telemetry.invalidateNeeds()
-                // The polling rates are settings like any other, and the
-                // timer here was started with the old ones.
-                self?.telemetry.retune()
-            }
+            RunLoop.main.perform(inModes: [.common]) { self?.adoptSettingsChanges() }
         }
         do {
             try process.run()

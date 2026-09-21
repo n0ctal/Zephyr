@@ -124,6 +124,8 @@ _ = controller
 // rendering stack cannot be unloaded, so the only way to give its memory back
 // is for the process holding it to end.
 if isSettingsProcess {
+    // Everything this process writes, the other one has to hear about.
+    CrossProcess.announceEveryChange()
     SettingsWindowController.didClose = { exit(0) }
     DispatchQueue.main.async { controller.showSettingsWindow() }
 }

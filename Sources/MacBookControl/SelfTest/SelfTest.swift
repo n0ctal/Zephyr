@@ -56,6 +56,7 @@ enum SelfTest {
         featureReconcile()
         batteryHeatNeedsTheTemperature()
         reloadAppliesWhatChanged()
+        theKnockArrivesAndIsCoalesced()
         readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
@@ -1154,6 +1155,30 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: The knock between the processes
+
+    /// The settings window writes a choice down and knocks; the menu bar
+    /// re-reads. Two things have to hold. It has to arrive at all — without it
+    /// a change waits for the window to be closed, which is what it waited for
+    /// before. And a drag has to arrive once: a slider writes on every frame,
+    /// and asking every feature to re-read itself per frame would cost more
+    /// than the window it is trying to answer.
+    private static func theKnockArrivesAndIsCoalesced() {
+        var answered = 0
+        CrossProcess.onChange { answered += 1 }
+
+        // A drag's worth of writes.
+        for _ in 0..<12 { CrossProcess.announceChange() }
+        let deadline = Date().addingTimeInterval(3)
+        while answered == 0 && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        expect(answered >= 1, "the knock arrives")
+        // Past the coalescing window, so anything late has landed by now.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        expectEqual(answered, 1, "and twelve of them are answered once")
     }
 
     // MARK: Reloading applies what changed, and only what changed
