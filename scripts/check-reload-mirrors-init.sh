@@ -18,6 +18,14 @@ cd "$(dirname "$0")/.."
 python3 - <<'PY'
 import glob, os, re, sys
 
+# Preferences a feature reads at launch that are not "what the user chose":
+# there is nothing to re-read, and re-reading would be wrong.
+NOT_THE_USERS_CHOICE = {
+    # Whether a key mapping is still written to the hardware from a run that
+    # was killed. Read once, to clean up; reloading it would undo a live one.
+    "KeyboardFeature.swift": {"keyboardMappingApplied"},
+}
+
 problems = []
 for path in sorted(glob.glob("Sources/MacBookControl/Features/*Feature.swift")):
     source = open(path, encoding="utf-8").read()
@@ -32,14 +40,15 @@ for path in sorted(glob.glob("Sources/MacBookControl/Features/*Feature.swift")):
     init = re.search(r"\n    init\(.*?\n    \}\n", source, re.S)
     reload = re.search(r"\n    override func reloadFromPreferences\(\).*?\n    \}\n", source, re.S)
 
-    read_at_init = set()
-    if init:
-        for line in init.group(0).splitlines():
-            m = re.search(r"^\s+(?:self\.)?[a-zA-Z]+ = Preferences\.([A-Za-z]+)", line)
-            if m:
-                read_at_init.add(m.group(1))
+    # Every preference init touches, however it is spelled. The first version
+    # of this looked for `x = Preferences.y` and missed
+    # `self.mode = GPUMode(rawValue: Preferences.gpuMode)`, which is exactly
+    # the kind of thing it exists to catch — a check with a blind spot is
+    # worse than no check, because it is believed.
+    read_at_init = preferences_in(init.group(0)) if init else set()
     # featureEnabled is the base class's business, reconciled separately.
     read_at_init.discard("featureEnabled")
+    read_at_init -= NOT_THE_USERS_CHOICE.get(name, set())
 
     reloaded = preferences_in(reload.group(0)) if reload else set()
 

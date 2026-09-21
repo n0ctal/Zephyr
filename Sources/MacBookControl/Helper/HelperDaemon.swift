@@ -174,8 +174,15 @@ final class HelperService: NSObject, HelperProtocol {
 
     /// Hands every fan back to the firmware. Called when the app's connection
     /// drops, so a crash or logout cannot leave a manual target latched.
-    func restoreFirmwareControl() {
+    ///
+    /// `stillWanted` is asked on the control queue, after everything already
+    /// queued has run. That is the whole point of it being a closure: deciding
+    /// outside this queue left a gap in which a client could connect and pin a
+    /// fan between the decision and the act, and the act would then wipe a
+    /// hold somebody was still keeping.
+    func restoreFirmwareControl(unless stillWanted: @escaping () -> Bool = { false }) {
         queue.async {
+            guard !stillWanted() else { return }
             guard !self.forcedTargets.isEmpty || !self.curveFans.isEmpty else { return }
             self.forcedTargets.removeAll()
             self.curveFans.removeAll()
@@ -429,10 +436,15 @@ final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
     private func connectionDropped(_ id: ObjectIdentifier) {
         connectionLock.lock()
         liveConnections.remove(id)
-        let lastOneGone = liveConnections.isEmpty
         connectionLock.unlock()
-        guard lastOneGone else { return }
-        service.restoreFirmwareControl()
+        // Asked again on the control queue rather than decided here: a client
+        // can connect between the two, and the one that arrives keeps the fans.
+        service.restoreFirmwareControl(unless: { [weak self] in
+            guard let self = self else { return false }
+            self.connectionLock.lock()
+            defer { self.connectionLock.unlock() }
+            return !self.liveConnections.isEmpty
+        })
     }
 
     /// Blocks until the fans are back under firmware control, for use on the

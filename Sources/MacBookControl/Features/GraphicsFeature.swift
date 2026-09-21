@@ -40,6 +40,10 @@ final class GraphicsFeature: Feature {
         isSupported ? nil : "This Mac has a single GPU, so there is nothing to switch between."
     }
 
+    override func reloadFromPreferences() {
+        mode = GPUMode(rawValue: Preferences.gpuMode) ?? .automatic
+    }
+
     override func activate() {
         helper.setGPUMode(mode)
         startWatchdog()

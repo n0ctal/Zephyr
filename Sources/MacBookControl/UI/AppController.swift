@@ -587,6 +587,9 @@ final class AppController: NSObject, NSMenuDelegate {
             RunLoop.main.perform(inModes: [.common]) {
                 self?.registry.reconcileEnabledState()
                 self?.telemetry.invalidateNeeds()
+                // The polling rates are settings like any other, and the
+                // timer here was started with the old ones.
+                self?.telemetry.retune()
             }
         }
         do {

@@ -54,6 +54,7 @@ enum SelfTest {
         batteryNamedKeys()
         batteryPacing()
         featureReconcile()
+        batteryHeatNeedsTheTemperature()
         readingsDriveTheMenuBar()
         networkFormatting()
         sectionCoverage()
@@ -1152,6 +1153,28 @@ enum SelfTest {
         defaults.set(false, forKey: "menubar.captions")
         expectEqual(Preferences.captionedMenuBarItems.count, 0,
                     "the old all-off switch becomes no items")
+    }
+
+    // MARK: The heat limit needs the temperature it acts on
+
+    /// Charging pauses when the battery gets hot, and the temperature comes
+    /// from the battery reading. Splitting that reading into a cheap half and
+    /// an expensive one put the temperature in the expensive half — and this
+    /// feature went on asking for the cheap one, so the figure it acts on
+    /// simply stopped arriving. Nothing failed; the pause just never happened
+    /// again. Found by review, pinned here.
+    private static func batteryHeatNeedsTheTemperature() {
+        let feature = BatteryFeature(helper: HelperClient(), telemetry: Telemetry())
+        let saved = feature.heatLimitCelsius
+        defer { feature.heatLimitCelsius = saved }
+
+        feature.heatLimitCelsius = 0
+        expect(!feature.telemetryNeeds.battery,
+               "with no heat limit set, the feature asks for no reading at all")
+        feature.heatLimitCelsius = 40
+        expect(feature.telemetryNeeds.battery, "with one set, it asks for the battery")
+        expect(feature.telemetryNeeds.batteryInDetail,
+               "and for the detail, which is where the temperature is")
     }
 
     // MARK: What the other process decided

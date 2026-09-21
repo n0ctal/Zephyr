@@ -133,6 +133,11 @@ final class BatteryFeature: Feature {
         guard heatLimitCelsius > 0 else { return Telemetry.Needs() }
         var needs = Telemetry.Needs()
         needs.battery = true
+        // In detail, because the temperature this pauses charging on is one of
+        // the fields the charge alone leaves unread. The note above says it
+        // has to keep arriving whether or not anything displays it, and
+        // splitting the reading in two quietly stopped it arriving at all.
+        needs.batteryInDetail = true
         return needs
     }
 
