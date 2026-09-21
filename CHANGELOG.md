@@ -7,6 +7,33 @@ the bump travelled inside the change it released.
 
 ## Unreleased
 
+- The settings window runs in a process of its own. Opening one is permanent:
+  SwiftUI, Metal, CoreML and Vision load when a window first draws and a dylib
+  cannot be unloaded, so a menu-bar process that has ever shown the window
+  carries about twelve megabytes and half a percent of a core for the rest of
+  the session. Measured on the owner's machine, which is where the gap showed
+  up — 0.5 % of a core and 20 MB against the 0.077 % and 7 MB reported from a
+  process whose window had never been opened. "Options…" now launches the same
+  binary with `--settings-window`, which builds everything except the status
+  item and quits when the window closes. After: 0.067 % of a core, four
+  threads and no rendering at all in the process that stays.
+- The daemon returns the fans to the firmware when the *last* authorised
+  connection drops, not when any one does. Two processes means the second one
+  ends every time its window closes, and restoring on any drop would have
+  handed back a manual fan hold the first one was still keeping. The guarantee
+  is unchanged — fans held by a process that no longer exists is still an empty
+  set — at the cost that an app which crashes with its settings window open
+  keeps the hold until that window closes too.
+- The settings window is released when it closes rather than kept for the next
+  time. Worth about a sixth of the cost of having opened it; none of the
+  memory, which belongs to the frameworks.
+- The charge is read when IOKit says it moved. The battery node raises general
+  interest on a strict sixty-second cycle — which is how often the gauge behind
+  it is read at all — so asking once a second was fifty-nine questions with the
+  same answer. A fifteen-second floor stays under it: a notification is a
+  mechanism without memory, and a missed edge would otherwise leave a wrong
+  number up for the rest of the session.
+
 - Idle cost is down about three times again, and about fifteen times against
   1.9.57. A sample of the running app found its entire main-thread cost inside
   a drawing that was thrown away: the line was composed first and compared
