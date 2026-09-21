@@ -21,6 +21,12 @@ final class AwakeFeature: Feature {
                    summary: "Hold the Mac awake while something long is running, instead of watching the screen to keep it alive.")
     }
 
+    override func reloadFromPreferences() {
+        keepDisplayOn = Preferences.awakeKeepsDisplayOn
+        throughLidClose = Preferences.awakeWhenLidClosed
+        durationMinutes = Preferences.awakeDurationMinutes
+    }
+
     override func activate() { reapply() }
 
     /// Asked for by a profile. Deliberately does nothing while the feature is

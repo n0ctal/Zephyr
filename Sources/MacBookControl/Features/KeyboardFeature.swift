@@ -61,6 +61,11 @@ final class KeyboardFeature: Feature {
         isSupported ? nil : "This build of macOS does not expose the HID interfaces Zephyr needs."
     }
 
+    override func reloadFromPreferences() {
+        store = Preferences.keyboardStore
+        rules = Preferences.keyRules
+    }
+
     override func activate() {
         refresh()
         remapper.apply(store)

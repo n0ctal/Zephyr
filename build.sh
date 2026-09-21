@@ -22,6 +22,12 @@ swift build -c "$CONFIG"
 # A suite nothing runs guards nothing. This is the gate: the binary that is
 # about to be bundled runs its own regression checks, and a failure stops the
 # build before anything is signed or shipped.
+# Cheap, and it guards a failure nothing else can see: a preference a feature
+# reads once and can never re-read stops taking effect the moment the settings
+# window (another process now) changes it.
+echo "==> reload mirrors init"
+"$PROJECT_DIR/scripts/check-reload-mirrors-init.sh"
+
 echo "==> self-test"
 if ! "$(swift build -c "$CONFIG" --show-bin-path)/Zephyr" --self-test; then
     echo "Self-test failed — not building the bundle." >&2

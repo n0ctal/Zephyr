@@ -1,6 +1,21 @@
 import Foundation
 import SwiftUI
 
+/// Which of the two processes this is.
+///
+/// The menu bar and the settings window run separately now, and they are not
+/// equals in what they may do to the machine. Anything that goes through the
+/// root daemon is safe from either — the daemon is one owner and serialises
+/// what it is told. Anything the process holds *itself* is not: an event tap
+/// belongs to the process that created it, so two processes with the Pointer
+/// tab enabled would rewrite every scroll twice.
+///
+/// So the window shows and edits; the menu bar owns.
+enum ProcessRole {
+    /// Set once, in main, before anything is built.
+    static var isSettingsWindow = false
+}
+
 /// One thing the app is allowed to do to the machine.
 ///
 /// The Enable checkbox is a promise, not a display preference: a feature that
@@ -73,7 +88,23 @@ class Feature: ObservableObject, Identifiable {
     /// the machine rather than watch it.
     var telemetryNeeds: Telemetry.Needs { Telemetry.Needs() }
 
+    /// Re-reads everything this feature read when it was built.
+    ///
+    /// The settings window is another process, and it writes the user's
+    /// choices straight to preferences — the copies held here never hear about
+    /// it. So whatever a feature reads once, in `init`, has to be readable
+    /// again: the two lists must match, and a property in one and not the
+    /// other is a setting that silently stops taking effect.
+    /// `scripts/check-reload-mirrors-init.sh` compares them.
+    ///
+    /// Assigning is enough. Every one of these publishes and writes back
+    /// through its own `didSet`, which is also what re-applies it.
+    func reloadFromPreferences() {}
+
     func applyStoredState() {
+        // The settings window displays and edits. It does not take ownership
+        // of the machine at startup: see `ProcessRole`.
+        guard !ProcessRole.isSettingsWindow else { return }
         guard isEnabled else { return }
         guard isSupported else {
             // The machine changed under a stored yes (external GPU gone, kext
@@ -121,6 +152,10 @@ final class FeatureRegistry: ObservableObject {
     /// not changed, and `activate` is required to be safe to call twice.
     func reconcileEnabledState() {
         for feature in features {
+            // Values first, so a feature being switched on is switched on with
+            // what the other process chose and not with what this one
+            // remembers from launch.
+            feature.reloadFromPreferences()
             feature.setEnabled(Preferences.featureEnabled(feature.id))
         }
     }

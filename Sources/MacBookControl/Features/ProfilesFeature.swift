@@ -4,6 +4,10 @@ import SwiftUI
 final class ProfilesFeature: Feature {
     /// The union of what every rule needs to be decided. A profile the user
     /// has switched off asks for nothing.
+    override func reloadFromPreferences() {
+        profiles = Preferences.profiles
+    }
+
     override var telemetryNeeds: Telemetry.Needs {
         profiles.filter(\.isEnabled)
             .flatMap(\.conditions)

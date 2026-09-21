@@ -130,6 +130,9 @@ final class ScrollInterceptor {
 
     @discardableResult
     func start() -> Bool {
+        // One tap, in the process that owns it. Two would rewrite every
+        // scroll twice; see `ProcessRole`.
+        guard !ProcessRole.isSettingsWindow else { return false }
         guard tap == nil else { return true }
         guard Self.isPermitted else { return false }
 

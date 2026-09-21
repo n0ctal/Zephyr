@@ -124,6 +124,11 @@ final class BatteryFeature: Feature {
 
     /// Battery temperature is the input, so it has to keep arriving whether
     /// or not anything is displaying it.
+    override func reloadFromPreferences() {
+        limitPercent = Preferences.chargeLimitPercent
+        heatLimitCelsius = Preferences.chargeHeatLimitCelsius
+    }
+
     override var telemetryNeeds: Telemetry.Needs {
         guard heatLimitCelsius > 0 else { return Telemetry.Needs() }
         var needs = Telemetry.Needs()

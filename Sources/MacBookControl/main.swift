@@ -101,6 +101,8 @@ if arguments.contains("--test-pointer") {
 // on `statusItem` for what a window costs the process that opens one — so this
 // copy is a second instance on purpose and the guard below must let it through.
 let isSettingsProcess = arguments.contains("--settings-window")
+// Before anything is built: features read this as they come up.
+ProcessRole.isSettingsWindow = isSettingsProcess
 
 // Single-instance guard: if another copy (e.g. the login item) is already
 // running, exit so we don't add a second menu-bar icon. (bundleIdentifier is

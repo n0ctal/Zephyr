@@ -75,6 +75,17 @@ final class CoolingFeature: Feature {
         isSupported ? nil : "No controllable fans were found. Fanless Macs cool passively, so there is nothing here to drive."
     }
 
+    override func reloadFromPreferences() {
+        mode = Preferences.coolingMode
+        speedInRPM = Preferences.fanSpeedInRPM
+        curveMin = Preferences.curveMinTemp
+        curveMax = Preferences.curveMaxTemp
+        manualRPM = Preferences.manualFanRPM
+        // Read through to preferences whenever it is asked, so emptying
+        // the cache is all there is to do here.
+        curveSensors.removeAll()
+    }
+
     override func activate() {
         switch mode {
         case "manual":

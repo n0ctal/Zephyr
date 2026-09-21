@@ -48,6 +48,11 @@ final class PointerFeature: Feature {
         isSupported ? nil : "This build of macOS does not expose the pointer interfaces Zephyr needs."
     }
 
+    override func reloadFromPreferences() {
+        store = Preferences.pointerStore
+        appRules = Preferences.appScrollRules
+    }
+
     override func activate() {
         refreshDevices()
         reapply()

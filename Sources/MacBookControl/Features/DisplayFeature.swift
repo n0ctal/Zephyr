@@ -78,6 +78,10 @@ final class DisplayFeature: Feature {
         isSupported ? nil : "This build of macOS does not expose the brightness interfaces Zephyr needs."
     }
 
+    override func reloadFromPreferences() {
+        virtualDisplays = Preferences.virtualDisplays
+    }
+
     override func activate() {
         control.onConfigurationChange = { [weak self] in
             self?.refresh()

@@ -41,6 +41,10 @@ final class TurboBoostFeature: Feature {
 
     /// Re-asserts the stored choice. Enabling the feature must not silently
     /// change the CPU: if the user never asked for turbo off, leave it on.
+    override func reloadFromPreferences() {
+        turboDisabled = Preferences.lastKnownTurboDisabled
+    }
+
     override func activate() {
         // Deferred until the real state is known: acting on a stale cached
         // value could flip Turbo Boost the wrong way at launch.
