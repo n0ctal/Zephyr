@@ -240,6 +240,8 @@ final class AppController: NSObject, NSMenuDelegate {
     /// See the `--open-settings` flag in main.swift.
     func openSettingsForTesting() { openSettings() }
 
+    func closeSettingsWindowForTesting() { settingsWindow.windowForTesting?.close() }
+
     /// Shows the window here, in this process.
     ///
     /// For the settings process itself, which must not go through

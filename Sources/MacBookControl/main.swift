@@ -122,13 +122,8 @@ _ = controller
 // rendering stack cannot be unloaded, so the only way to give its memory back
 // is for the process holding it to end.
 if isSettingsProcess {
-    DispatchQueue.main.async {
-        controller.showSettingsWindow()
-        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
-                                               object: nil, queue: .main) { _ in
-            RunLoop.main.perform(inModes: [.common]) { exit(0) }
-        }
-    }
+    SettingsWindowController.didClose = { exit(0) }
+    DispatchQueue.main.async { controller.showSettingsWindow() }
 }
 // Dev affordance: the Settings window is only reachable by clicking the status
 // item, which nothing automated can do — so a broken tab would only ever be
@@ -149,6 +144,35 @@ if let index = arguments.firstIndex(of: "--dump-window"), index + 1 < arguments.
                                          || arguments.contains("--darkness"),
                                      pitch: arguments.contains("--darkness"))
         exit(0)
+    }
+}
+
+// Reproduces what closing a popover used to do to the settings process.
+if arguments.contains("--test-settings-lifetime") {
+    var closed = 0
+    SettingsWindowController.didClose = { closed += 1 }
+    DispatchQueue.main.async {
+        controller.showSettingsWindow()
+        RunLoop.current.run(until: Date().addingTimeInterval(2))
+
+        // Something else AppKit put up: a popover, a menu, the panel that
+        // comes with adding a virtual screen. Closing it must mean nothing.
+        let stranger = NSWindow(contentRect: NSRect(x: -9000, y: -9000, width: 100, height: 100),
+                                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        stranger.orderFront(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        stranger.close()
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        print(closed == 0
+              ? "  ok: another window closing is not the settings window closing"
+              : "  FAILED: the settings window reported itself closed \(closed) times")
+
+        controller.closeSettingsWindowForTesting()
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        print(closed == 1
+              ? "  ok: and closing the settings window does report it, once"
+              : "  FAILED: closing the settings window reported \(closed) times")
+        exit(closed == 1 ? 0 : 1)
     }
 }
 

@@ -24,6 +24,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// normal launches open on whatever the window remembers.
     static var initialTab: String?
 
+    /// Called when *this* window has closed — not when any window has.
+    ///
+    /// The settings process ends on it, and the first version of that listened
+    /// for `NSWindow.willCloseNotification` with a nil object, which is every
+    /// window in the process: a popover, a menu, whatever AppKit puts up while
+    /// a virtual screen is being added. Adding a second one closed the
+    /// settings window for no reason anybody could see, because the process
+    /// had quietly exited on somebody else's window.
+    static var didClose: () -> Void = {}
+
     /// `alwaysVisible` is for the capture flags only: a window parked off
     /// every screen is occluded by definition, and reading it as though nobody
     /// were looking is how a picture of it comes back with half its numbers
@@ -85,6 +95,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     // exists to avoid.
 
     func windowWillClose(_ notification: Notification) {
+        // Ours, and only ours: this object is the delegate of one window, but
+        // a delegate method is a notification observer like any other.
+        guard notification.object as AnyObject? === window else { return }
         context?.telemetry.isWindowOpen = false
         // And let the window go. Keeping it cost the rest of the session:
         // opening this once took the footprint from 7.6 MB to 20.3 on this
@@ -101,7 +114,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // not delivered while another one is running, and something driving a
         // run loop of its own — a menu tracking, a slider being dragged, the
         // probe that measures this — would never let it through at all.
-        RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.letGoOfWindow() }
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in
+            self?.letGoOfWindow()
+            SettingsWindowController.didClose()
+        }
     }
 
     /// Releases the window and everything hanging off it.
