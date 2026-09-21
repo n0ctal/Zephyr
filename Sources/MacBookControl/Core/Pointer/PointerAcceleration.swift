@@ -1,4 +1,5 @@
 import Foundation
+import IOKit
 
 /// Turns off the pointer acceleration curve, per device.
 ///
@@ -143,6 +144,53 @@ final class PointerAcceleration {
             let curve = hid.string(service, "HIDPointerAccelerationType")
             let raw = curve.flatMap { hid.string(service, $0) }
             return (hid.name(service), curve, curve.flatMap { hid.int(service, $0) }, raw)
+        }
+    }
+
+    /// Acceleration curves as the registry holds them, whoever published them.
+    ///
+    /// For the probe, and the other half of the answer above. A service that
+    /// does not answer for its own curve may still have one recorded on its
+    /// event driver, inside `HIDEventServiceProperties` — which is where this
+    /// machine's trackpad keeps its 45056 — so "unreadable" from the service
+    /// does not mean "not there".
+    func registryCurves() -> [(entry: String, key: String, value: Int)] {
+        var found: [(entry: String, key: String, value: Int)] = []
+        var iterator = io_iterator_t()
+        // 0 is the default port: the constant that names it was renamed in
+        // macOS 12 and this package still builds back to 11.
+        guard IORegistryCreateIterator(0, kIOServicePlane,
+                                       IOOptionBits(kIORegistryIterateRecursively),
+                                       &iterator) == KERN_SUCCESS else { return found }
+        defer { IOObjectRelease(iterator) }
+        while case let entry = IOIteratorNext(iterator), entry != 0 {
+            defer { IOObjectRelease(entry) }
+            guard let raw = IORegistryEntryCreateCFProperty(entry, "HIDEventServiceProperties" as CFString,
+                                                            kCFAllocatorDefault, 0),
+                  let properties = raw.takeRetainedValue() as? [String: Any] else { continue }
+            var name = [CChar](repeating: 0, count: 128)
+            let entryName = IORegistryEntryGetName(entry, &name) == KERN_SUCCESS
+                ? String(cString: name) : "(unnamed)"
+            for (key, value) in properties where key.hasSuffix("Acceleration") {
+                guard let number = value as? Int else { continue }
+                found.append((entryName, key, number))
+            }
+        }
+        return found
+    }
+
+    /// Writes a value to every matched service and reads it back.
+    ///
+    /// For the probe, and only answerable by trying: the trackpad publishes no
+    /// curve of its own, so it never reaches `devices()` and nothing says
+    /// whether a write would land. Called with the value the device already
+    /// has, the experiment is invisible — nothing under the fingers changes
+    /// whether it succeeds or not.
+    func probeWrite(_ value: Int) -> [(name: String, key: String, accepted: Bool, readBack: Int?)] {
+        pointerServices().compactMap { service in
+            guard let key = hid.string(service, "HIDPointerAccelerationType") else { return nil }
+            let accepted = hid.set(service, key, value as CFNumber)
+            return (hid.name(service), key, accepted, hid.int(service, key))
         }
     }
 }

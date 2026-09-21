@@ -466,8 +466,36 @@ func runPointerTest(write: Bool) {
     for key in ["RegistryID", "LocationID", "VendorID", "ProductID", "SerialNumber", "Transport", "DeviceUsagePairs"] {
         print("  \(key): \(acceleration.probe(key) ?? "—")")
     }
+    // The other place a curve can live: on the event driver rather than the
+    // service. A device missing from the list above may still be here.
+    let registry = acceleration.registryCurves()
+    print("curves in the registry: \(registry.count)")
+    for row in registry {
+        print(String(format: "  %@ — %@ = %d (%.4f)", row.entry, row.key,
+                     row.value, Double(row.value) / 65536))
+    }
     print("stored originals: \(Preferences.pointerOriginals)")
     guard write else { return }
+    // Does a write reach a service at all? `accepted` alone cannot say — the
+    // call returns true for a value the device already had, which is
+    // indistinguishable from doing nothing. So write a different one and look
+    // in the registry, then put it back. A thousand out of 65536 is under two
+    // percent, which the hand cannot feel and the registry states plainly.
+    func curveValues(_ key: String) -> Set<Int> {
+        Set(acceleration.registryCurves().filter { $0.key == key }.map(\.value))
+    }
+    if let key = matched.first?.curve, let original = curveValues(key).first {
+        print("write test on \(key): registry holds \(curveValues(key).sorted())")
+        let accepted = acceleration.probeWrite(original + 1000).map(\.accepted)
+        print("  wrote \(original + 1000), accepted=\(accepted)")
+        let during = curveValues(key).sorted()
+        print("  registry now \(during)")
+        _ = acceleration.probeWrite(original)
+        print("  restored to \(original); registry now \(curveValues(key).sorted())")
+        print(during.contains(original + 1000)
+              ? "  VERDICT: the write lands — the trackpad can be driven this way"
+              : "  VERDICT: accepted but ignored — the write does not reach the device")
+    }
     print("applying 0 …")
     acceleration.apply { _ in 0 }
     for device in acceleration.devices() {
