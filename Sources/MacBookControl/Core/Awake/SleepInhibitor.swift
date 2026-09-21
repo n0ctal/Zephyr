@@ -79,7 +79,15 @@ final class SleepInhibitor {
 
     // MARK: Assertion plumbing
 
+    /// Takes an assertion, in the process that owns the machine.
+    ///
+    /// A power assertion belongs to the process that made it and is released
+    /// when that process ends — and the settings window ends every time it is
+    /// closed. Held there, "keep awake" would have lasted exactly as long as
+    /// somebody was looking at the switch. The choice is written down; the
+    /// menu bar holds the assertion.
     private func take(_ kind: Kind) {
+        guard !ProcessRole.isSettingsWindow else { return }
         var id: IOPMAssertionID = 0
         let result = IOPMAssertionCreateWithName(
             kind.rawValue as CFString,
