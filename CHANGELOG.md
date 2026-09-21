@@ -7,6 +7,14 @@ the bump travelled inside the change it released.
 
 ## Unreleased
 
+- What the split costs, measured: the settings window takes about a second to
+  appear where it used to take half of one. 582 ms of that is a process coming
+  into existence — exec, seven hundred libraries, AppKit — and 481 ms is SwiftUI
+  building the window, which is what it cost before as well. So the price of
+  the window living elsewhere is the first number, and it is paid when somebody
+  opens it; what it buys is 0.43 % of a core and twelve megabytes for the rest
+  of the session. `--settings-window --time-phases` prints the three figures.
+
 - The settings window can tell the menu bar it changed something. Until now a
   choice made there reached the process that acts on it when the window closed
   and not before: dragging the scroll speed did nothing you could feel, and the

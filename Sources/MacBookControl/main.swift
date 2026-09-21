@@ -127,7 +127,23 @@ if isSettingsProcess {
     // Everything this process writes, the other one has to hear about.
     CrossProcess.announceEveryChange()
     SettingsWindowController.didClose = { exit(0) }
-    DispatchQueue.main.async { controller.showSettingsWindow() }
+    DispatchQueue.main.async {
+        // Split in two, because the answer changes what there is to do about
+        // it: everything before this line is the process existing at all, and
+        // everything after it is the window being built.
+        let beforeWindow = Date()
+        controller.showSettingsWindow()
+        // On stderr because stdout is buffered and this process is usually
+        // killed rather than allowed to finish.
+        if arguments.contains("--time-phases") {
+            FileHandle.standardError.write(Data(String(
+                format: "  %6.0f ms  getting here from exec\n  %6.0f ms  building the window\n"
+                      + "  %6.0f ms  settings window up, total\n",
+                beforeWindow.timeIntervalSince(launchedAt) * 1000,
+                Date().timeIntervalSince(beforeWindow) * 1000,
+                Date().timeIntervalSince(launchedAt) * 1000).utf8))
+        }
+    }
 }
 // Dev affordance: the Settings window is only reachable by clicking the status
 // item, which nothing automated can do — so a broken tab would only ever be
