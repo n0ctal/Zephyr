@@ -240,8 +240,16 @@ final class AppController: NSObject, NSMenuDelegate {
     /// See the `--open-settings` flag in main.swift.
     func openSettingsForTesting() { openSettings() }
 
-    /// For the settings process, which has no status item to click.
-    func showSettingsWindow() { openSettings() }
+    /// Shows the window here, in this process.
+    ///
+    /// For the settings process itself, which must not go through
+    /// `openSettings()` — that launches a settings process, and a settings
+    /// process calling it launches another, which is exactly what happened:
+    /// twenty-two copies in fourteen seconds.
+    func showSettingsWindow() {
+        helperState = HelperState.current(helper)
+        settingsWindow.show(registry: registry, telemetry: telemetry, helperState: helperState)
+    }
 
     /// Renders the prototype straight to a PNG.
     ///
