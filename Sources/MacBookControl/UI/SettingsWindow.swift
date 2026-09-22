@@ -52,7 +52,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // Everything on screen wants every reading; nothing on screen wants
         // almost none of them. Telemetry reads accordingly.
         telemetry.isWindowOpen = true
-        let hosting = NSHostingController(rootView: makeRoot())
+        // Dev only: the window takes about half a second to build and the
+        // phases want telling apart before anybody tries to make it faster.
+        let phaseStart = Date()
+        func phase(_ label: String, _ since: Date) -> Date {
+            guard CommandLine.arguments.contains("--time-phases") else { return Date() }
+            FileHandle.standardError.write(Data(String(
+                format: "    %6.0f ms  %@\n", Date().timeIntervalSince(since) * 1000, label).utf8))
+            return Date()
+        }
+        var mark = phaseStart
+        let root = makeRoot()
+        mark = phase("root view value", mark)
+        let hosting = NSHostingController(rootView: root)
+        mark = phase("hosting controller", mark)
         self.hosting = hosting
         SettingsWindowController.layoutDidChange = { [weak self] in self?.rebuild() }
         let window = NSWindow(contentViewController: hosting)
@@ -75,7 +88,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // Applied again here: setting it during launch can be overwritten
         // before the first window exists.
         AppearanceControl.apply()
+        mark = phase("window built", mark)
         window.makeKeyAndOrderFront(nil)
+        _ = phase("on screen", mark)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
     }

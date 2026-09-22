@@ -40,13 +40,16 @@ the bump travelled inside the change it released.
   missing: a dropped one is corrected by the next cycle a minute later, but a
   registration that dies leaves the reading frozen until the app restarts.
 
-- What the split costs, measured: the settings window takes about a second to
-  appear where it used to take half of one. 582 ms of that is a process coming
-  into existence — exec, seven hundred libraries, AppKit — and 481 ms is SwiftUI
-  building the window, which is what it cost before as well. So the price of
-  the window living elsewhere is the first number, and it is paid when somebody
-  opens it; what it buys is 0.43 % of a core and twelve megabytes for the rest
-  of the session. `--settings-window --time-phases` prints the three figures.
+- What the split costs, measured, and where the time actually is. The settings
+  window takes about a second to appear where it used to take half of one:
+  roughly 700 ms for a process to come into existence — exec, seven hundred
+  libraries, AppKit — 250 ms for SwiftUI to lay the tab out, and 90 ms for the
+  window itself. The last figure is not ours: a bare AppKit process spends 87 ms
+  on its first window and 14 on every one after, which is what a first window
+  costs anybody. So the price of the window living elsewhere is the process
+  start, paid by whoever opens it, against 0.43 % of a core and twelve megabytes
+  saved for the rest of the session. `--settings-window --time-phases` prints
+  every step.
 
 - The settings window can tell the menu bar it changed something. Until now a
   choice made there reached the process that acts on it when the window closed
