@@ -496,10 +496,18 @@ func runGPUTest() {
     // And who is keeping the discrete card awake, which is the question the
     // policy alone cannot answer: on this machine the policy reads "integrated
     // only" while four processes hold a command queue on the other card.
+    // The power state first, because the holder list below is read as an
+    // answer to a question it does not answer.
+    switch AcceleratorClients.discreteIsPoweredOff() {
+    case true:  print("  Discrete card:      switched off by automatic graphics switching")
+    case false: print("  Discrete card:      powered on")
+    case nil:   print("  Discrete card:      nothing says either way")
+    }
     let holders = AcceleratorClients.discreteHolders()
-    print("  Discrete held by:   " + (holders.isEmpty
+    print("  Holding a queue:    " + (holders.isEmpty
         ? "nobody"
-        : holders.map { "\($0.name) (\($0.pid))" }.joined(separator: ", ")))
+        : holders.map { "\($0.name) (\($0.pid))" }.joined(separator: ", "))
+        + (holders.isEmpty ? "" : "  — holding is not running: see the line above"))
 }
 
 
@@ -556,8 +564,12 @@ func runPointerTest(write: Bool) {
     func curveValues(_ key: String) -> Set<Int> {
         Set(acceleration.registryCurves().filter { $0.key == key }.map(\.value))
     }
-    if let key = matched.first?.curve, let original = curveValues(key).first {
-        print("write test on \(key): registry holds \(curveValues(key).sorted())")
+    // Only when every service agrees on one value. With several, there is no
+    // single number to put back — and this writes to every matched service at
+    // once, so restoring would hand one device another's setting.
+    let values = matched.first?.curve.map(curveValues) ?? []
+    if let key = matched.first?.curve, values.count == 1, let original = values.first {
+        print("write test on \(key): registry holds \(values.sorted())")
         let accepted = acceleration.probeWrite(original + 1000).map(\.accepted)
         print("  wrote \(original + 1000), accepted=\(accepted)")
         let during = curveValues(key).sorted()
@@ -568,17 +580,11 @@ func runPointerTest(write: Bool) {
               ? "  VERDICT: the write lands — the trackpad can be driven this way"
               : "  VERDICT: accepted but ignored — the write does not reach the device")
     }
-    print("applying 0 …")
-    acceleration.apply { _ in 0 }
-    for device in acceleration.devices() {
-        print(String(format: "  now %@ = %d", device.key, device.value))
-    }
-    print("stored originals: \(Preferences.pointerOriginals)")
-    print("restoring …")
-    acceleration.restore()
-    for device in acceleration.devices() {
-        print(String(format: "  back %@ = %d", device.key, device.value))
-    }
+    // What used to be here — apply zero to everything, then restore — is gone.
+    // It recorded whatever it found as the original, including a value this
+    // probe had just written over, and `restore()` then made that permanent.
+    // The experiment above answers the question the probe exists for and puts
+    // its own value back.
 }
 
 

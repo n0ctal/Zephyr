@@ -34,13 +34,58 @@ enum AcceleratorClients {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// Both answers together, because asking them apart is what let one be
+    /// read as the other.
+    struct DiscreteState: Equatable {
+        /// Nil when nothing answers, which is not the same as "powered on".
+        var poweredOff: Bool?
+        var holding: [Holder]
+    }
+
+    static func discreteState() -> DiscreteState {
+        DiscreteState(poweredOff: discreteIsPoweredOff(), holding: discreteHolders())
+    }
+
+    /// Whether the discrete card is switched off at the rail.
+    ///
+    /// The authoritative answer, and a different question from who holds a
+    /// client on it. Automatic graphics switching records this on the
+    /// accelerator itself, under `AGCInfo`.
+    ///
+    /// Worth the separate reading because the two disagree, and disagree in
+    /// the direction that misleads: on this machine five processes hold a
+    /// command queue on the discrete card — WindowServer among them — while
+    /// `poweredOffByAGC` says the card is off and nothing has been submitted
+    /// to it. Holding a queue is not running work through it. Reading the
+    /// holder list as "the card is awake" is a conclusion this code invited
+    /// and a person acted on.
+    ///
+    /// Nil when nothing answers, which is not the same as "powered on".
+    static func discreteIsPoweredOff() -> Bool? {
+        var answer: Bool?
+        Registry.forEachService(matching: "IOAccelerator") { accelerator in
+            guard isDiscrete(Registry.name(of: accelerator)) else { return }
+            guard let info: [String: Any] = Registry.property(accelerator, "AGCInfo" as CFString),
+                  let off = info["poweredOffByAGC"] as? Bool else { return }
+            answer = off
+        }
+        return answer
+    }
+
     /// Whether anything is running work on the discrete card right now.
     ///
     /// This is gfxCardStatus's indicator, and it is read from the registry
     /// rather than by asking Metal which device is default — asking Metal
     /// wakes the discrete card, which is the opposite of what someone
     /// watching this wants.
-    static func discreteIsBusy() -> Bool { !discreteHolders().isEmpty }
+    ///
+    /// A card that is switched off is not busy, whoever is holding a queue on
+    /// it. Without that the menu bar read "dGPU" on a machine whose discrete
+    /// card had been off for hours.
+    static func discreteIsBusy() -> Bool {
+        guard discreteIsPoweredOff() != true else { return false }
+        return !discreteHolders().isEmpty
+    }
 
     /// Which accelerator is the discrete one, by the vendor's own name.
     static func isDiscrete(_ acceleratorName: String) -> Bool {

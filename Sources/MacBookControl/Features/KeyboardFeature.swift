@@ -229,7 +229,8 @@ private struct KeyboardView: View {
                      + (feature.rulesAreRunning || ProcessRole.isSettingsWindow ? ""
                         : " The tap is not running: Accessibility permission is needed, the same one the Pointer section asks for."))
                     .font(.caption)
-                    .foregroundColor(feature.rulesAreRunning ? .secondary : .orange)
+                    .foregroundColor(feature.rulesAreRunning || ProcessRole.isSettingsWindow
+                                     ? .secondary : .orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

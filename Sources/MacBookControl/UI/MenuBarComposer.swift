@@ -714,7 +714,7 @@ enum MenuBarComposer {
         // on the phone it very nearly fills the shape, and that is most of why
         // it reads at a glance.
         let text = "\(battery.percent)" as NSString
-        // 0.72 rather than 0.80: against the reference the owner drew from, the
+        // 0.68 rather than 0.80: against the reference the owner drew from, the
         // digits were running a little large and taking the pill with them.
         let font = NSFont.systemFont(ofSize: height * 0.68, weight: .bold)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
@@ -746,13 +746,12 @@ enum MenuBarComposer {
         // and stubbier. The pill is sized for everything it can ever hold —
         // three digits, the gap and the bolt — and what is not there simply
         // leaves the middle emptier.
-        // Two points of side padding, not five: with three digits and a
-        // bolt the pill was running at about two and a half times its
-        // height, which in a real menu bar reads as a wide slab rather
-        // than as a battery.
-        // Padding on both sides. One point was not enough: the first digit came
-        // out touching the left edge and the bolt ran into the curve on the
-        // right, which cut its corner off.
+        // Two and a half points on each side, arrived at from both directions.
+        // Five was too much: with three digits and a bolt the pill ran at
+        // about two and a half times its height, which in a real menu bar
+        // reads as a wide slab rather than as a battery. One was too little:
+        // the first digit came out touching the left edge and the bolt ran
+        // into the curve on the right, which cut its corner off.
         let bodyWidth = widest + boltGap + boltWidth + sidePadding * 2
         let size = NSSize(width: bodyWidth + capGap + capWidth, height: height)
 

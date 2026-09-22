@@ -33,6 +33,11 @@ final class AwakeFeature: Feature {
         if durationMinutes != Preferences.awakeDurationMinutes {
             durationMinutes = Preferences.awakeDurationMinutes
         }
+        // A countdown that has already run out leaves the feature switched on
+        // with nothing held, and picking the same duration again is how
+        // somebody asks for another go. An assignment that changes nothing
+        // cannot carry that, so what is held decides rather than what is set.
+        if isEnabled, !inhibitor.isActive { reapply() }
     }
 
     override func activate() { reapply() }

@@ -31,7 +31,12 @@ final class SleepInhibitor {
     var isActive: Bool { !held.isEmpty }
 
     /// Applies the requested combination, releasing whatever no longer applies.
-    /// Idempotent: calling it with the same arguments changes nothing.
+    ///
+    /// Not idempotent, whatever an earlier version of this note claimed: the
+    /// countdown is cancelled and started again on every call, so asking twice
+    /// for fifteen minutes gives thirty. That is right when somebody asks
+    /// twice and wrong when a reload asks for what is already set, which is
+    /// why the caller decides rather than this.
     ///
     /// `minutes == 0` means indefinite. A non-zero value schedules a release
     /// rather than using IOKit's own timeout, so the countdown survives the

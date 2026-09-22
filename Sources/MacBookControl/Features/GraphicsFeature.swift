@@ -128,7 +128,7 @@ private struct GraphicsView: View {
     /// both, rather than a timer for one and a single reading on appear for
     /// the other.
     @StateObject private var holders = Polled(every: 5) {
-        AcceleratorClients.discreteHolders()
+        AcceleratorClients.discreteState()
     }
 
     var body: some View {
@@ -155,15 +155,25 @@ private struct GraphicsView: View {
                     .font(.caption).foregroundColor(.orange)
             }
 
-            // Naming the culprit, which the line above could only ever hint
-            // at. Every client of an accelerator records the process that
-            // opened it, so this is the same answer gfxCardStatus gives.
-            if let holding = holders.value, !holding.isEmpty {
+            // The power state first and the names second, because the names
+            // alone were read as the answer to a question they do not answer:
+            // a process can hold a queue on a card that is switched off, and
+            // this section used to say "running work" regardless — which is
+            // how somebody concluded their own setting was not working.
+            if let reading = holders.value, !reading.holding.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Running work on the discrete card").font(.subheadline)
-                    Text(holding.map(\.name).joined(separator: ", "))
+                    Text(reading.poweredOff == true
+                         ? "Holding the discrete card open, but it is switched off"
+                         : "Running work on the discrete card")
+                        .font(.subheadline)
+                    Text(reading.holding.map(\.name).joined(separator: ", "))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if reading.poweredOff == true {
+                        Text("Holding is not running. These have asked the system about the card, which does not wake it — automatic graphics switching has it powered down, and nothing is being drawn on it.")
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 

@@ -13,6 +13,11 @@ final class ProfilesFeature: Feature {
         // and decides there is nothing to do. So the belief goes first.
         engine?.forget()
         profiles = stored
+        // Only while the feature is on. Editing a rule with the tab switched
+        // off would otherwise drive Turbo Boost, the GPU policy and the charge
+        // limit anyway — and leave the engine believing a profile is active,
+        // so switching the tab on later would find nothing to do.
+        guard isEnabled else { return }
         _ = engine?.evaluate(stored)
     }
 
