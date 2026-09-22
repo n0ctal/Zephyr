@@ -65,11 +65,18 @@ final class Telemetry: ObservableObject {
     /// How long the charge may go unread when nothing has announced a change.
     ///
     /// The floor under `BatteryWatcher`, and the whole of what a missed
-    /// notification costs: fifteen seconds of a stale percentage, rather than
-    /// a wrong one until the app is restarted. Short enough that plugging the
-    /// charger in looks immediate even if IOKit says nothing, long enough that
-    /// fourteen readings out of fifteen are saved.
-    static let batteryFallbackSeconds: TimeInterval = 15
+    /// notification costs: one cycle of a stale percentage rather than a wrong
+    /// one until the app is restarted.
+    ///
+    /// Sixty, because that is the battery's own period and measuring settled
+    /// what the number should be. Watched with the charger in hand: the plain
+    /// refreshes arrive 60.0 s apart to the tenth, and plugging in raised an
+    /// event at once — 1.0 s after the cable went in, not at the next edge 48
+    /// seconds later — as did pulling it out. So the thing a person sees
+    /// immediately, the bolt appearing, does not depend on this at all, and
+    /// fifteen seconds was paying for four readings a minute to insure against
+    /// something that answers in one.
+    static let batteryFallbackSeconds: TimeInterval = 60
 
     /// How often to actually read.
     ///

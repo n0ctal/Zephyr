@@ -30,6 +30,16 @@ the bump travelled inside the change it released.
 
 ## 0.4.46 — 2026-09-22
 
+- The charge is read once a minute at worst instead of four times, now that
+  the charger has been watched going in and out. The battery's own refreshes
+  arrive 60.0 seconds apart to the tenth, and plugging in raised an event one
+  second after the cable went in rather than at the next edge — so the bolt
+  appearing does not depend on the fallback poll at all, and fifteen seconds
+  was insuring against something that answers in one. What the fallback is
+  still for is the notifications stopping altogether rather than one going
+  missing: a dropped one is corrected by the next cycle a minute later, but a
+  registration that dies leaves the reading frozen until the app restarts.
+
 - What the split costs, measured: the settings window takes about a second to
   appear where it used to take half of one. 582 ms of that is a process coming
   into existence — exec, seven hundred libraries, AppKit — and 481 ms is SwiftUI
