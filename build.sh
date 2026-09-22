@@ -10,7 +10,28 @@ set -euo pipefail
 CONFIG="${1:-release}"
 APP_NAME="Zephyr"
 BUNDLE_ID="com.n0ctal.macbookcontrol"   # legacy id kept so the installed helper/agent keep working
-VERSION="1.10.0"
+# The version a person reads, and the one only a machine compares.
+#
+# MAJOR is the only part chosen by hand: it goes to 1 when the design is
+# finished and not before, which is the whole reason the rest is arithmetic.
+# The other two come from the commit count — 50 commits to a minor — so the
+# number cannot be forgotten, cannot be argued about, and says how much work
+# is behind the build without pretending to say anything else.
+#
+# CFBundleVersion is the count itself. It is the field anything that compares
+# versions actually reads, and it only ever goes up, even on a day when MAJOR
+# is reset downwards by hand.
+MAJOR=0
+COMMITS="$(git -C "$(dirname "$0")" rev-list --count HEAD 2>/dev/null || echo 0)"
+if [ "$COMMITS" -eq 0 ]; then
+    # Built from something that is not a checkout. Better a version that says
+    # so than one that quietly claims to be the first commit.
+    VERSION="$MAJOR.0.0-unknown"
+    BUILD="0"
+else
+    VERSION="$MAJOR.$((COMMITS / 50)).$((COMMITS % 50))"
+    BUILD="$COMMITS"
+fi
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/.build/$CONFIG"
@@ -67,7 +88,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>      <string>$BUNDLE_ID</string>
     <key>CFBundleExecutable</key>      <string>$APP_NAME</string>
-    <key>CFBundleVersion</key>         <string>$VERSION</string>
+    <key>CFBundleVersion</key>         <string>$BUILD</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>

@@ -1,11 +1,34 @@
 # Changelog
 
+## How the numbers work, from 0.4.46 onwards
+
+The version a person reads is `MAJOR.MINOR.PATCH`, and only `MAJOR` is chosen
+by hand. It is 0 while the design is still being looked at and becomes 1 when
+it is finished — that decision is the reason the rest is arithmetic and not
+judgement.
+
+`MINOR` and `PATCH` come from the commit count: fifty commits to a minor. So
+246 commits reads 0.4.46, and the number cannot be forgotten, cannot be
+argued about, and says how much work is behind a build without pretending to
+say anything else. `CFBundleVersion` is the count itself — the field anything
+comparing versions actually reads, and the one that keeps going up even on a
+day when `MAJOR` is set downwards by hand.
+
+Everything above 1.10.0 in this file used the old numbering, where the version
+was a line in `build.sh` moved by hand. Those entries are left as they are:
+those builds really did carry those numbers, and rewriting them to fit the new
+scheme would be inventing a history that did not happen. 1.10.0 was the last
+of them; 0.4.46 is the first of these, and it is a lower number than the one
+before it on purpose.
+
+## Entries
+
 Assembled from the history: each entry lists the commits whose tree carried
 that version number. Up to 1.9.43 and again from 1.9.50 the bump is a commit
 of its own named `Release X`, which is why some entries carry one; in between
 the bump travelled inside the change it released.
 
-## Unreleased
+## 0.4.46 — 2026-09-22
 
 - What the split costs, measured: the settings window takes about a second to
   appear where it used to take half of one. 582 ms of that is a process coming
